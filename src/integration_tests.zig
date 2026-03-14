@@ -22,6 +22,7 @@ const universe = @import("universe.zig");
 const bases = @import("bases.zig");
 const nav_graph = @import("nav_graph.zig");
 const cockpit = @import("cockpit.zig");
+const mfd = @import("mfd.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1731,4 +1732,117 @@ test "integration: cockpit renders onto framebuffer without crash" {
     try std.testing.expect(has_cockpit_pixel);
     // Viewport window should let space show through
     try std.testing.expect(has_space_pixel);
+}
+
+// --- MFD (Multi-Function Display) integration tests ---
+
+test "integration: Tarsus cockpit has MFD display areas" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    // Tarsus has 1 MFD display area
+    try std.testing.expect(cock.mfd.display_count >= 1);
+    // First display should have a valid rect within 320x200
+    const display = cock.mfd.displays[0].?;
+    try std.testing.expect(display.rect.x2 <= 320);
+    try std.testing.expect(display.rect.y2 <= 200);
+    try std.testing.expect(display.rect.width() > 0);
+    try std.testing.expect(display.rect.height() > 0);
+}
+
+test "integration: Centurion cockpit has 2 MFD display areas" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "FIGHTCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    // Centurion has 2 MFD displays (left and right)
+    try std.testing.expectEqual(@as(u8, 2), cock.mfd.display_count);
+    // Both should have valid rects
+    for (0..2) |i| {
+        const display = cock.mfd.displays[i].?;
+        try std.testing.expect(display.rect.x2 <= 320);
+        try std.testing.expect(display.rect.y2 <= 200);
+        try std.testing.expect(display.rect.width() > 0);
+    }
+}
+
+test "integration: all cockpit types have radar and shield dials" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const ship_types = [_]cockpit.ShipType{ .tarsus, .centurion, .galaxy, .orion };
+    for (ship_types) |ship| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, ship.iffFilename());
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var cock = try cockpit.parseCockpitIff(allocator, file_data);
+        defer cock.deinit();
+
+        // All ships should have radar and shield display rects
+        try std.testing.expect(cock.mfd.dials.radar_rect != null);
+        try std.testing.expect(cock.mfd.dials.shield_rect != null);
+
+        // Radar rect should be a reasonable size
+        const radar = cock.mfd.dials.radar_rect.?;
+        try std.testing.expect(radar.width() >= 20);
+        try std.testing.expect(radar.height() >= 20);
+    }
+}
+
+test "integration: all cockpit types have HUD modes" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const ship_types = [_]cockpit.ShipType{ .tarsus, .centurion, .galaxy, .orion };
+    for (ship_types) |ship| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, ship.iffFilename());
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var cock = try cockpit.parseCockpitIff(allocator, file_data);
+        defer cock.deinit();
+
+        // All ships should have at least targeting and crosshair HUD modes
+        try std.testing.expect(cock.mfd.hud_mode_count >= 2);
+    }
+}
+
+test "integration: Tarsus DIAL has speed displays with labels" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    // Tarsus should have set speed and actual speed displays
+    const sspd = cock.mfd.dials.set_speed.?;
+    try std.testing.expectEqualStrings("SET ", sspd.labelSlice());
+    try std.testing.expect(sspd.rect.width() > 0);
+
+    const aspd = cock.mfd.dials.actual_speed.?;
+    try std.testing.expectEqualStrings("KPS ", aspd.labelSlice());
+    try std.testing.expect(aspd.rect.width() > 0);
 }

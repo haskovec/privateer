@@ -1264,6 +1264,141 @@ def gen_cockpit_file():
     write("test_cockpit.bin", root)
 
 
+def gen_mfd_file():
+    """Generate a cockpit IFF with MFD data (CMFD, DIAL, CHUD) for MFD parser tests.
+
+    Structure:
+        FORM:COCK
+          FORM:FRNT (minimal view with 4x4 sprite)
+            SHAP
+            TPLT
+          FONT "PRIVFNT\\0"
+          FORM:CMFD
+            FORM:AMFD (left MFD)
+              INFO (11 bytes): rect(36,6,115,70) + index=0, 0x1A, 0x6C
+            FORM:AMFD (right MFD)
+              INFO (11 bytes): rect(180,6,259,70) + index=1, 0x1A, 0x6C
+            SOFT "SOFTWARE"
+          FORM:CHUD
+            HINF (17 bytes)
+            FORM:HSFT
+              FORM:TRGT
+                INFO (7 bytes)
+              FORM:CRSS
+                SHAP (minimal 3x3 RLE crosshair)
+              FORM:NAVI
+                SHAP (minimal 3x3 RLE nav indicator)
+          FORM:DIAL
+            FORM:RADR
+              INFO (8 bytes): rect(90,126,138,162)
+            FORM:SHLD
+              INFO (8 bytes): rect(170,126,218,162)
+            FORM:ENER
+              FORM:VIEW
+                INFO (8 bytes): rect(155,35,168,59)
+            FORM:FUEL
+              FORM:VIEW
+                INFO (8 bytes): rect(143,3,180,8)
+            FORM:AUTO
+              INFO (8 bytes): rect(146,14,177,19)
+            FORM:SSPD
+              INFO (8 bytes): rect(50,130,81,135)
+              DATA (10 bytes): 00 00 00 00 "SET \\0" + pad
+            FORM:ASPD
+              INFO (8 bytes): rect(50,140,81,144)
+              DATA (10 bytes): 00 00 00 00 "KPS \\0" + pad
+          FORM:DAMG
+            DAMG (4 bytes)
+          FORM:CDMG
+            EXPL (2 bytes)
+    """
+    # Minimal front view sprite (same as cockpit fixture)
+    def make_cockpit_sprite(color):
+        sprite = struct.pack('<hhhh', 2, 2, 2, 2)
+        sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color]*4)
+        sprite += struct.pack('<HHH', 8, 0, 1) + bytes([color, 0, 0, color])
+        sprite += struct.pack('<HHH', 8, 0, 2) + bytes([color, 0, 0, color])
+        sprite += struct.pack('<HHH', 8, 0, 3) + bytes([color]*4)
+        sprite += struct.pack('<H', 0)
+        first_offset = 8
+        declared_size = 4 + 4 + len(sprite)
+        return struct.pack('<II', declared_size, first_offset) + sprite
+
+    # Minimal 3x3 RLE sprite for crosshair/nav indicators
+    def make_tiny_sprite(color):
+        sprite = struct.pack('<hhhh', 1, 1, 1, 1)  # 3x3 centered
+        sprite += struct.pack('<HHH', 6, 0, 0) + bytes([0, color, 0])
+        sprite += struct.pack('<HHH', 6, 0, 1) + bytes([color, color, color])
+        sprite += struct.pack('<HHH', 6, 0, 2) + bytes([0, color, 0])
+        sprite += struct.pack('<H', 0)
+        first_offset = 8
+        declared_size = 4 + 4 + len(sprite)
+        return struct.pack('<II', declared_size, first_offset) + sprite
+
+    # Build front view
+    tplt_data = struct.pack('<HHHH', 1, 1, 2, 2)
+    frnt = make_iff_form(b"FRNT",
+        make_iff_chunk(b"SHAP", make_cockpit_sprite(10)) +
+        make_iff_chunk(b"TPLT", tplt_data))
+
+    # FONT
+    font = make_iff_chunk(b"FONT", b"PRIVFNT\x00")
+
+    # CMFD: two MFD display areas
+    amfd_left = make_iff_form(b"AMFD",
+        make_iff_chunk(b"INFO",
+            struct.pack('<HHHH', 36, 6, 115, 70) + bytes([0, 0x1A, 0x6C])))
+    amfd_right = make_iff_form(b"AMFD",
+        make_iff_chunk(b"INFO",
+            struct.pack('<HHHH', 180, 6, 259, 70) + bytes([1, 0x1A, 0x6C])))
+    cmfd = make_iff_form(b"CMFD",
+        amfd_left + amfd_right +
+        make_iff_chunk(b"SOFT", b"SOFTWARE"))
+
+    # CHUD: HUD info and shift modes
+    hinf_data = bytes([0x3B, 0x00, 0x00, 0x39, 0x00, 0x06, 0x01, 0x90,
+                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    trgt_info = bytes([0x0C, 0x22, 0x29, 0xAA, 0x40, 0x05, 0x00])
+    trgt = make_iff_form(b"TRGT", make_iff_chunk(b"INFO", trgt_info))
+    crss = make_iff_form(b"CRSS", make_iff_chunk(b"SHAP", make_tiny_sprite(0x3C)))
+    navi = make_iff_form(b"NAVI", make_iff_chunk(b"SHAP", make_tiny_sprite(0x40)))
+    hsft = make_iff_form(b"HSFT", trgt + crss + navi)
+    chud = make_iff_form(b"CHUD",
+        make_iff_chunk(b"HINF", hinf_data) + hsft)
+
+    # DIAL: instrument gauges
+    radr = make_iff_form(b"RADR",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 90, 126, 138, 162)))
+    shld = make_iff_form(b"SHLD",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 170, 126, 218, 162)))
+    ener_view = make_iff_form(b"VIEW",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 155, 35, 168, 59)))
+    ener = make_iff_form(b"ENER", ener_view)
+    fuel_view = make_iff_form(b"VIEW",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 143, 3, 180, 8)))
+    fuel = make_iff_form(b"FUEL", fuel_view)
+    auto = make_iff_form(b"AUTO",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 146, 14, 177, 19)))
+    sspd = make_iff_form(b"SSPD",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 50, 130, 81, 135)) +
+        make_iff_chunk(b"DATA", b"\x00\x00\x00\x00kSET \x00"))
+    aspd = make_iff_form(b"ASPD",
+        make_iff_chunk(b"INFO", struct.pack('<HHHH', 50, 140, 81, 144)) +
+        make_iff_chunk(b"DATA", b"\x00\x00\x00\x00kKPS \x00"))
+    dial = make_iff_form(b"DIAL",
+        radr + shld + ener + fuel + auto + sspd + aspd)
+
+    # DAMG / CDMG (minimal)
+    damg = make_iff_form(b"DAMG",
+        make_iff_chunk(b"DAMG", struct.pack('<HH', 100, 2)))
+    cdmg = make_iff_form(b"CDMG",
+        make_iff_chunk(b"EXPL", struct.pack('<H', 0)))
+
+    root = make_iff_form(b"COCK",
+        frnt + font + cmfd + chud + dial + damg + cdmg)
+    write("test_mfd.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1286,4 +1421,5 @@ if __name__ == "__main__":
     gen_nav_table()
     gen_teams_file()
     gen_cockpit_file()
+    gen_mfd_file()
     print("Done.")

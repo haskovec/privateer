@@ -17,6 +17,7 @@ const iff = @import("iff.zig");
 const sprite_mod = @import("sprite.zig");
 const scene_renderer = @import("scene_renderer.zig");
 const framebuffer_mod = @import("framebuffer.zig");
+const mfd_mod = @import("mfd.zig");
 
 /// Ship types that have distinct cockpit designs.
 pub const ShipType = enum {
@@ -94,11 +95,13 @@ pub const CockpitView = struct {
 };
 
 /// Parsed cockpit data for a single ship type.
-/// Contains up to 4 directional views.
+/// Contains up to 4 directional views and MFD display configuration.
 pub const CockpitData = struct {
     views: [4]?CockpitView,
     /// Number of views successfully loaded.
     view_count: u8,
+    /// MFD display areas, instrument dials, and HUD configuration.
+    mfd: mfd_mod.MfdData,
 
     allocator: std.mem.Allocator,
 
@@ -127,17 +130,7 @@ pub const CockpitData = struct {
     }
 };
 
-/// Find a child FORM container with a specific form_type.
-fn findFormByType(parent: iff.Chunk, form_type: iff.Tag) ?*const iff.Chunk {
-    for (parent.children) |*child| {
-        if (std.mem.eql(u8, &child.tag, "FORM")) {
-            if (child.form_type) |ft| {
-                if (std.mem.eql(u8, &ft, &form_type)) return child;
-            }
-        }
-    }
-    return null;
-}
+// findFormByType is now available as iff.Chunk.findForm
 
 /// Parse a cockpit IFF file (FORM:COCK) and extract view sprites.
 pub fn parseCockpitIff(allocator: std.mem.Allocator, data: []const u8) (CockpitError || iff.IffError)!CockpitData {
@@ -154,9 +147,13 @@ pub fn parseCockpitIff(allocator: std.mem.Allocator, data: []const u8) (CockpitE
         return CockpitError.InvalidFormat;
     }
 
+    // Parse MFD data (CMFD, DIAL, CHUD) from the root chunk.
+    const mfd_data = mfd_mod.parseMfdData(allocator, root) catch mfd_mod.MfdData{};
+
     var result = CockpitData{
         .views = .{ null, null, null, null },
         .view_count = 0,
+        .mfd = mfd_data,
         .allocator = allocator,
     };
     errdefer result.deinit();
@@ -167,7 +164,7 @@ pub fn parseCockpitIff(allocator: std.mem.Allocator, data: []const u8) (CockpitE
     for (directions) |dir| {
         const view_type = dir.formType();
         // Search children for a FORM with matching form_type
-        const view_form = findFormByType(root, view_type) orelse continue;
+        const view_form = root.findForm(view_type) orelse continue;
         // Find SHAP chunk within the view.
         // SHAP data uses the scene pack format: [size:4][offset_table][sprite_data].
         if (view_form.findChild("SHAP".*)) |shap_chunk| {

@@ -64,6 +64,7 @@ privateer/
 │   ├── autopilot.zig          # Autopilot system (nav point steering, arrival detection, hostile interruption)
 │   ├── jump_drive.zig         # Jump drive system (inter-system travel, adjacency validation, cooldown)
 │   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
+│   ├── mfd.zig                # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper
@@ -126,3 +127,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `check_rf.py` | Check whether Righteous Fire expansion data is present |
 | `analyze_cockpits.py` | Analyze cockpit IFF/PAK file structures from PRIV.TRE |
 | `analyze_cockpit_shap.py` | Deep analysis of cockpit SHAP sprite format and TPLT layout data |
+| `analyze_mfd.py` | Deep analysis of MFD chunks (CMFD, CHUD, DIAL) from cockpit IFF files |

@@ -46,6 +46,34 @@ pub const Chunk = struct {
         return null;
     }
 
+    /// Find the first child FORM container with the given form_type.
+    pub fn findForm(self: Chunk, form_type: Tag) ?*const Chunk {
+        for (self.children) |*child| {
+            if (std.mem.eql(u8, &child.tag, "FORM")) {
+                if (child.form_type) |ft| {
+                    if (std.mem.eql(u8, &ft, &form_type)) return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Find all child FORM containers with the given form_type.
+    pub fn findForms(self: Chunk, allocator: std.mem.Allocator, form_type: Tag) ![]const *const Chunk {
+        var results: std.ArrayListUnmanaged(*const Chunk) = .empty;
+        errdefer results.deinit(allocator);
+        for (self.children) |*child| {
+            if (std.mem.eql(u8, &child.tag, "FORM")) {
+                if (child.form_type) |ft| {
+                    if (std.mem.eql(u8, &ft, &form_type)) {
+                        try results.append(allocator, child);
+                    }
+                }
+            }
+        }
+        return results.toOwnedSlice(allocator);
+    }
+
     /// Find all children with the given tag.
     pub fn findChildren(self: Chunk, allocator: std.mem.Allocator, tag: Tag) ![]const *const Chunk {
         var results: std.ArrayListUnmanaged(*const Chunk) = .empty;

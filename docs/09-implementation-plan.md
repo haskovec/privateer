@@ -337,7 +337,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement cockpit loader + renderer
   - Handle widescreen extension of cockpit edges
 
-- [ ] **6.2 MFD (Multi-Function Display) system**
+- [x] **6.2 MFD (Multi-Function Display) system**
   - Parse CMFD, CHUD, DIAL chunks
   - Render left/right MFDs with cycling content
   - RED: Test MFD displays target info when target is selected
