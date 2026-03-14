@@ -23,6 +23,7 @@ pub const validate = @import("validate.zig");
 pub const window = @import("window.zig");
 pub const framebuffer = @import("framebuffer.zig");
 pub const upscale = @import("upscale.zig");
+pub const viewport = @import("viewport.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

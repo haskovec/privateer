@@ -222,7 +222,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test scaled sprite at 50% produces half-size output
   - GREEN: Implement scaling
 
-- [ ] **3.5 Widescreen viewport**
+- [x] **3.5 Widescreen viewport**
   - Compute pillarbox/letterbox for non-4:3 displays
   - Space flight: extend viewport to fill width
   - Landing screens: center at 4:3 with decorative borders

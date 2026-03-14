@@ -11,6 +11,7 @@ const c = sdl.raw;
 const pal = @import("pal.zig");
 const window_mod = @import("window.zig");
 const sprite_mod = @import("sprite.zig");
+const viewport_mod = @import("viewport.zig");
 
 /// Internal framebuffer dimensions (original game resolution).
 pub const WIDTH = window_mod.BASE_WIDTH; // 320
@@ -171,6 +172,30 @@ pub const Framebuffer = struct {
             WIDTH * 4,
         );
         _ = c.SDL_RenderTexture(renderer, tex, null, null);
+    }
+
+    /// Upload the RGBA buffer and render using a viewport destination rect.
+    /// The viewport controls where the framebuffer appears on screen,
+    /// enabling proper aspect ratio correction and widescreen borders.
+    /// Black borders are rendered automatically (SDL clears to black before each frame).
+    pub fn presentViewport(self: *Framebuffer, renderer: *c.SDL_Renderer, vp: viewport_mod.Rect) void {
+        const tex = self.texture orelse return;
+        _ = c.SDL_UpdateTexture(
+            tex,
+            null,
+            &self.rgba,
+            WIDTH * 4,
+        );
+        var dst = c.SDL_FRect{ .x = vp.x, .y = vp.y, .w = vp.w, .h = vp.h };
+        _ = c.SDL_RenderTexture(renderer, tex, null, &dst);
+    }
+
+    /// Upload the RGBA buffer and render using a viewport mode.
+    /// Computes the destination rect from the window dimensions and mode,
+    /// then presents with proper aspect ratio or fill behavior.
+    pub fn presentWithMode(self: *Framebuffer, renderer: *c.SDL_Renderer, window_w: u32, window_h: u32, mode: viewport_mod.Mode) void {
+        const vp = viewport_mod.compute(mode, window_w, window_h);
+        self.presentViewport(renderer, vp);
     }
 };
 
@@ -575,4 +600,80 @@ test "blitSpriteScaled clips correctly at edges" {
     try std.testing.expectEqual(@as(u8, 3), fb.getPixel(318, 199));
     // src(1,1)=4 at (319,199)
     try std.testing.expectEqual(@as(u8, 4), fb.getPixel(319, 199));
+}
+
+// --- Viewport-aware present tests (Phase 3.5) ---
+
+test "presentViewport renders without crashing" {
+    try sdl.init();
+    defer sdl.shutdown();
+
+    var win = try window_mod.Window.create(1920, 1080);
+    defer win.destroy();
+
+    var fb = Framebuffer.create();
+    defer fb.destroy();
+    try fb.createTexture(win.renderer);
+
+    fb.clear(0);
+    var palette: pal.Palette = undefined;
+    @memset(&palette.colors, pal.Color{ .r = 0, .g = 0, .b = 0 });
+    fb.applyPalette(&palette);
+
+    // Present with a 4:3 viewport on a 16:9 window
+    const vp = viewport_mod.compute(.fit_4_3, 1920, 1080);
+    fb.presentViewport(win.renderer, vp);
+}
+
+test "presentWithMode renders in fill mode without crashing" {
+    try sdl.init();
+    defer sdl.shutdown();
+
+    var win = try window_mod.Window.create(1280, 800);
+    defer win.destroy();
+
+    var fb = Framebuffer.create();
+    defer fb.destroy();
+    try fb.createTexture(win.renderer);
+
+    fb.clear(0);
+    var palette: pal.Palette = undefined;
+    @memset(&palette.colors, pal.Color{ .r = 0, .g = 0, .b = 0 });
+    fb.applyPalette(&palette);
+
+    fb.presentWithMode(win.renderer, 1280, 800, .fill);
+}
+
+test "presentWithMode renders in fit_4_3 mode without crashing" {
+    try sdl.init();
+    defer sdl.shutdown();
+
+    var win = try window_mod.Window.create(1920, 1080);
+    defer win.destroy();
+
+    var fb = Framebuffer.create();
+    defer fb.destroy();
+    try fb.createTexture(win.renderer);
+
+    fb.clear(42);
+    var palette: pal.Palette = undefined;
+    @memset(&palette.colors, pal.Color{ .r = 0, .g = 0, .b = 0 });
+    palette.colors[42] = .{ .r = 100, .g = 50, .b = 200 };
+    fb.applyPalette(&palette);
+
+    // fit_4_3 on 16:9 → pillarboxed at 1440x1080 centered
+    fb.presentWithMode(win.renderer, 1920, 1080, .fit_4_3);
+}
+
+test "presentViewport without texture is no-op" {
+    try sdl.init();
+    defer sdl.shutdown();
+
+    var win = try window_mod.Window.create(640, 400);
+    defer win.destroy();
+
+    var fb = Framebuffer.create();
+    const vp = viewport_mod.Rect{ .x = 0, .y = 0, .w = 640, .h = 400 };
+    // Should not crash with no texture
+    fb.presentViewport(win.renderer, vp);
 }
