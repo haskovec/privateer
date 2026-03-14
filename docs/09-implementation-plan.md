@@ -309,7 +309,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test afterburner temporarily increases max speed
   - GREEN: Implement afterburner
 
-- [ ] **5.5 Autopilot system**
+- [x] **5.5 Autopilot system**
   - Navigate to selected nav point automatically
   - Interrupt on hostile contact
   - RED: Test autopilot moves ship toward target nav point
