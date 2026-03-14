@@ -110,6 +110,9 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `tre_entries.py` | Extract all 832 TRE entries with spacing analysis |
 | `find_file_data.py` | Locate actual file data within the TRE using offset hypothesis testing |
 | `iff_analysis.py` | Parse IFF chunk structures and catalog all FORM/chunk types |
+| `analyze_iff.py` | Deep recursive IFF chunk analysis with data extraction |
 | `other_formats.py` | Analyze non-IFF formats (PAK, VPK, VPF, VOC, SHP, PAL, DAT) |
+| `pak_diag.py` | Diagnose PAK file offset tables and resource layouts |
+| `vpk_analysis.py` | Analyze VPK/VPF voice pack file structures and LZW compression |
 | `exe_strings.py` | Extract and categorize meaningful strings from PRCD.EXE |
 | `check_rf.py` | Check whether Righteous Fire expansion data is present |
