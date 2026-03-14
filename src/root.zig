@@ -33,6 +33,7 @@ pub const midgame = @import("midgame.zig");
 pub const universe = @import("universe.zig");
 pub const bases = @import("bases.zig");
 pub const nav_graph = @import("nav_graph.zig");
+pub const nav_map = @import("nav_map.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

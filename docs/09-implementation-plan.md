@@ -292,7 +292,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test jump connectivity (system A connects to system B)
   - GREEN: Implement nav graph from TABLE.DAT
 
-- [ ] **5.3 Nav map display**
+- [x] **5.3 Nav map display**
   - Parse NMAP form data (GRID, BTTN, QUAD, etc.)
   - Render sector map with systems, connections, player position
   - RED: Test nav map renders all systems in correct positions
