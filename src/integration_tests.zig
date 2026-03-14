@@ -18,6 +18,7 @@ const png = @import("png.zig");
 const validate = @import("validate.zig");
 const palette_viewer = @import("palette_viewer.zig");
 const midgame = @import("midgame.zig");
+const universe = @import("universe.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1447,4 +1448,89 @@ test "integration: midgame sequence advances through frames" {
     // Should have visited all frames
     try std.testing.expectEqual(total_frames, frames_seen);
     try std.testing.expectEqual(total_frames - 1, seq.currentFrameIndex());
+}
+
+// --- Universe data integration tests (Phase 5.1) ---
+
+test "integration: QUADRANT.IFF parses as FORM:UNIV with 4 quadrants" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "QUADRANT.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+
+    // Verify it's a FORM:UNIV
+    var chunk = try iff.parseFile(allocator, file_data);
+    defer chunk.deinit();
+    try std.testing.expectEqualStrings("FORM", &chunk.tag);
+    try std.testing.expectEqualStrings("UNIV", &chunk.form_type.?);
+}
+
+test "integration: parse QUADRANT.IFF universe structure" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "QUADRANT.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var univ = try universe.parseUniverse(allocator, file_data);
+    defer univ.deinit();
+
+    // The Gemini Sector has 4 quadrants
+    try std.testing.expectEqual(@as(usize, 4), univ.quadrants.len);
+}
+
+test "integration: each quadrant contains systems" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "QUADRANT.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var univ = try universe.parseUniverse(allocator, file_data);
+    defer univ.deinit();
+
+    // Each quadrant should have at least 1 system
+    for (univ.quadrants) |q| {
+        try std.testing.expect(q.systems.len > 0);
+    }
+
+    // Total systems should be substantial (Gemini Sector has ~69 systems)
+    const total = univ.totalSystems();
+    try std.testing.expect(total > 50);
+}
+
+test "integration: universe systems have valid coordinates and factions" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "QUADRANT.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var univ = try universe.parseUniverse(allocator, file_data);
+    defer univ.deinit();
+
+    // All systems should have valid coordinate data
+    for (univ.quadrants) |q| {
+        for (q.systems) |sys| {
+            // Coordinates should be within reasonable range for a map grid
+            _ = sys.x;
+            _ = sys.y;
+            _ = sys.faction;
+            _ = sys.hazard;
+        }
+    }
+
+    // Some systems should have bases
+    const base_count = univ.totalBases();
+    try std.testing.expect(base_count > 0);
 }

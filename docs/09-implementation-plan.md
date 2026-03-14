@@ -277,7 +277,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 5: Universe & Navigation
 *The player needs to go places.*
 
-- [ ] **5.1 Universe data loader**
+- [x] **5.1 Universe data loader**
   - Parse QUADRANT.IFF (UNIV > QUAD > SYST hierarchy)
   - Parse SECTORS.IFF, BASES.IFF, TEAMS.IFF
   - RED: Test loading universe produces 4 quadrants

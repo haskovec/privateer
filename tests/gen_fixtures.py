@@ -1026,6 +1026,66 @@ def gen_midgame_pak():
     write("test_midgame.bin", bytes(data))
 
 
+def gen_quadrant_file():
+    """Generate test QUADRANT.IFF fixture (FORM:UNIV with FORM:QUAD > FORM:SYST).
+
+    QUADRANT.IFF structure:
+        FORM:UNIV
+          INFO (universe metadata)
+          FORM:QUAD (per quadrant)
+            INFO (quadrant metadata)
+            FORM:SYST (per star system)
+              INFO (system properties: coordinates, faction, hazard level)
+              [BASE] (optional: base present at this system)
+
+    Fixture: test_quadrant.bin - 2 quadrants, 5 systems total
+        Quadrant 0: 3 systems
+          System 0: coords (10, 20), faction 1, hazard 2, has base (type 3)
+          System 1: coords (30, 40), faction 2, hazard 1, no base
+          System 2: coords (50, 60), faction 1, hazard 3, has base (type 1)
+        Quadrant 1: 2 systems
+          System 0: coords (70, 80), faction 3, hazard 1, no base
+          System 1: coords (90, 100), faction 2, hazard 2, has base (type 2)
+    """
+    def make_syst(x, y, faction, hazard, base_type=None):
+        """Build a FORM:SYST with INFO and optional BASE chunk."""
+        # INFO: 4 bytes - x(u8), y(u8), faction(u8), hazard(u8)
+        info = make_iff_chunk(b"INFO", bytes([x, y, faction, hazard]))
+        children = info
+        if base_type is not None:
+            # BASE: 1 byte - base type
+            children += make_iff_chunk(b"BASE", bytes([base_type]))
+        return make_iff_form(b"SYST", children)
+
+    def make_quad(systems_bytes):
+        """Build a FORM:QUAD with INFO and SYST children."""
+        # Count systems by scanning for FORM headers with SYST type
+        # INFO: just a placeholder byte for quadrant metadata
+        info = make_iff_chunk(b"INFO", bytes([0x00]))
+        return make_iff_form(b"QUAD", info + systems_bytes)
+
+    # Quadrant 0: 3 systems
+    q0_systems = (
+        make_syst(10, 20, 1, 2, base_type=3) +
+        make_syst(30, 40, 2, 1) +
+        make_syst(50, 60, 1, 3, base_type=1)
+    )
+    quad0 = make_quad(q0_systems)
+
+    # Quadrant 1: 2 systems
+    q1_systems = (
+        make_syst(70, 80, 3, 1) +
+        make_syst(90, 100, 2, 2, base_type=2)
+    )
+    quad1 = make_quad(q1_systems)
+
+    # Universe root: INFO + 2 quadrants
+    univ_info = make_iff_chunk(b"INFO", bytes([0x02]))  # 2 quadrants
+    root = make_iff_form(b"UNIV", univ_info + quad0 + quad1)
+
+    write("test_quadrant.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1043,4 +1103,5 @@ if __name__ == "__main__":
     gen_font_file()
     gen_gameflow_file()
     gen_midgame_pak()
+    gen_quadrant_file()
     print("Done.")
