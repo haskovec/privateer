@@ -452,7 +452,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test insufficient credits prevents purchase
   - GREEN: Implement credit validation
 
-- [ ] **8.3 Ship dealer**
+- [x] **8.3 Ship dealer**
   - Parse SHIPSTUF.IFF for equipment
   - Buy/sell ships and equipment
   - RED: Test buying Centurion with sufficient credits succeeds

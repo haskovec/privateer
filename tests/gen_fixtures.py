@@ -1725,6 +1725,79 @@ def gen_commodities_file():
     write("test_commodities.bin", root)
 
 
+def gen_shipstuf_file():
+    """Generate test SHIPSTUF.IFF fixture (FORM:SHPS).
+
+    Ship dealer data with ships and equipment for purchase.
+
+    Structure:
+      FORM:SHPS
+        FORM:SHPC (ship catalog)
+          FORM:SHIP (per ship)
+            INFO (4 bytes: id(u16 LE) + ship_class(u16 LE))
+            LABL (null-terminated name)
+            COST (4 bytes: price(i32 LE))
+            STAT (12 bytes: speed(u16 LE) + shields(u16 LE) + armor(u16 LE) +
+                  cargo(u16 LE) + gun_mounts(u8) + missile_mounts(u8) +
+                  turret_mounts(u8) + pad(u8))
+        FORM:EQPC (equipment catalog)
+          FORM:EQUP (per equipment)
+            INFO (4 bytes: id(u16 LE) + category(u16 LE))
+            LABL (null-terminated name)
+            COST (4 bytes: price(i32 LE))
+            CMPT (N bytes: number of compatible ship IDs (u8) + ship_id(u16 LE) each)
+
+    Fixture: test_shipstuf.bin - 3 ships + 4 equipment items
+        Ship 0: "Tarsus" class 0 (scout), 20000 cr, speed 200, 2 guns, 1 launcher
+        Ship 1: "Galaxy" class 1 (merchant), 70000 cr, speed 180, 2 guns, 2 launchers, 1 turret
+        Ship 2: "Centurion" class 2 (fighter), 200000 cr, speed 300, 4 guns, 2 launchers
+        Equipment 0: "Laser" category 0 (gun), 5000 cr, compatible with all ships
+        Equipment 1: "Plasma Gun" category 0 (gun), 40000 cr, compatible with Centurion only
+        Equipment 2: "Shield Level 3" category 1 (shield), 15000 cr, compatible with Galaxy + Centurion
+        Equipment 3: "Repair Droid" category 3 (software), 10000 cr, compatible with all ships
+    """
+    def make_ship(ship_id, ship_class, name, price, speed, shields, armor, cargo,
+                  gun_mounts, missile_mounts, turret_mounts):
+        info = make_iff_chunk(b"INFO", struct.pack('<HH', ship_id, ship_class))
+        labl = make_iff_chunk(b"LABL", name.encode('ascii') + b'\x00')
+        cost = make_iff_chunk(b"COST", struct.pack('<i', price))
+        stat = make_iff_chunk(b"STAT", struct.pack('<HHHHBBBx',
+            speed, shields, armor, cargo,
+            gun_mounts, missile_mounts, turret_mounts))
+        return make_iff_form(b"SHIP", info + labl + cost + stat)
+
+    def make_equipment(equip_id, category, name, price, compatible_ship_ids):
+        info = make_iff_chunk(b"INFO", struct.pack('<HH', equip_id, category))
+        labl = make_iff_chunk(b"LABL", name.encode('ascii') + b'\x00')
+        cost = make_iff_chunk(b"COST", struct.pack('<i', price))
+        cmpt_data = struct.pack('B', len(compatible_ship_ids))
+        for sid in compatible_ship_ids:
+            cmpt_data += struct.pack('<H', sid)
+        cmpt = make_iff_chunk(b"CMPT", cmpt_data)
+        return make_iff_form(b"EQUP", info + labl + cost + cmpt)
+
+    # Ships
+    tarsus = make_ship(0, 0, "Tarsus", 20000,
+                       200, 80, 60, 20, 2, 1, 0)
+    galaxy = make_ship(1, 1, "Galaxy", 70000,
+                       180, 120, 100, 75, 2, 2, 1)
+    centurion = make_ship(2, 2, "Centurion", 200000,
+                          300, 200, 150, 10, 4, 2, 0)
+
+    ship_catalog = make_iff_form(b"SHPC", tarsus + galaxy + centurion)
+
+    # Equipment
+    laser = make_equipment(0, 0, "Laser", 5000, [0, 1, 2])
+    plasma = make_equipment(1, 0, "Plasma Gun", 40000, [2])
+    shield3 = make_equipment(2, 1, "Shield Level 3", 15000, [1, 2])
+    repair = make_equipment(3, 3, "Repair Droid", 10000, [0, 1, 2])
+
+    equip_catalog = make_iff_form(b"EQPC", laser + plasma + shield3 + repair)
+
+    root = make_iff_form(b"SHPS", ship_catalog + equip_catalog)
+    write("test_shipstuf.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1753,4 +1826,5 @@ if __name__ == "__main__":
     gen_expltype_file()
     gen_trshtype_file()
     gen_commodities_file()
+    gen_shipstuf_file()
     print("Done.")
