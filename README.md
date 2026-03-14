@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system), 7.2 (Projectile physics), 7.3 (Damage model), 7.4 (AI flight behavior), 7.5 (NPC spawning), and 7.6 (Explosions & debris) complete. See the
+Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system), 7.2 (Projectile physics), 7.3 (Damage model), 7.4 (AI flight behavior), 7.5 (NPC spawning), 7.6 (Explosions & debris), and 7.7 (Tractor beam & cargo) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -88,7 +88,8 @@ privateer/
 │   │   ├── damage.zig         # Damage model (shield absorption, armor penetration, hit facing, ship destruction)
 │   │   ├── ai.zig             # AI flight behavior (state machine: patrol/attack/flee/escort, pursuit steering, engagement logic)
 │   │   ├── spawning.zig       # NPC spawning system (faction-weighted spawn rules, ship pool, sector-based encounters)
-│   │   └── explosions.zig     # Explosion & debris system (EXPLTYPE/TRSHTYPE parsers, pool management, animated effects, destruction spawning)
+│   │   ├── explosions.zig     # Explosion & debris system (EXPLTYPE/TRSHTYPE parsers, pool management, animated effects, destruction spawning)
+│   │   └── tractor_cargo.zig  # Tractor beam & cargo system (floating cargo pools, tractor beam pull physics, cargo hold management)
 │   │
 │   └── cli/                   # Offline tools & asset pipelines
 │       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)

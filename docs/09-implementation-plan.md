@@ -424,7 +424,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test ship destruction plays explosion animation
   - GREEN: Implement explosion system
 
-- [ ] **7.7 Tractor beam & cargo**
+- [x] **7.7 Tractor beam & cargo**
   - Collect floating cargo with tractor beam
   - RED: Test tractor beam pulls cargo toward ship
   - GREEN: Implement tractor beam
