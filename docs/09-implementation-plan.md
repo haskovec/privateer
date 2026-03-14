@@ -460,7 +460,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test equipment installation respects hardpoint compatibility
   - GREEN: Implement equipment system
 
-- [ ] **8.4 Landing fees**
+- [x] **8.4 Landing fees**
   - Parse LANDFEE.IFF
   - Deduct landing fee on landing
   - RED: Test landing at agricultural base deducts correct fee

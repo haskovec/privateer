@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 7 complete. Phase 8.1-8.3 (Commodity system, exchange, ship dealer) complete. See the
+Phase 0 through Phase 7 complete. Phase 8.1-8.4 (Economy & trading) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -72,7 +72,8 @@ privateer/
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
 │   │   ├── exchange.zig       # Commodity exchange (buy/sell transactions, credit validation, cargo space checks)
-│   │   └── ship_dealer.zig    # Ship dealer (SHIPSTUF.IFF: ship/equipment catalog, purchase/sell, hardpoint compatibility)
+│   │   ├── ship_dealer.zig    # Ship dealer (SHIPSTUF.IFF: ship/equipment catalog, purchase/sell, hardpoint compatibility)
+│   │   └── landing_fees.zig   # Landing fees (LANDFEE.IFF: fee deduction on base landing)
 │   │
 │   ├── flight/                # Real-time flight systems
 │   │   ├── flight_physics.zig # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)

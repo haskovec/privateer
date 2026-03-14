@@ -1798,6 +1798,22 @@ def gen_shipstuf_file():
     write("test_shipstuf.bin", root)
 
 
+def gen_landfee_file():
+    """Generate test LANDFEE.IFF fixture (FORM:LFEE).
+
+    Simple structure: single DATA chunk with a landing fee value (i32 LE).
+
+    Structure:
+      FORM:LFEE
+        DATA (4 bytes: fee(i32 LE))
+
+    Fixture: test_landfee.bin - landing fee of 50 credits
+    """
+    data_chunk = make_iff_chunk(b"DATA", struct.pack('<i', 50))
+    root = make_iff_form(b"LFEE", data_chunk)
+    write("test_landfee.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1827,4 +1843,5 @@ if __name__ == "__main__":
     gen_trshtype_file()
     gen_commodities_file()
     gen_shipstuf_file()
+    gen_landfee_file()
     print("Done.")

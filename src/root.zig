@@ -44,6 +44,7 @@ pub const nav_map = @import("game/nav_map.zig");
 pub const commodities = @import("economy/commodities.zig");
 pub const exchange = @import("economy/exchange.zig");
 pub const ship_dealer = @import("economy/ship_dealer.zig");
+pub const landing_fees = @import("economy/landing_fees.zig");
 
 // Flight systems
 pub const flight_physics = @import("flight/flight_physics.zig");
