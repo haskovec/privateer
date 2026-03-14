@@ -317,7 +317,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test autopilot disengages when enemy detected
   - GREEN: Implement threat detection interrupt
 
-- [ ] **5.6 Jump drive**
+- [x] **5.6 Jump drive**
   - Inter-system travel at jump points
   - Jump sequence animation
   - RED: Test jumping at a jump point transitions to connected system
