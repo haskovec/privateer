@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 5 complete. Phase 6 (Cockpit & HUD) is next. See the
+Phase 0 through Phase 5 complete. Phase 6 (Cockpit & HUD) is in progress. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -63,6 +63,7 @@ privateer/
 │   ├── flight_physics.zig     # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
 │   ├── autopilot.zig          # Autopilot system (nav point steering, arrival detection, hostile interruption)
 │   ├── jump_drive.zig         # Jump drive system (inter-system travel, adjacency validation, cooldown)
+│   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper
@@ -123,3 +124,5 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `vpk_analysis.py` | Analyze VPK/VPF voice pack file structures and LZW compression |
 | `exe_strings.py` | Extract and categorize meaningful strings from PRCD.EXE |
 | `check_rf.py` | Check whether Righteous Fire expansion data is present |
+| `analyze_cockpits.py` | Analyze cockpit IFF/PAK file structures from PRIV.TRE |
+| `analyze_cockpit_shap.py` | Deep analysis of cockpit SHAP sprite format and TPLT layout data |

@@ -330,7 +330,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 6: Cockpit & HUD
 *The player's primary interface during flight.*
 
-- [ ] **6.1 Cockpit renderer**
+- [x] **6.1 Cockpit renderer**
   - Load cockpit IFF/PAK for current ship type (Tarsus/Fighter/Merchant)
   - Render cockpit frame around viewport
   - RED: Test cockpit loads correct frame for Tarsus

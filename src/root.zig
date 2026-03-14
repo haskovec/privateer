@@ -37,6 +37,7 @@ pub const nav_map = @import("nav_map.zig");
 pub const flight_physics = @import("flight_physics.zig");
 pub const autopilot = @import("autopilot.zig");
 pub const jump_drive = @import("jump_drive.zig");
+pub const cockpit = @import("cockpit.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

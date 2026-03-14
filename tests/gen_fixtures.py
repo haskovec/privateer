@@ -1199,6 +1199,71 @@ def gen_teams_file():
     write("test_teams.bin", root)
 
 
+def gen_cockpit_file():
+    """Generate a minimal cockpit IFF fixture (FORM:COCK).
+
+    Structure:
+        FORM:COCK
+          FORM:FRNT  (front view)
+            SHAP  (4x4 RLE sprite - cockpit frame with transparent viewport)
+            TPLT  (template: viewport rect as 4x u16 LE: x, y, w, h)
+          FORM:RITE  (right view)
+            SHAP  (4x4 RLE sprite)
+            TPLT  (template)
+          FORM:BACK  (rear view)
+            SHAP  (4x4 RLE sprite)
+            TPLT  (template)
+          FORM:LEFT  (left view)
+            SHAP  (4x4 RLE sprite)
+            TPLT  (template)
+
+    The SHAP chunk contains raw RLE sprite data (8-byte header + RLE data).
+    The sprite is 4x4 with a transparent center pixel (simulating viewport).
+    """
+    def make_cockpit_sprite(color):
+        """Build a 4x4 RLE sprite in scene pack format (size + offset table + sprite data)."""
+        # First build the raw RLE sprite
+        # Header: x2=2, x1=2, y1=2, y2=2 => 4x4
+        sprite = struct.pack('<hhhh', 2, 2, 2, 2)
+        # Row 0: all opaque [color, color, color, color]
+        sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color, color, color, color])
+        # Row 1: opaque, transparent, transparent, opaque [color, 0, 0, color]
+        sprite += struct.pack('<HHH', 8, 0, 1) + bytes([color, 0, 0, color])
+        # Row 2: opaque, transparent, transparent, opaque
+        sprite += struct.pack('<HHH', 8, 0, 2) + bytes([color, 0, 0, color])
+        # Row 3: all opaque
+        sprite += struct.pack('<HHH', 8, 0, 3) + bytes([color, color, color, color])
+        # Terminator
+        sprite += struct.pack('<H', 0)
+
+        # Wrap in scene pack format: [declared_size:4][first_offset:4][sprite_data]
+        first_offset = 8  # offset to sprite data within the scene pack
+        declared_size = 4 + 4 + len(sprite)  # size + offset + sprite
+        scene_pack = struct.pack('<II', declared_size, first_offset) + sprite
+        return scene_pack
+
+    # TPLT: viewport rectangle as 4x u16 LE (x=1, y=1, w=2, h=2)
+    tplt_data = struct.pack('<HHHH', 1, 1, 2, 2)
+
+    # Build views with different colors
+    views = [
+        (b"FRNT", 10),
+        (b"RITE", 20),
+        (b"BACK", 30),
+        (b"LEFT", 40),
+    ]
+
+    children = b""
+    for view_type, color in views:
+        shap = make_iff_chunk(b"SHAP", make_cockpit_sprite(color))
+        tplt = make_iff_chunk(b"TPLT", tplt_data)
+        view = make_iff_form(view_type, shap + tplt)
+        children += view
+
+    root = make_iff_form(b"COCK", children)
+    write("test_cockpit.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1220,4 +1285,5 @@ if __name__ == "__main__":
     gen_bases_file()
     gen_nav_table()
     gen_teams_file()
+    gen_cockpit_file()
     print("Done.")

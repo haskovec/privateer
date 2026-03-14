@@ -21,6 +21,7 @@ const midgame = @import("midgame.zig");
 const universe = @import("universe.zig");
 const bases = @import("bases.zig");
 const nav_graph = @import("nav_graph.zig");
+const cockpit = @import("cockpit.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1640,4 +1641,94 @@ test "integration: universe system indices match nav graph dimensions" {
             try std.testing.expect(sys.index < graph.system_count);
         }
     }
+}
+
+// --- Phase 6.1: Cockpit ---
+
+test "integration: CLUNKCK.IFF (Tarsus cockpit) loads with 4 views" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    try std.testing.expectEqual(@as(u8, 4), cock.view_count);
+    try std.testing.expect(cock.getView(.front) != null);
+    try std.testing.expect(cock.getView(.right) != null);
+    try std.testing.expect(cock.getView(.back) != null);
+    try std.testing.expect(cock.getView(.left) != null);
+}
+
+test "integration: Tarsus front cockpit sprite covers full screen" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    const front = cock.getView(.front).?;
+    // Front cockpit sprite should cover most of the 320x200 screen
+    try std.testing.expect(front.sprite.width >= 200);
+    try std.testing.expect(front.sprite.height >= 150);
+}
+
+test "integration: all 4 cockpit types load successfully" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const ship_types = [_]cockpit.ShipType{ .tarsus, .centurion, .galaxy, .orion };
+    for (ship_types) |ship| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, ship.iffFilename());
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var cock = try cockpit.parseCockpitIff(allocator, file_data);
+        defer cock.deinit();
+
+        // All cockpit types should have at least a front view
+        try std.testing.expect(cock.getView(.front) != null);
+        try std.testing.expect(cock.view_count >= 1);
+    }
+}
+
+test "integration: cockpit renders onto framebuffer without crash" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var cock = try cockpit.parseCockpitIff(allocator, file_data);
+    defer cock.deinit();
+
+    // Create framebuffer, fill with "space" color, overlay cockpit
+    var fb = framebuffer_mod.Framebuffer.create();
+    fb.clear(1); // space background
+    cockpit.renderCockpit(&fb, &cock, .front);
+
+    // After rendering, some pixels should be cockpit (non-zero, non-1)
+    // and some should still be space (1 or 0 if transparent)
+    var has_cockpit_pixel = false;
+    var has_space_pixel = false;
+    for (fb.pixels) |p| {
+        if (p != 0 and p != 1) has_cockpit_pixel = true;
+        if (p == 1) has_space_pixel = true;
+    }
+    // Cockpit frame should have opaque pixels
+    try std.testing.expect(has_cockpit_pixel);
+    // Viewport window should let space show through
+    try std.testing.expect(has_space_pixel);
 }
