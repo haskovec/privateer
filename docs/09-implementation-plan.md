@@ -54,7 +54,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement fixture loader
   - Configure `zig build test` to run all test suites
 
-- [ ] **0.4 Configuration system**
+- [x] **0.4 Configuration system**
   - Define paths: original game data dir, mod dir, output dir
   - RED: Test config loading from a TOML/JSON file
   - GREEN: Implement config parser (or use a minimal embedded format)
