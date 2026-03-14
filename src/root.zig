@@ -51,6 +51,7 @@ pub const projectiles = @import("combat/projectiles.zig");
 pub const damage = @import("combat/damage.zig");
 pub const ai = @import("combat/ai.zig");
 pub const spawning = @import("combat/spawning.zig");
+pub const explosions = @import("combat/explosions.zig");
 
 // Cockpit & HUD
 pub const cockpit = @import("cockpit/cockpit.zig");

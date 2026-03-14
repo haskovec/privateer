@@ -15,6 +15,7 @@ const flight_physics = @import("../flight/flight_physics.zig");
 const damage_mod = @import("damage.zig");
 const ai_mod = @import("ai.zig");
 const radar_mod = @import("../cockpit/radar.zig");
+const explosions_mod = @import("explosions.zig");
 
 const Vec3 = flight_physics.Vec3;
 const FlightState = flight_physics.FlightState;
@@ -25,6 +26,9 @@ const AiController = ai_mod.AiController;
 const AiConstants = ai_mod.AiConstants;
 const Faction = radar_mod.Faction;
 const RadarContact = radar_mod.RadarContact;
+const ExplosionSystem = explosions_mod.ExplosionSystem;
+const DebrisSystem = explosions_mod.DebrisSystem;
+const ExplosionSize = explosions_mod.ExplosionSize;
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -411,15 +415,35 @@ pub const SpawnSystem = struct {
     }
 
     /// Update all active NPCs for one frame.
-    pub fn updateNpcs(self: *SpawnSystem, dt: f32) void {
+    /// If explosion/debris systems are provided, destroyed ships spawn effects.
+    pub fn updateNpcs(
+        self: *SpawnSystem,
+        dt: f32,
+        explosion_sys: ?*ExplosionSystem,
+        debris_sys: ?*DebrisSystem,
+    ) void {
         for (&self.ships) |*ship| {
             if (!ship.active) continue;
 
             _ = ship.ai.update(&ship.flight, &ship.health, &.{}, dt);
             ship.flight.update(dt);
 
-            // Remove destroyed ships
+            // Remove destroyed ships and spawn explosion/debris
             if (ship.health.isDestroyed()) {
+                if (explosion_sys) |es| {
+                    const size: ExplosionSize = .medium;
+                    if (debris_sys) |ds| {
+                        _ = explosions_mod.spawnDestructionEffect(
+                            es,
+                            ds,
+                            ship.flight.position,
+                            size,
+                            &self.rng,
+                        );
+                    } else {
+                        _ = es.spawn(ship.flight.position, size);
+                    }
+                }
                 ship.active = false;
             }
         }
@@ -860,7 +884,7 @@ test "SpawnSystem.updateNpcs removes destroyed ships" {
     _ = sys.ships[slot].health.applyDamage(.right, 500);
     try testing.expect(sys.ships[slot].health.isDestroyed());
 
-    sys.updateNpcs(0.016);
+    sys.updateNpcs(0.016, null, null);
 
     try testing.expectEqual(@as(u32, 0), sys.activeCount());
 }
@@ -871,10 +895,34 @@ test "SpawnSystem.updateNpcs advances ship positions" {
     sys.ships[slot].flight.setThrottle(1.0);
 
     const initial_pos = sys.ships[slot].flight.position;
-    sys.updateNpcs(1.0);
+    sys.updateNpcs(1.0, null, null);
     const final_pos = sys.ships[slot].flight.position;
 
     // Ship should have moved
     const dist = final_pos.sub(initial_pos).length();
     try testing.expect(dist > 0);
+}
+
+test "SpawnSystem.updateNpcs spawns explosion on ship destruction" {
+    var sys = SpawnSystem.init(42);
+    var expl_sys = ExplosionSystem.init();
+    var debris_sys = DebrisSystem.init();
+
+    const ship_pos = Vec3{ .x = 500, .y = 100, .z = 300 };
+    const slot = sys.spawnNpc(.retro, ship_pos).?;
+
+    // Destroy the ship
+    _ = sys.ships[slot].health.applyDamage(.front, 500);
+
+    try testing.expectEqual(@as(usize, 0), expl_sys.count());
+    try testing.expectEqual(@as(usize, 0), debris_sys.count());
+
+    sys.updateNpcs(0.016, &expl_sys, &debris_sys);
+
+    // Ship should be removed
+    try testing.expectEqual(@as(u32, 0), sys.activeCount());
+    // Explosion should be spawned
+    try testing.expectEqual(@as(usize, 1), expl_sys.count());
+    // Debris should be spawned (medium explosion = 8 particles)
+    try testing.expect(debris_sys.count() > 0);
 }

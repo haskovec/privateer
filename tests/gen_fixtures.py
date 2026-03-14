@@ -1572,6 +1572,86 @@ def gen_weapons_file():
     write("test_weapons.bin", root)
 
 
+def gen_expltype_file():
+    """Generate test EXPLTYPE.IFF fixture (FORM:EXPL with explosion type UNITs).
+
+    EXPLTYPE.IFF structure:
+        FORM:EXPL
+          UNIT (per explosion type, 17 bytes each)
+
+    Explosion UNIT (17 bytes):
+        byte 0: explosion type ID
+        byte 1-8: name (8 chars, null-padded)
+        byte 9-10: u16 LE duration_ms
+        byte 11-12: u16 LE num_frames
+        byte 13-14: u16 LE radius
+        byte 15: spawn_debris flag (0 or 1)
+        byte 16: num_debris particles to spawn
+    """
+    def make_expl_unit(type_id, name, duration_ms, num_frames, radius,
+                       spawn_debris, num_debris):
+        data = bytes([type_id])
+        n = name.encode('ascii')
+        data += n + b'\x00' * (8 - len(n))
+        data += struct.pack('<HH', duration_ms, num_frames)
+        data += struct.pack('<H', radius)
+        data += bytes([1 if spawn_debris else 0, num_debris])
+        assert len(data) == 17, f"EXPL UNIT data size: {len(data)}"
+        return make_iff_chunk(b'UNIT', data)
+
+    units = (
+        make_expl_unit(0, "BIGEXPL", duration_ms=1500, num_frames=15,
+                       radius=80, spawn_debris=True, num_debris=12) +
+        make_expl_unit(1, "MEDEXPL", duration_ms=1000, num_frames=10,
+                       radius=50, spawn_debris=True, num_debris=8) +
+        make_expl_unit(2, "SMLEXPL", duration_ms=600, num_frames=6,
+                       radius=25, spawn_debris=True, num_debris=4) +
+        make_expl_unit(3, "DETHEXPL", duration_ms=2000, num_frames=20,
+                       radius=100, spawn_debris=True, num_debris=16)
+    )
+
+    root = make_iff_form(b'EXPL', units)
+    write("test_expltype.bin", root)
+
+
+def gen_trshtype_file():
+    """Generate test TRSHTYPE.IFF fixture (FORM:TRSH with debris type UNITs).
+
+    TRSHTYPE.IFF structure:
+        FORM:TRSH
+          UNIT (per debris type, 17 bytes each)
+
+    Debris UNIT (17 bytes):
+        byte 0: debris type ID
+        byte 1-8: name (8 chars, null-padded)
+        byte 9-10: u16 LE speed_min
+        byte 11-12: u16 LE speed_max
+        byte 13-14: u16 LE lifetime_ms
+        byte 15-16: u16 LE spin_rate (degrees per second)
+    """
+    def make_trsh_unit(type_id, name, speed_min, speed_max, lifetime_ms,
+                       spin_rate):
+        data = bytes([type_id])
+        n = name.encode('ascii')
+        data += n + b'\x00' * (8 - len(n))
+        data += struct.pack('<HH', speed_min, speed_max)
+        data += struct.pack('<HH', lifetime_ms, spin_rate)
+        assert len(data) == 17, f"TRSH UNIT data size: {len(data)}"
+        return make_iff_chunk(b'UNIT', data)
+
+    units = (
+        make_trsh_unit(0, "CDBRTYPE", speed_min=20, speed_max=80,
+                       lifetime_ms=3000, spin_rate=180) +
+        make_trsh_unit(1, "BODYPRT1", speed_min=10, speed_max=50,
+                       lifetime_ms=4000, spin_rate=90) +
+        make_trsh_unit(2, "BODYPRT2", speed_min=10, speed_max=50,
+                       lifetime_ms=4000, spin_rate=120)
+    )
+
+    root = make_iff_form(b'TRSH', units)
+    write("test_trshtype.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1597,4 +1677,6 @@ if __name__ == "__main__":
     gen_mfd_file()
     gen_guns_file()
     gen_weapons_file()
+    gen_expltype_file()
+    gen_trshtype_file()
     print("Done.")

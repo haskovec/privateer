@@ -417,7 +417,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test Confed patrol spawns in Confed systems
   - GREEN: Implement faction spawn rules
 
-- [ ] **7.6 Explosions & debris**
+- [x] **7.6 Explosions & debris**
   - Parse EXPLTYPE.IFF, TRSHTYPE.IFF
   - Animate explosion sequences
   - Spawn debris on destruction
