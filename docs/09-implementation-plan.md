@@ -410,7 +410,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test AI flees when shields critical
   - GREEN: Implement flee behavior with threshold from CNST data
 
-- [ ] **7.5 NPC spawning**
+- [x] **7.5 NPC spawning**
   - Spawn NPC ships based on sector data and faction presence
   - RED: Test pirate sector spawns pirate ships
   - GREEN: Implement sector-based spawning
