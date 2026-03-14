@@ -22,6 +22,8 @@ pub const State = enum {
     combat,
     /// Player destroyed (game over).
     dead,
+    /// Playing a midgame animation sequence (landing/launch/jump/death).
+    animation,
 };
 
 /// Error returned when an invalid state transition is attempted.
@@ -30,7 +32,7 @@ pub const TransitionError = error{InvalidTransition};
 /// Returns true if the state is part of the base context (landed area).
 /// Room/scene data is preserved across transitions within the base context.
 fn isBaseState(state: State) bool {
-    return state == .landed or state == .conversation;
+    return state == .landed or state == .conversation or state == .animation;
 }
 
 /// Game state machine tracking the current high-level state and
@@ -57,11 +59,12 @@ pub const GameStateMachine = struct {
         return switch (self.state) {
             .title => target == .loading,
             .loading => target == .space_flight or target == .landed,
-            .space_flight => target == .landed or target == .combat or target == .dead or target == .loading,
-            .landed => target == .space_flight or target == .conversation or target == .loading,
+            .space_flight => target == .landed or target == .combat or target == .dead or target == .loading or target == .animation,
+            .landed => target == .space_flight or target == .conversation or target == .loading or target == .animation,
             .conversation => target == .landed,
             .combat => target == .space_flight or target == .dead,
             .dead => target == .title,
+            .animation => target == .space_flight or target == .landed,
         };
     }
 
@@ -94,7 +97,9 @@ pub const GameStateMachine = struct {
                 self.current_scene = target_scene;
             },
             .launch, .takeoff => {
-                try self.transition(.space_flight);
+                // Launch/takeoff only valid from landed state
+                if (self.state != .landed) return error.InvalidTransition;
+                try self.transition(.animation);
             },
             .bar_conversation, .bartender_conversation => {
                 try self.transition(.conversation);
@@ -104,6 +109,18 @@ pub const GameStateMachine = struct {
             },
         }
         return action;
+    }
+
+    /// Complete a midgame animation and transition to the target state.
+    /// Called when a landing/launch animation sequence finishes.
+    pub fn completeAnimation(self: *GameStateMachine, target: State) TransitionError!void {
+        if (self.state != .animation) return error.InvalidTransition;
+        if (target != .space_flight and target != .landed) return error.InvalidTransition;
+        self.state = target;
+        if (target == .space_flight) {
+            self.current_room = null;
+            self.current_scene = null;
+        }
     }
 };
 
@@ -364,20 +381,20 @@ test "handleAction scene_transition updates current scene" {
     try std.testing.expectEqual(State.landed, sm.state);
 }
 
-test "handleAction launch transitions to space_flight" {
+test "handleAction launch transitions to animation" {
     var sm = GameStateMachine.init();
     try sm.transition(.loading);
     try sm.transition(.landed);
     _ = try sm.handleAction(.launch);
-    try std.testing.expectEqual(State.space_flight, sm.state);
+    try std.testing.expectEqual(State.animation, sm.state);
 }
 
-test "handleAction takeoff transitions to space_flight" {
+test "handleAction takeoff transitions to animation" {
     var sm = GameStateMachine.init();
     try sm.transition(.loading);
     try sm.transition(.landed);
     _ = try sm.handleAction(.takeoff);
-    try std.testing.expectEqual(State.space_flight, sm.state);
+    try std.testing.expectEqual(State.animation, sm.state);
 }
 
 test "handleAction bar_conversation transitions to conversation" {
@@ -428,9 +445,97 @@ test "handleAction launch from non-landed state returns error" {
     try std.testing.expectEqual(State.space_flight, sm.state);
 }
 
+// Animation state
+
+test "transition from landed to animation succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    try sm.transition(.animation);
+    try std.testing.expectEqual(State.animation, sm.state);
+}
+
+test "transition from space_flight to animation succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.space_flight);
+    try sm.transition(.animation);
+    try std.testing.expectEqual(State.animation, sm.state);
+}
+
+test "transition from animation to space_flight succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    try sm.transition(.animation);
+    try sm.transition(.space_flight);
+    try std.testing.expectEqual(State.space_flight, sm.state);
+}
+
+test "transition from animation to landed succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.space_flight);
+    try sm.transition(.animation);
+    try sm.transition(.landed);
+    try std.testing.expectEqual(State.landed, sm.state);
+}
+
+test "animation preserves room and scene" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    sm.setScene(3, 7);
+    try sm.transition(.animation);
+    try std.testing.expectEqual(@as(u8, 3), sm.current_room.?);
+    try std.testing.expectEqual(@as(u8, 7), sm.current_scene.?);
+}
+
+test "completeAnimation to space_flight clears scene" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    sm.setScene(3, 7);
+    _ = try sm.handleAction(.launch);
+    try std.testing.expectEqual(State.animation, sm.state);
+
+    try sm.completeAnimation(.space_flight);
+    try std.testing.expectEqual(State.space_flight, sm.state);
+    try std.testing.expect(sm.current_room == null);
+    try std.testing.expect(sm.current_scene == null);
+}
+
+test "completeAnimation to landed preserves scene" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.space_flight);
+    try sm.transition(.animation);
+
+    sm.setScene(2, 5);
+    try sm.completeAnimation(.landed);
+    try std.testing.expectEqual(State.landed, sm.state);
+    try std.testing.expectEqual(@as(u8, 2), sm.current_room.?);
+    try std.testing.expectEqual(@as(u8, 5), sm.current_scene.?);
+}
+
+test "completeAnimation from non-animation state returns error" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    try std.testing.expectError(error.InvalidTransition, sm.completeAnimation(.space_flight));
+}
+
+test "completeAnimation to invalid target returns error" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    try sm.transition(.animation);
+    try std.testing.expectError(error.InvalidTransition, sm.completeAnimation(.dead));
+}
+
 // Full gameplay cycle
 
-test "full cycle: title -> loading -> landed -> conversation -> landed -> space_flight -> combat -> dead -> title" {
+test "full cycle: title -> loading -> landed -> conversation -> landed -> animation -> space_flight -> combat -> dead -> title" {
     var sm = GameStateMachine.init();
     try std.testing.expectEqual(State.title, sm.state);
 
@@ -444,9 +549,13 @@ test "full cycle: title -> loading -> landed -> conversation -> landed -> space_
     _ = try sm.handleAction(.{ .bartender_conversation = 0 });
     try std.testing.expectEqual(State.conversation, sm.state);
 
-    // End conversation, launch
+    // End conversation, launch (goes through animation)
     try sm.transition(.landed);
     _ = try sm.handleAction(.launch);
+    try std.testing.expectEqual(State.animation, sm.state);
+
+    // Animation completes -> space flight
+    try sm.completeAnimation(.space_flight);
     try std.testing.expectEqual(State.space_flight, sm.state);
     try std.testing.expect(sm.current_room == null);
 

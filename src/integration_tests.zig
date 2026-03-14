@@ -17,6 +17,7 @@ const render = @import("render.zig");
 const png = @import("png.zig");
 const validate = @import("validate.zig");
 const palette_viewer = @import("palette_viewer.zig");
+const midgame = @import("midgame.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1331,4 +1332,119 @@ test "integration: scene transition targets are valid scene IDs" {
             }
         }
     }
+}
+
+// --- Midgame animation integration tests ---
+
+test "integration: LANDINGS.PAK loads as midgame sequence" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "LANDINGS.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+
+    var seq = try midgame.MidgameSequence.init(allocator, file_data);
+    defer seq.deinit();
+
+    // LANDINGS.PAK should have multiple animation frames
+    try std.testing.expect(seq.frame_count > 0);
+    try std.testing.expectEqual(@as(usize, 0), seq.currentFrameIndex());
+    try std.testing.expect(!seq.isComplete());
+}
+
+test "integration: LANDINGS.PAK frames decode as scene packs" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "LANDINGS.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+
+    var seq = try midgame.MidgameSequence.init(allocator, file_data);
+    defer seq.deinit();
+
+    // Should have detected the palette
+    try std.testing.expect(seq.has_palette);
+
+    // First animation frame should decode as a scene pack with sprites
+    const frame_data = try seq.getFrameData();
+    try std.testing.expect(frame_data.len > 8);
+
+    var pack = try scene_renderer.parseScenePack(allocator, frame_data);
+    defer pack.deinit();
+    try std.testing.expect(pack.spriteCount() > 0);
+
+    // Decode first sprite - should be a reasonable size
+    var spr = try pack.decodeSprite(allocator, 0);
+    defer spr.deinit();
+    try std.testing.expect(spr.width > 10);
+    try std.testing.expect(spr.height > 10);
+}
+
+test "integration: MIDGAMES PAK files all load as sequences" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var midgame_count: usize = 0;
+    for (entries) |entry| {
+        // Check if this is a MIDGAMES PAK file
+        const is_midgames = std.mem.indexOf(u8, entry.path, "MIDGAMES") != null;
+        const is_pak = std.mem.endsWith(u8, entry.path, ".PAK");
+        if (!is_midgames or !is_pak) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var seq = midgame.MidgameSequence.init(allocator, file_data) catch continue;
+        defer seq.deinit();
+
+        try std.testing.expect(seq.frame_count > 0);
+        midgame_count += 1;
+    }
+
+    // Should find multiple MIDGAMES PAK files
+    try std.testing.expect(midgame_count > 0);
+}
+
+test "integration: midgame sequence advances through frames" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "LANDINGS.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+
+    var seq = try midgame.MidgameSequence.init(allocator, file_data);
+    defer seq.deinit();
+
+    const total_frames = seq.frame_count;
+    try std.testing.expect(total_frames > 1);
+
+    // Advance through all frames
+    var frames_seen: usize = 1; // starts on frame 0
+    while (!seq.isComplete()) {
+        seq.advance(midgame.DEFAULT_FRAME_DURATION_MS);
+        if (!seq.isComplete()) {
+            frames_seen += 1;
+        }
+    }
+
+    // Should have visited all frames
+    try std.testing.expectEqual(total_frames, frames_seen);
+    try std.testing.expectEqual(total_frames - 1, seq.currentFrameIndex());
 }

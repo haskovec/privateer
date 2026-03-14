@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0, Phase 1, Phase 2, and Phase 3 complete. Phase 4 (Scene System & Landing Screens) in progress. See the
+Phase 0, Phase 1, Phase 2, Phase 3, and Phase 4 complete. Phase 5 (Universe & Navigation) is next. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -55,6 +55,7 @@ privateer/
 │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
 │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
+│   ├── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

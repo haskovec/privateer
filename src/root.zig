@@ -29,6 +29,7 @@ pub const scene = @import("scene.zig");
 pub const scene_renderer = @import("scene_renderer.zig");
 pub const click_region = @import("click_region.zig");
 pub const game_state = @import("game_state.zig");
+pub const midgame = @import("midgame.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

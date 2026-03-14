@@ -974,6 +974,58 @@ def gen_gameflow_file():
     write("test_gameflow.bin", root)
 
 
+def gen_midgame_pak():
+    """Generate test midgame animation PAK fixture.
+
+    A PAK file with 3 resources representing animation frames.
+    Each resource is a minimal scene pack (4-byte size + offset table + sprite).
+    This simulates a landing/launch sequence with 3 frames.
+
+    Frame 0: 2x2 sprite with pixels [10, 11, 12, 13]
+    Frame 1: 2x2 sprite with pixels [20, 21, 22, 23]
+    Frame 2: 2x2 sprite with pixels [30, 31, 32, 33]
+    """
+    def make_scene_pack_frame(pixels):
+        """Build a minimal scene pack with one 2x2 sprite."""
+        # Sprite: header(8) + row0(8) + row1(8) + terminator(2) = 26 bytes
+        sprite = bytearray()
+        sprite += struct.pack('<hhhh', 1, 1, 1, 1)  # 2x2 sprite
+        sprite += struct.pack('<HHH', 4, 0, 0) + bytes([pixels[0], pixels[1]])
+        sprite += struct.pack('<HHH', 4, 0, 1) + bytes([pixels[2], pixels[3]])
+        sprite += struct.pack('<H', 0)  # terminator
+
+        # Scene pack: size(4) + offset(4) + sprite data
+        pack = bytearray()
+        sprite_offset = 8  # after size + 1 offset entry
+        total_size = 4 + 4 + len(sprite)
+        pack += struct.pack('<I', total_size)       # declared size
+        pack += struct.pack('<I', sprite_offset)    # offset to sprite 0
+        pack += sprite
+        return bytes(pack)
+
+    frame0 = make_scene_pack_frame([10, 11, 12, 13])
+    frame1 = make_scene_pack_frame([20, 21, 22, 23])
+    frame2 = make_scene_pack_frame([30, 31, 32, 33])
+
+    # PAK: [file_size(4)] [3 E0 entries(12)] [terminator(4)] [frame0] [frame1] [frame2]
+    header_size = 4 + 3 * 4 + 4  # file_size + 3 entries + terminator = 20
+    off0 = header_size
+    off1 = off0 + len(frame0)
+    off2 = off1 + len(frame1)
+    total = off2 + len(frame2)
+
+    data = bytearray()
+    data += struct.pack('<I', total)
+    data += bytes([off0 & 0xFF, (off0 >> 8) & 0xFF, (off0 >> 16) & 0xFF, 0xE0])
+    data += bytes([off1 & 0xFF, (off1 >> 8) & 0xFF, (off1 >> 16) & 0xFF, 0xE0])
+    data += bytes([off2 & 0xFF, (off2 >> 8) & 0xFF, (off2 >> 16) & 0xFF, 0xE0])
+    data += bytes([0, 0, 0, 0])  # terminator
+    data += frame0 + frame1 + frame2
+
+    assert len(data) == total, f"Midgame PAK size mismatch: {len(data)} != {total}"
+    write("test_midgame.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -990,4 +1042,5 @@ if __name__ == "__main__":
     gen_xmidi_file()
     gen_font_file()
     gen_gameflow_file()
+    gen_midgame_pak()
     print("Done.")
