@@ -23,6 +23,7 @@ const bases = @import("bases.zig");
 const nav_graph = @import("nav_graph.zig");
 const cockpit = @import("cockpit.zig");
 const mfd = @import("mfd.zig");
+const damage_display = @import("damage_display.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1845,4 +1846,92 @@ test "integration: Tarsus DIAL has speed displays with labels" {
     const aspd = cock.mfd.dials.actual_speed.?;
     try std.testing.expectEqualStrings("KPS ", aspd.labelSlice());
     try std.testing.expect(aspd.rect.width() > 0);
+}
+
+// --- Damage display integration tests ---
+
+test "integration: all cockpit types have DAMG config" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const ship_types = [_]cockpit.ShipType{ .tarsus, .centurion, .galaxy, .orion };
+    for (ship_types) |ship| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, ship.iffFilename());
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var root = iff.parseFile(allocator, file_data) catch continue;
+        defer root.deinit();
+
+        // All ships should have FORM:DAMG
+        const damg_form = root.findForm("DAMG".*);
+        try std.testing.expect(damg_form != null);
+
+        // Parse DAMG config
+        const config = damage_display.parseDamageConfig(damg_form.?);
+        try std.testing.expect(config != null);
+        try std.testing.expectEqual(@as(u16, 100), config.?.max_value);
+    }
+}
+
+test "integration: all cockpit types produce valid DamageDisplay" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const ship_types = [_]cockpit.ShipType{ .tarsus, .centurion, .galaxy, .orion };
+    for (ship_types) |ship| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, ship.iffFilename());
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var root = iff.parseFile(allocator, file_data) catch continue;
+        defer root.deinit();
+
+        // Should be able to create a DamageDisplay from any cockpit
+        const display = damage_display.parseDamageDisplay(root);
+        try std.testing.expect(display != null);
+
+        // Display rect should be a reasonable size (shield display area)
+        try std.testing.expect(display.?.rect.width() >= 20);
+        try std.testing.expect(display.?.rect.height() >= 20);
+    }
+}
+
+test "integration: damage display renders onto framebuffer without crash" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CLUNKCK.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var root = iff.parseFile(allocator, file_data) catch return;
+    defer root.deinit();
+
+    const display = damage_display.parseDamageDisplay(root) orelse return;
+
+    var fb = framebuffer_mod.Framebuffer.create();
+    fb.clear(0);
+
+    // Render with full shields
+    const status = damage_display.DamageStatus.full();
+    display.render(&fb, &status);
+
+    // Some pixels inside the shield rect should be non-zero (shield bars)
+    var has_shield_pixel = false;
+    var y: u16 = display.rect.y1;
+    while (y < display.rect.y2) : (y += 1) {
+        var x: u16 = display.rect.x1;
+        while (x < display.rect.x2) : (x += 1) {
+            if (fb.getPixel(x, y) != 0) {
+                has_shield_pixel = true;
+                break;
+            }
+        }
+        if (has_shield_pixel) break;
+    }
+    try std.testing.expect(has_shield_pixel);
 }

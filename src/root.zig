@@ -40,6 +40,7 @@ pub const jump_drive = @import("jump_drive.zig");
 pub const cockpit = @import("cockpit.zig");
 pub const mfd = @import("mfd.zig");
 pub const radar = @import("radar.zig");
+pub const damage_display = @import("damage_display.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

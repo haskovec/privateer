@@ -349,7 +349,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test radar shows friendly as green, hostile as red
   - GREEN: Implement radar renderer with faction coloring
 
-- [ ] **6.4 Damage display**
+- [x] **6.4 Damage display**
   - Ship damage diagram showing shield/armor status per facing
   - RED: Test damage display shows full shields when undamaged
   - GREEN: Implement damage diagram renderer

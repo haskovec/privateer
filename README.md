@@ -66,6 +66,7 @@ privateer/
 │   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
 │   ├── mfd.zig                # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
 │   ├── radar.zig              # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
+│   ├── damage_display.zig    # Damage display (shield/armor status per facing, color-coded diagram renderer)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper
