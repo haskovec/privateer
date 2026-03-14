@@ -86,7 +86,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement full directory enumeration
   - Integration test: Verify all 832 files can be read and have valid data
 
-- [ ] **1.3 IFF chunk parser**
+- [x] **1.3 IFF chunk parser**
   - RED: Test parsing FORM container from ATTITUDE.IFF (type="ATTD", size=248)
   - GREEN: Implement FORM/CAT/LIST container parsing
   - RED: Test parsing leaf chunks (AROW, DISP, FLNG, THRD, CNST from ATTITUDE.IFF)

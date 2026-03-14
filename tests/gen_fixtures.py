@@ -158,8 +158,48 @@ def gen_tre_archive():
     write("test_tre.bin", bytes(data))
 
 
+def gen_iff_chunks():
+    """Generate a test IFF file with nested FORMs, leaf chunks, and odd-size padding.
+
+    Structure:
+        FORM (type=ATTD)
+            AROW chunk (4 bytes data: 0x01020304)
+            DISP chunk (3 bytes data: 0x050607 + 1 pad byte) -- tests odd-size padding
+            FORM (type=NEST)
+                INFO chunk (4 bytes data: 0x08090A0B)
+    """
+    # Inner FORM children
+    info_chunk = b"INFO" + struct.pack('>I', 4) + b"\x08\x09\x0A\x0B"  # 12 bytes
+
+    inner_form_data = b"NEST" + info_chunk  # 4 + 12 = 16 bytes
+    inner_form = b"FORM" + struct.pack('>I', len(inner_form_data)) + inner_form_data  # 8 + 16 = 24 bytes
+
+    # Outer FORM children
+    arow_chunk = b"AROW" + struct.pack('>I', 4) + b"\x01\x02\x03\x04"  # 12 bytes
+    disp_chunk = b"DISP" + struct.pack('>I', 3) + b"\x05\x06\x07" + b"\x00"  # 12 bytes (3 data + 1 pad)
+
+    outer_form_data = b"ATTD" + arow_chunk + disp_chunk + inner_form  # 4 + 12 + 12 + 24 = 52
+    outer_form = b"FORM" + struct.pack('>I', len(outer_form_data)) + outer_form_data  # 8 + 52 = 60
+
+    write("test_iff.bin", outer_form)
+
+    # Also generate a CAT container test
+    # CAT containing two FORMs
+    form1_data = b"TYPX" + b"DATA" + struct.pack('>I', 2) + b"\xAA\xBB" + b"\x00"  # odd pad
+    form1 = b"FORM" + struct.pack('>I', len(form1_data)) + form1_data  # 8 + 15 = 23 bytes + 1 pad = 24 total in cat
+    form2_data = b"TYPY" + b"DATA" + struct.pack('>I', 4) + b"\xCC\xDD\xEE\xFF"
+    form2 = b"FORM" + struct.pack('>I', len(form2_data)) + form2_data  # 8 + 12 = 20 bytes
+
+    # CAT size includes subtype + children (account for padding of form1 which is odd-sized: 8+15=23, pad to 24)
+    cat_data = b"TYPX" + form1 + b"\x00" + form2  # subtype + form1(23) + pad(1) + form2(20) = 4+23+1+20 = 48
+    cat = b"CAT " + struct.pack('>I', len(cat_data)) + cat_data
+
+    write("test_iff_cat.bin", cat)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
     gen_tre_archive()
+    gen_iff_chunks()
     print("Done.")

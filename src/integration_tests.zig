@@ -4,6 +4,7 @@
 const std = @import("std");
 const iso9660 = @import("iso9660.zig");
 const tre = @import("tre.zig");
+const iff = @import("iff.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -119,4 +120,65 @@ test "integration: all 832 TRE files can be read" {
     for (entries) |e| {
         _ = try tre.extractFileData(tre_data, e.offset, e.size);
     }
+}
+
+test "integration: ATTITUDE.IFF parses as FORM with type ATTD" {
+    const allocator = std.testing.allocator;
+    const data = try loadGameDat(allocator) orelse return;
+    defer allocator.free(data);
+
+    const pvd = try iso9660.readPvd(data);
+    const tre_info = try iso9660.findFile(allocator, data, pvd, "PRIV.TRE");
+    const tre_data = try iso9660.readFileData(data, tre_info.lba, tre_info.size);
+
+    var entry = try tre.readEntry(allocator, tre_data, 0);
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(tre_data, entry.offset, entry.size);
+    var chunk = try iff.parseFile(allocator, file_data);
+    defer chunk.deinit();
+
+    try std.testing.expectEqualStrings("FORM", &chunk.tag);
+    try std.testing.expectEqualStrings("ATTD", &chunk.form_type.?);
+    try std.testing.expectEqual(@as(u32, 248), chunk.size);
+}
+
+test "integration: parse every IFF file in the TRE without errors" {
+    const allocator = std.testing.allocator;
+    const data = try loadGameDat(allocator) orelse return;
+    defer allocator.free(data);
+
+    const pvd = try iso9660.readPvd(data);
+    const tre_info = try iso9660.findFile(allocator, data, pvd, "PRIV.TRE");
+    const tre_data = try iso9660.readFileData(data, tre_info.lba, tre_info.size);
+
+    const entries = try tre.readAllEntries(allocator, tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var iff_count: usize = 0;
+    for (entries) |e| {
+        // Check if this is an IFF file (starts with FORM, CAT, or LIST)
+        const file_data = try tre.extractFileData(tre_data, e.offset, e.size);
+        if (file_data.len < 8) continue;
+
+        const tag = file_data[0..4];
+        if (!std.mem.eql(u8, tag, "FORM") and
+            !std.mem.eql(u8, tag, "CAT ") and
+            !std.mem.eql(u8, tag, "LIST")) continue;
+
+        var chunk = try iff.parseFile(allocator, file_data);
+        defer chunk.deinit();
+
+        try std.testing.expect(chunk.isContainer());
+        iff_count += 1;
+    }
+
+    // We expect a significant number of IFF files (most of the 832 entries)
+    try std.testing.expect(iff_count > 100);
 }
