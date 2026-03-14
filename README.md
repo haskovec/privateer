@@ -52,6 +52,7 @@ privateer/
 │   ├── viewport.zig           # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
 │   ├── text.zig               # Text rendering engine (SHP font loading, string rendering)
 │   ├── scene.zig              # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
+│   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

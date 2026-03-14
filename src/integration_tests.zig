@@ -1079,6 +1079,8 @@ test "integration: render all 4 palettes to PNG" {
 // --- Scene system integration tests (Phase 4.1) ---
 
 const scene = @import("scene.zig");
+const scene_renderer = @import("scene_renderer.zig");
+const framebuffer_mod = @import("framebuffer.zig");
 
 test "integration: parse GAMEFLOW.IFF scene structure" {
     const allocator = std.testing.allocator;
@@ -1132,4 +1134,123 @@ test "integration: GAMEFLOW rooms have valid info bytes" {
             _ = scn.info;
         }
     }
+}
+
+// --- Scene renderer integration tests (Phase 4.2) ---
+
+test "integration: decode scene background from OPTSHPS.PAK" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // OPTSHPS.PAK contains full-screen scene backgrounds as RLE sprites
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "OPTSHPS.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var pak_file = try pak.parse(allocator, file_data);
+    defer pak_file.deinit();
+
+    // Should have many resources (226 per diagnostic)
+    try std.testing.expect(pak_file.resourceCount() > 10);
+
+    // Resource 1 (index 1) is a full-screen scene sprite
+    const resource = try pak_file.getResource(1);
+    var pack = try scene_renderer.parseScenePack(allocator, resource);
+    defer pack.deinit();
+
+    try std.testing.expectEqual(@as(usize, 1), pack.spriteCount());
+
+    // Decode the background sprite
+    var spr = try pack.decodeSprite(allocator, 0);
+    defer spr.deinit();
+
+    // Should be 319x199 (full screen minus 1 pixel border)
+    try std.testing.expectEqual(@as(u16, 319), spr.width);
+    try std.testing.expectEqual(@as(u16, 199), spr.height);
+
+    // Render to framebuffer
+    var fb = framebuffer_mod.Framebuffer.create();
+    const view = scene_renderer.SceneView{ .background = spr };
+    scene_renderer.renderScene(&fb, view);
+
+    // Verify framebuffer has non-black content
+    var non_zero: usize = 0;
+    for (fb.pixels) |p| {
+        if (p != 0) non_zero += 1;
+    }
+    try std.testing.expect(non_zero > 1000);
+}
+
+test "integration: render scene from CU.PAK with palette" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CU.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var pak_file = try pak.parse(allocator, file_data);
+    defer pak_file.deinit();
+
+    try std.testing.expect(pak_file.resourceCount() > 5);
+
+    // Decode resource 1 as scene background
+    const resource = try pak_file.getResource(1);
+    var pack = try scene_renderer.parseScenePack(allocator, resource);
+    defer pack.deinit();
+
+    var spr = try pack.decodeSprite(allocator, 0);
+    defer spr.deinit();
+
+    // CU.PAK backgrounds are 319x199 or 319x128
+    try std.testing.expectEqual(@as(u16, 319), spr.width);
+    try std.testing.expect(spr.height > 100);
+
+    // Render and verify
+    var fb = framebuffer_mod.Framebuffer.create();
+    scene_renderer.renderScene(&fb, .{ .background = spr });
+
+    var non_zero: usize = 0;
+    for (fb.pixels) |p| {
+        if (p != 0) non_zero += 1;
+    }
+    try std.testing.expect(non_zero > 1000);
+}
+
+test "integration: scene PAK resources with palettes decode correctly" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // MID1.PAK has a palette as resource 0 and sprites as subsequent resources
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "MID1.PAK");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var pak_file = try pak.parse(allocator, file_data);
+    defer pak_file.deinit();
+
+    try std.testing.expect(pak_file.resourceCount() > 5);
+
+    // Resource 0 should be a palette (772 bytes)
+    const pal_resource = try pak_file.getResource(0);
+    try std.testing.expectEqual(@as(usize, pal.PAL_FILE_SIZE), pal_resource.len);
+    const palette = try pal.parse(pal_resource);
+    _ = palette;
+
+    // Resource 1 should decode as a scene sprite
+    const spr_resource = try pak_file.getResource(1);
+    var pack = try scene_renderer.parseScenePack(allocator, spr_resource);
+    defer pack.deinit();
+
+    try std.testing.expect(pack.spriteCount() >= 1);
+
+    var spr = try pack.decodeSprite(allocator, 0);
+    defer spr.deinit();
+
+    try std.testing.expect(spr.width > 100);
+    try std.testing.expect(spr.height > 50);
+    try std.testing.expect(spr.pixels.len > 0);
 }

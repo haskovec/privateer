@@ -248,7 +248,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement scene parser (GameFlow, Room, Scene, SceneSprite types)
   - Integration test: Parse real GAMEFLOW.IFF, verify rooms have scenes with sprites
 
-- [ ] **4.2 Scene renderer**
+- [x] **4.2 Scene renderer**
   - Render background, foreground overlay, sprites, clickable regions
   - RED: Test rendering a scene produces non-black framebuffer
   - GREEN: Implement scene rendering pipeline
