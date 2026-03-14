@@ -834,6 +834,69 @@ def gen_xmidi_file():
     write("test_midi.bin", mthd + mtrk)
 
 
+def gen_font_file():
+    """Generate test font SHP file fixture for text rendering.
+
+    A minimal font with 3 glyphs mapped to 'A'=65, 'B'=66, 'C'=67.
+    Each glyph uses color index 1 for opaque pixels, 0 for transparent.
+
+    Glyph 'A' (3x3):
+        .#.    Row 0: [0, 1, 0]
+        ###    Row 1: [1, 1, 1]
+        #.#    Row 2: [1, 0, 1]
+
+    Glyph 'B' (2x3):
+        ##     Row 0: [1, 1]
+        #.     Row 1: [1, 0]
+        ##     Row 2: [1, 1]
+
+    Glyph 'C' (4x3):
+        ####   Row 0: [1, 1, 1, 1]
+        #...   Row 1: [1, 0, 0, 0]
+        ####   Row 2: [1, 1, 1, 1]
+    """
+    # Glyph A: 3x3 (x2=2, x1=1 -> w=3; y1=2, y2=1 -> h=3)
+    ga = bytearray()
+    ga += struct.pack('<hhhh', 2, 1, 2, 1)
+    ga += struct.pack('<HHH', 6, 0, 0) + bytes([0, 1, 0])
+    ga += struct.pack('<HHH', 6, 0, 1) + bytes([1, 1, 1])
+    ga += struct.pack('<HHH', 6, 0, 2) + bytes([1, 0, 1])
+    ga += struct.pack('<H', 0)
+
+    # Glyph B: 2x3 (x2=1, x1=1 -> w=2; y1=2, y2=1 -> h=3)
+    gb = bytearray()
+    gb += struct.pack('<hhhh', 1, 1, 2, 1)
+    gb += struct.pack('<HHH', 4, 0, 0) + bytes([1, 1])
+    gb += struct.pack('<HHH', 4, 0, 1) + bytes([1, 0])
+    gb += struct.pack('<HHH', 4, 0, 2) + bytes([1, 1])
+    gb += struct.pack('<H', 0)
+
+    # Glyph C: 4x3 (x2=2, x1=2 -> w=4; y1=2, y2=1 -> h=3)
+    gc = bytearray()
+    gc += struct.pack('<hhhh', 2, 2, 2, 1)
+    gc += struct.pack('<HHH', 8, 0, 0) + bytes([1, 1, 1, 1])
+    gc += struct.pack('<HHH', 8, 0, 1) + bytes([1, 0, 0, 0])
+    gc += struct.pack('<HHH', 8, 0, 2) + bytes([1, 1, 1, 1])
+    gc += struct.pack('<H', 0)
+
+    # SHP: [file_size(4)] [off0(4)] [off1(4)] [off2(4)] [ga] [gb] [gc]
+    header_size = 4 + 3 * 4  # 16
+    off0 = header_size
+    off1 = off0 + len(ga)
+    off2 = off1 + len(gb)
+    total = off2 + len(gc)
+
+    data = bytearray()
+    data += struct.pack('<I', total)
+    data += struct.pack('<I', off0)
+    data += struct.pack('<I', off1)
+    data += struct.pack('<I', off2)
+    data += ga + gb + gc
+
+    assert len(data) == total, f"Font SHP size mismatch: {len(data)} != {total}"
+    write("test_font.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -848,4 +911,5 @@ if __name__ == "__main__":
     gen_voc_file()
     gen_vpk_file()
     gen_xmidi_file()
+    gen_font_file()
     print("Done.")

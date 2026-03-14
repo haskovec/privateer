@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0, Phase 1, and Phase 2 complete. Phase 3 (Core Rendering Engine) in progress: window creation, game loop, palette-based software renderer, sprite upscaling pipeline, sprite blitting with scaling, and widescreen viewport done. See the
+Phase 0, Phase 1, Phase 2, and Phase 3 complete. Phase 4 (Scene System & Landing Screens) is next. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -50,6 +50,7 @@ privateer/
 │   ├── framebuffer.zig        # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
 │   ├── upscale.zig            # Edge-aware pixel art upscaler (Scale2x/3x, 2x/3x/4x factors)
 │   ├── viewport.zig           # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
+│   ├── text.zig               # Text rendering engine (SHP font loading, string rendering)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

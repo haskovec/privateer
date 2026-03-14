@@ -231,7 +231,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test scene renders centered with correct borders
   - GREEN: Implement border rendering
 
-- [ ] **3.6 Text rendering**
+- [x] **3.6 Text rendering**
   - Load SHP font files and render text strings
   - RED: Test rendering "CREDITS: 1000" produces correct pixel output
   - GREEN: Implement font renderer using SHP glyph data
