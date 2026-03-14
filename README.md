@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phases 0 and 1.1-1.6 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader). See the
+Phases 0 and 1.1-1.7 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker). See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -38,6 +38,7 @@ privateer/
 │   ├── iff.zig                # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
 │   ├── sprite.zig             # RLE sprite decoder (Origin's proprietary run-length encoding)
 │   ├── shp.zig                # SHP shape/font file parser (offset table + RLE sprites)
+│   ├── pak.zig                # PAK resource unpacker (two-level offset tables + resources)
 │   ├── sdl.zig                # SDL3 initialization wrapper
 │   ├── testing.zig            # Test helpers (fixture loader, binary assertions, BE readers)
 │   └── integration_tests.zig  # Integration tests against real game data

@@ -388,6 +388,69 @@ def gen_shp_file():
     write("test_shp_single.bin", bytes(data2))
 
 
+def gen_pak_file():
+    """Generate test PAK file fixtures.
+
+    PAK format:
+        Offset 0x0000: u32 LE - total file size
+        Offset 0x0004: var   - offset table (3-byte LE offset + 1-byte marker each)
+        ...           : var   - resource data
+
+    Marker bytes: 0xE0 = data, 0xC1 = sub-table, 0x00 = end of table
+
+    Fixture 1: test_pak.bin - PAK with 3 direct (E0) resources
+        Resource 0: 8 bytes [0x01..0x08]
+        Resource 1: 6 bytes [0xAA..0xAF]
+        Resource 2: 6 bytes [0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA]
+
+    Fixture 2: test_pak_l2.bin - PAK with L2 sub-tables
+        L1 entry 0: C1 sub-table with 2 sub-resources
+        L1 entry 1: E0 direct resource
+    """
+    # --- Fixture 1: Simple PAK, 3 direct E0 entries ---
+    # Layout: [file_size(4)] [3 entries(12)] [terminator(4)] [res0(8)] [res1(6)] [res2(6)]
+    # Offsets:  0              4               16              20        28        34
+    # Total: 40 bytes
+    data = bytearray()
+    data += struct.pack('<I', 40)                          # file_size = 40
+    data += bytes([20, 0, 0, 0xE0])                        # entry 0: offset=20, E0
+    data += bytes([28, 0, 0, 0xE0])                        # entry 1: offset=28, E0
+    data += bytes([34, 0, 0, 0xE0])                        # entry 2: offset=34, E0
+    data += bytes([0, 0, 0, 0])                            # terminator
+    data += bytes([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])  # resource 0
+    data += bytes([0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF])              # resource 1
+    data += bytes([0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA])              # resource 2
+
+    assert len(data) == 40, f"PAK size mismatch: {len(data)} != 40"
+    write("test_pak.bin", bytes(data))
+
+    # --- Fixture 2: PAK with L2 sub-tables ---
+    # Layout: [file_size(4)] [2 L1 entries(8)] [terminator(4)]
+    #         [2 L2 entries(8)] [terminator(4)]
+    #         [sub-res0(8)] [sub-res1(4)] [direct-res(12)]
+    # Offsets:  0             4              12
+    #           16            16              24
+    #           28            36              40
+    # Total: 52 bytes
+    data = bytearray()
+    data += struct.pack('<I', 52)                          # file_size = 52
+    data += bytes([16, 0, 0, 0xC1])                        # L1 entry 0: sub-table at 16
+    data += bytes([40, 0, 0, 0xE0])                        # L1 entry 1: data at 40
+    data += bytes([0, 0, 0, 0])                            # L1 terminator
+    # Sub-table at offset 16:
+    data += bytes([28, 0, 0, 0xE0])                        # L2 entry 0: data at 28
+    data += bytes([36, 0, 0, 0xE0])                        # L2 entry 1: data at 36
+    data += bytes([0, 0, 0, 0])                            # L2 terminator
+    # Resource data:
+    data += bytes([0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18])  # sub-res 0 (8 bytes)
+    data += bytes([0x21, 0x22, 0x23, 0x24])                            # sub-res 1 (4 bytes)
+    data += bytes([0x31, 0x32, 0x33, 0x34, 0x35, 0x36,                # direct res (12 bytes)
+                   0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C])
+
+    assert len(data) == 52, f"PAK L2 size mismatch: {len(data)} != 52"
+    write("test_pak_l2.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -396,4 +459,5 @@ if __name__ == "__main__":
     gen_pal_file()
     gen_sprite_rle()
     gen_shp_file()
+    gen_pak_file()
     print("Done.")

@@ -8,6 +8,7 @@ const iff = @import("iff.zig");
 const pal = @import("pal.zig");
 const sprite = @import("sprite.zig");
 const shp = @import("shp.zig");
+const pak = @import("pak.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -404,4 +405,86 @@ test "integration: load all SHP files" {
     try std.testing.expect(shp_count > 0);
     // At least some should have decodable sprites
     try std.testing.expect(decoded_sprites > 0);
+}
+
+// --- PAK resource unpacker integration tests ---
+
+test "integration: parse a PAK file from TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    // Find the first PAK file and parse it
+    var found = false;
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".PAK")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < pak.MIN_FILE_SIZE) continue;
+
+        var pak_file = pak.parse(allocator, file_data) catch continue;
+        defer pak_file.deinit();
+
+        // PAK files should have at least 1 resource
+        try std.testing.expect(pak_file.resourceCount() > 0);
+
+        // Try extracting the first resource
+        const r0 = try pak_file.getResource(0);
+        try std.testing.expect(r0.len > 0);
+
+        found = true;
+        break;
+    }
+
+    try std.testing.expect(found);
+}
+
+test "integration: unpack all PAK files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var pak_count: usize = 0;
+    var total_resources: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".PAK")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < pak.MIN_FILE_SIZE) continue;
+
+        var pak_file = pak.parse(allocator, file_data) catch continue;
+        defer pak_file.deinit();
+
+        pak_count += 1;
+        total_resources += pak_file.resourceCount();
+
+        // Verify all resources can be extracted
+        for (0..pak_file.resourceCount()) |i| {
+            const resource = try pak_file.getResource(i);
+            try std.testing.expect(resource.len > 0);
+        }
+    }
+
+    // Per docs: 32 PAK files
+    try std.testing.expect(pak_count > 0);
+    try std.testing.expect(total_resources > 0);
 }

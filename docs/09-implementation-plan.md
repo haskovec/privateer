@@ -124,7 +124,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement shape extraction
   - Integration test: Load all 11 SHP files
 
-- [ ] **1.7 PAK resource unpacker**
+- [x] **1.7 PAK resource unpacker**
   - RED: Test parsing PAK header (4-byte file length)
   - GREEN: Implement PAK header reader
   - RED: Test L1 offset table parsing (3-byte offset + 1-byte marker C1/E0)
