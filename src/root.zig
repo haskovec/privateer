@@ -48,6 +48,7 @@ pub const jump_drive = @import("flight/jump_drive.zig");
 // Combat
 pub const weapons = @import("combat/weapons.zig");
 pub const projectiles = @import("combat/projectiles.zig");
+pub const damage = @import("combat/damage.zig");
 
 // Cockpit & HUD
 pub const cockpit = @import("cockpit/cockpit.zig");

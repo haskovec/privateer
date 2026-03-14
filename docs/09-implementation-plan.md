@@ -391,7 +391,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test projectile-ship collision detection
   - GREEN: Implement bounding-sphere collision
 
-- [ ] **7.3 Damage model**
+- [x] **7.3 Damage model**
   - Shield absorption, armor penetration, component damage
   - RED: Test gun hit reduces target shield on hit facing
   - GREEN: Implement shield damage

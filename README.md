@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system) and 7.2 (Projectile physics) complete. See the
+Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system), 7.2 (Projectile physics), and 7.3 (Damage model) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -84,7 +84,8 @@ privateer/
 │   │
 │   ├── combat/                # Combat systems
 │   │   ├── weapons.zig        # Weapon system (gun/missile/torpedo data parsers, projectile creation & physics)
-│   │   └── projectiles.zig   # Projectile physics (pool management, movement, bounding-sphere collision detection)
+│   │   ├── projectiles.zig    # Projectile physics (pool management, movement, bounding-sphere collision detection)
+│   │   └── damage.zig         # Damage model (shield absorption, armor penetration, hit facing, ship destruction)
 │   │
 │   └── cli/                   # Offline tools & asset pipelines
 │       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)
