@@ -65,6 +65,7 @@ privateer/
 │   ├── jump_drive.zig         # Jump drive system (inter-system travel, adjacency validation, cooldown)
 │   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
 │   ├── mfd.zig                # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
+│   ├── radar.zig              # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

@@ -343,7 +343,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test MFD displays target info when target is selected
   - GREEN: Implement MFD rendering with data binding
 
-- [ ] **6.3 Radar display**
+- [x] **6.3 Radar display**
   - Parse RADR form data
   - Render radar blips for nearby objects
   - RED: Test radar shows friendly as green, hostile as red
