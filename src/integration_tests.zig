@@ -25,6 +25,7 @@ const cockpit = @import("cockpit/cockpit.zig");
 const mfd = @import("cockpit/mfd.zig");
 const damage_display = @import("cockpit/damage_display.zig");
 const weapons = @import("combat/weapons.zig");
+const commodities = @import("game/commodities.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -2094,4 +2095,46 @@ test "integration: WEAPONS.IFF heat-seeker has tracking type 2" {
         }
     }
     try std.testing.expect(found_heat);
+}
+
+// --- COMODTYP.IFF integration tests (Phase 8.1) ---
+
+test "integration: COMODTYP.IFF parses all commodities" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "COMODTYP.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var registry = try commodities.parseCommodities(allocator, file_data);
+    defer registry.deinit();
+
+    // Should have 42 commodities
+    try std.testing.expectEqual(@as(usize, 42), registry.commodities.len);
+
+    // All commodities should have names
+    for (registry.commodities) |commodity| {
+        try std.testing.expect(commodity.name.len > 0);
+    }
+
+    // Should be able to find known commodities
+    const grain = registry.findByName("Grain");
+    try std.testing.expect(grain != null);
+    try std.testing.expectEqual(@as(u16, 0), grain.?.id);
+    try std.testing.expectEqual(@as(i16, 20), grain.?.base_cost);
+
+    const iron = registry.findByName("Iron");
+    try std.testing.expect(iron != null);
+    try std.testing.expectEqual(@as(u16, 5), iron.?.id);
+
+    // Contraband commodities exist
+    const slaves = registry.findByName("Slaves");
+    try std.testing.expect(slaves != null);
+    try std.testing.expectEqual(@as(u16, 6), slaves.?.category);
+
+    // Special commodities exist
+    const artifact = registry.findByName("Alien Artifact");
+    try std.testing.expect(artifact != null);
 }

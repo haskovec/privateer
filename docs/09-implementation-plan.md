@@ -436,7 +436,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 8: Economy & Trading
 *The other half of the gameplay loop.*
 
-- [ ] **8.1 Commodity system**
+- [x] **8.1 Commodity system**
   - Parse COMODTYP.IFF for commodity types and base prices
   - RED: Test loading commodity data produces correct number of types
   - GREEN: Implement commodity data loader

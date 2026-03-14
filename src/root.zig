@@ -39,6 +39,7 @@ pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");
 pub const nav_map = @import("game/nav_map.zig");
+pub const commodities = @import("game/commodities.zig");
 
 // Flight systems
 pub const flight_physics = @import("flight/flight_physics.zig");

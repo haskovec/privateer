@@ -1652,6 +1652,79 @@ def gen_trshtype_file():
     write("test_trshtype.bin", root)
 
 
+def gen_commodities_file():
+    """Generate test COMODTYP.IFF fixture (FORM:COMD with FORM:COMM entries).
+
+    Real COMODTYP.IFF format:
+        FORM:COMD
+          FORM:COMM (per commodity)
+            INFO (4 bytes: id(u16 LE) + category(u16 LE))
+            LABL (N bytes: null-terminated name)
+            COST (38 bytes: base_price(i16 LE) + 9 x {base_type_id(i16 LE), modifier(i16 LE)})
+            AVAL (38 bytes: base_avail(i16 LE) + 9 x {base_type_id(i16 LE), quantity(i16 LE)})
+
+    Fixture: test_commodities.bin - 3 commodities
+        Commodity 0: "Grain" category 0 (food), base_cost 20
+        Commodity 5: "Iron" category 1 (raw materials), base_cost 50
+        Commodity 34: "Tobacco" category 6 (contraband), base_cost 100
+    """
+    # The 9 base type IDs used in COST/AVAL entries (from real game data)
+    BASE_TYPE_IDS = [0x1f, 0x20, 0x27, 0x29, 0x03, 0x02, 0x04, 0x01, 0x05]
+
+    def make_cost(base_price, modifiers):
+        """Build a 38-byte COST chunk data.
+        modifiers: list of 9 i16 values, one per base type."""
+        data = struct.pack('<h', base_price)
+        for i in range(9):
+            data += struct.pack('<hh', BASE_TYPE_IDS[i], modifiers[i])
+        return data
+
+    def make_avail(base_avail, quantities):
+        """Build a 38-byte AVAL chunk data.
+        quantities: list of 9 i16 values (-1 = unavailable)."""
+        data = struct.pack('<h', base_avail)
+        for i in range(9):
+            data += struct.pack('<hh', BASE_TYPE_IDS[i], quantities[i])
+        return data
+
+    def make_commodity(commodity_id, category, name, base_price, cost_mods, base_avail, avail_qtys):
+        info = make_iff_chunk(b"INFO", struct.pack('<HH', commodity_id, category))
+        labl = make_iff_chunk(b"LABL", name.encode('ascii') + b'\x00')
+        cost = make_iff_chunk(b"COST", make_cost(base_price, cost_mods))
+        aval = make_iff_chunk(b"AVAL", make_avail(base_avail, avail_qtys))
+        return make_iff_form(b"COMM", info + labl + cost + aval)
+
+    # Commodity 0: Grain (food)
+    grain = make_commodity(
+        commodity_id=0, category=0, name="Grain",
+        base_price=20,
+        cost_mods=[3, 10, -13, 3, 7, 7, -15, 3, 10],
+        base_avail=50,
+        avail_qtys=[-1, -1, 20, -1, -1, -1, 60, -1, -1],
+    )
+
+    # Commodity 5: Iron (raw materials)
+    iron = make_commodity(
+        commodity_id=5, category=1, name="Iron",
+        base_price=50,
+        cost_mods=[-15, 15, -5, -15, -25, 15, -5, -15, -15],
+        base_avail=50,
+        avail_qtys=[-1, -25, -1, -1, 60, -25, -1, -1, -1],
+    )
+
+    # Commodity 34: Tobacco (contraband)
+    tobacco = make_commodity(
+        commodity_id=34, category=6, name="Tobacco",
+        base_price=100,
+        cost_mods=[-1, 50, -1, -1, 20, 20, 20, 20, -20],
+        base_avail=30,
+        avail_qtys=[-1, -1, -1, -1, -1, -1, -1, -1, 50],
+    )
+
+    root = make_iff_form(b"COMD", grain + iron + tobacco)
+    write("test_commodities.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1679,4 +1752,5 @@ if __name__ == "__main__":
     gen_weapons_file()
     gen_expltype_file()
     gen_trshtype_file()
+    gen_commodities_file()
     print("Done.")

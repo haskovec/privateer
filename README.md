@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system), 7.2 (Projectile physics), 7.3 (Damage model), 7.4 (AI flight behavior), 7.5 (NPC spawning), 7.6 (Explosions & debris), and 7.7 (Tractor beam & cargo) complete. See the
+Phase 0 through Phase 7 complete. Phase 8.1 (Commodity system) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -62,6 +62,7 @@ privateer/
 │   ├── game/                  # World data & game flow
 │   │   ├── universe.zig       # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
 │   │   ├── bases.zig          # Base registry loader (BASES.IFF: base names, types, indices)
+│   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
 │   │   ├── nav_graph.zig      # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
 │   │   ├── nav_map.zig        # Nav map display (sector map renderer, hit-testing, autopilot selection)
 │   │   ├── scene.zig          # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
@@ -156,3 +157,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_cockpit_shap.py` | Deep analysis of cockpit SHAP sprite format and TPLT layout data |
 | `analyze_mfd.py` | Deep analysis of MFD chunks (CMFD, CHUD, DIAL) from cockpit IFF files |
 | `analyze_weapons.py` | Deep analysis of weapon data files (GUNS.IFF, WEAPONS.IFF, BEAMTYPE.IFF, TORPTYPE.IFF) |
+| `analyze_commodities.py` | Deep analysis of commodity data files (COMODTYP.IFF, LANDFEE.IFF, LIMITS.IFF) |
