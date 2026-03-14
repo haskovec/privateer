@@ -532,6 +532,164 @@ def gen_voc_file():
     write("test_voc_multi.bin", bytes(data))
 
 
+def lzw_compress(raw_data):
+    """LZW compress data using the same variant as WC:Privateer VPK files.
+
+    9-12 bit variable-width codes, LSB-first packing.
+    Code 256 = clear, 257 = end.
+    """
+    CLEAR = 256
+    END = 257
+    FIRST_CODE = 258
+
+    # Initialize dictionary with single-byte entries
+    dictionary = {bytes([i]): i for i in range(256)}
+    next_code = FIRST_CODE
+    code_size = 9
+
+    codes = [CLEAR]  # always start with clear code
+
+    w = b""
+    for byte in raw_data:
+        wc = w + bytes([byte])
+        if wc in dictionary:
+            w = wc
+        else:
+            codes.append(dictionary[w])
+            if next_code < 4096:
+                dictionary[wc] = next_code
+                next_code += 1
+                if next_code > (1 << code_size) - 1 and code_size < 12:
+                    code_size += 1
+            w = bytes([byte])
+    if w:
+        codes.append(dictionary[w])
+    codes.append(END)
+
+    # Pack codes into bytes (LSB-first bit packing)
+    output = bytearray()
+    bit_buf = 0
+    bits_in_buf = 0
+    code_size = 9
+    next_code = FIRST_CODE
+
+    for code in codes:
+        if code == CLEAR:
+            # Reset code size for encoding
+            code_size = 9
+            next_code = FIRST_CODE
+            bit_buf |= (code << bits_in_buf)
+            bits_in_buf += code_size
+            while bits_in_buf >= 8:
+                output.append(bit_buf & 0xFF)
+                bit_buf >>= 8
+                bits_in_buf -= 8
+            continue
+        if code == END:
+            bit_buf |= (code << bits_in_buf)
+            bits_in_buf += code_size
+            while bits_in_buf > 0:
+                output.append(bit_buf & 0xFF)
+                bit_buf >>= 8
+                bits_in_buf -= 8
+            break
+
+        bit_buf |= (code << bits_in_buf)
+        bits_in_buf += code_size
+        while bits_in_buf >= 8:
+            output.append(bit_buf & 0xFF)
+            bit_buf >>= 8
+            bits_in_buf -= 8
+
+        # Track dictionary growth for code_size changes
+        if next_code < 4096:
+            next_code += 1
+            if next_code > (1 << code_size) - 1 and code_size < 12:
+                code_size += 1
+
+    return bytes(output)
+
+
+def gen_vpk_file():
+    """Generate test VPK (voice pack) file fixtures.
+
+    VPK format:
+        Offset 0x0000: u32 LE - total file size
+        Offset 0x0004: var   - offset table (u32 LE: low 24 bits = offset, high 8 bits = 0x20 marker)
+        ...           : var   - entry data (u32 LE decompressed_size + LZW compressed data)
+
+    Number of entries = (first_data_offset - 4) / 4
+
+    Each entry decompresses to a Creative Voice File (VOC).
+
+    Fixture 1: test_vpk.bin - VPK with 2 entries
+        Entry 0: short VOC (8 samples)
+        Entry 1: short VOC (4 samples)
+
+    Fixture 2: test_vpk_single.bin - VPK with 1 entry (edge case)
+    """
+    def make_voc(pcm_samples):
+        """Build a minimal VOC file from raw PCM samples."""
+        voc = bytearray()
+        voc += b"Creative Voice File\x1a"
+        voc += struct.pack('<H', 26)          # data_offset
+        voc += struct.pack('<H', 0x010A)      # version 1.10
+        voc += struct.pack('<H', (~0x010A + 0x1234) & 0xFFFF)  # validity
+        # Sound data block (type 1)
+        block_size = 2 + len(pcm_samples)
+        voc += bytes([0x01])
+        voc += struct.pack('<I', block_size)[:3]
+        freq_divisor = 256 - (1000000 // 11025)  # = 165
+        voc += bytes([freq_divisor, 0x00])    # freq_div, codec=PCM
+        voc += pcm_samples
+        voc += bytes([0x00])                  # terminator
+        return bytes(voc)
+
+    # --- Fixture 1: VPK with 2 entries ---
+    voc0 = make_voc(bytes([128, 160, 192, 224, 255, 224, 192, 160]))
+    voc1 = make_voc(bytes([64, 96, 128, 96]))
+
+    compressed0 = lzw_compress(voc0)
+    compressed1 = lzw_compress(voc1)
+
+    # Entry data: u32 decompressed_size + compressed bytes
+    entry0_data = struct.pack('<I', len(voc0)) + compressed0
+    entry1_data = struct.pack('<I', len(voc1)) + compressed1
+
+    # Layout: [file_size(4)] [offset0(4)] [offset1(4)] [entry0] [entry1]
+    header_size = 4 + 2 * 4  # file_size + 2 offsets = 12
+    off0 = header_size
+    off1 = off0 + len(entry0_data)
+    total_size = off1 + len(entry1_data)
+
+    data = bytearray()
+    data += struct.pack('<I', total_size)
+    data += struct.pack('<I', off0 | (0x20 << 24))  # offset with 0x20 marker
+    data += struct.pack('<I', off1 | (0x20 << 24))
+    data += entry0_data
+    data += entry1_data
+
+    assert len(data) == total_size, f"VPK size mismatch: {len(data)} != {total_size}"
+    write("test_vpk.bin", bytes(data))
+
+    # --- Fixture 2: VPK with 1 entry ---
+    voc_single = make_voc(bytes([128, 255, 128, 0, 128, 255]))
+    compressed_single = lzw_compress(voc_single)
+    entry_single = struct.pack('<I', len(voc_single)) + compressed_single
+
+    single_header_size = 4 + 1 * 4  # file_size + 1 offset = 8
+    single_off = single_header_size
+    single_total = single_off + len(entry_single)
+
+    data2 = bytearray()
+    data2 += struct.pack('<I', single_total)
+    data2 += struct.pack('<I', single_off | (0x20 << 24))
+    data2 += entry_single
+
+    assert len(data2) == single_total
+    write("test_vpk_single.bin", bytes(data2))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -542,4 +700,5 @@ if __name__ == "__main__":
     gen_shp_file()
     gen_pak_file()
     gen_voc_file()
+    gen_vpk_file()
     print("Done.")

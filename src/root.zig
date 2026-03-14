@@ -14,6 +14,7 @@ pub const sprite = @import("sprite.zig");
 pub const shp = @import("shp.zig");
 pub const pak = @import("pak.zig");
 pub const voc = @import("voc.zig");
+pub const vpk = @import("vpk.zig");
 pub const integration_tests = @import("integration_tests.zig");
 
 test "engine module loads" {

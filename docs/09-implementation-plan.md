@@ -140,7 +140,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement VOC data block extraction
   - Integration test: Load all 17 VOC files, verify sample rates
 
-- [ ] **1.9 VPK/VPF voice pack decompressor**
+- [x] **1.9 VPK/VPF voice pack decompressor**
   - RED: Test parsing VPK header (offset table)
   - GREEN: Implement VPK offset table parser
   - RED: Test LZW decompression of a VPK entry produces valid VOC data

@@ -10,6 +10,7 @@ const sprite = @import("sprite.zig");
 const shp = @import("shp.zig");
 const pak = @import("pak.zig");
 const voc = @import("voc.zig");
+const vpk = @import("vpk.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -568,4 +569,136 @@ test "integration: load all VOC files, verify sample rates" {
     // Per docs: 17 VOC files in DATA\SPEECH\MID01\
     try std.testing.expect(voc_count > 0);
     try std.testing.expect(total_samples > 0);
+}
+
+// --- VPK/VPF voice pack integration tests ---
+
+test "integration: parse a VPK file and decompress first entry" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    // Find the first VPK file
+    var found = false;
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".VPK")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < vpk.MIN_FILE_SIZE) continue;
+
+        var vpk_file = vpk.parse(allocator, file_data) catch continue;
+        defer vpk_file.deinit();
+
+        // Should have at least 1 entry
+        try std.testing.expect(vpk_file.entryCount() > 0);
+
+        // Decompress first entry - should be valid VOC
+        const voc_data = try vpk_file.decompressEntry(allocator, 0);
+        defer allocator.free(voc_data);
+
+        try std.testing.expect(voc_data.len >= voc.MIN_FILE_SIZE);
+        try std.testing.expect(std.mem.eql(u8, voc_data[0..voc.SIGNATURE_LEN], voc.SIGNATURE));
+
+        // Parse the decompressed VOC
+        var voc_file = try voc.parse(allocator, voc_data);
+        defer voc_file.deinit();
+
+        try std.testing.expectEqual(voc.CODEC_PCM_8BIT, voc_file.codec);
+        try std.testing.expect(voc_file.sample_rate > 10000);
+        try std.testing.expect(voc_file.sample_rate < 12000);
+        try std.testing.expect(voc_file.samples.len > 0);
+
+        found = true;
+        break;
+    }
+
+    try std.testing.expect(found);
+}
+
+test "integration: decompress first entry from 5 random VPK files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var vpk_count: usize = 0;
+    var decompressed_count: usize = 0;
+    var voc_valid_count: usize = 0;
+
+    // Pick VPK files spread across the file list (every Nth)
+    var vpk_indices: [5]usize = .{ 0, 0, 0, 0, 0 };
+    var total_vpks: usize = 0;
+    for (entries, 0..) |e, i| {
+        if (std.mem.endsWith(u8, e.path, ".VPK") or std.mem.endsWith(u8, e.path, ".VPF")) {
+            if (total_vpks < 5) {
+                vpk_indices[total_vpks] = i;
+            }
+            total_vpks += 1;
+        }
+    }
+
+    // Use evenly spaced entries if we have more than 5
+    if (total_vpks > 5) {
+        var vpk_idx: usize = 0;
+        var count: usize = 0;
+        const step = total_vpks / 5;
+        for (entries, 0..) |e, i| {
+            if (std.mem.endsWith(u8, e.path, ".VPK") or std.mem.endsWith(u8, e.path, ".VPF")) {
+                if (count % step == 0 and vpk_idx < 5) {
+                    vpk_indices[vpk_idx] = i;
+                    vpk_idx += 1;
+                }
+                count += 1;
+            }
+        }
+    }
+
+    const test_count = @min(total_vpks, 5);
+    for (vpk_indices[0..test_count]) |idx| {
+        const e = entries[idx];
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < vpk.MIN_FILE_SIZE) continue;
+
+        var vpk_file = vpk.parse(allocator, file_data) catch continue;
+        defer vpk_file.deinit();
+
+        vpk_count += 1;
+
+        // Decompress first entry
+        const voc_data = vpk_file.decompressEntry(allocator, 0) catch continue;
+        defer allocator.free(voc_data);
+
+        decompressed_count += 1;
+
+        // Verify it's valid VOC
+        if (voc_data.len >= voc.SIGNATURE_LEN and
+            std.mem.eql(u8, voc_data[0..voc.SIGNATURE_LEN], voc.SIGNATURE))
+        {
+            var voc_file = voc.parse(allocator, voc_data) catch continue;
+            defer voc_file.deinit();
+            voc_valid_count += 1;
+        }
+    }
+
+    // We should have successfully parsed and decompressed from at least 5 files
+    try std.testing.expect(vpk_count >= test_count);
+    try std.testing.expect(decompressed_count >= test_count);
+    try std.testing.expect(voc_valid_count >= test_count);
 }
