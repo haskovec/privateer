@@ -173,7 +173,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement sprite-to-PNG pipeline (using stb_image_write or similar)
   - Batch mode: render all sprites from APPEARNC/ directory
 
-- [ ] **2.3 Palette viewer**
+- [x] **2.3 Palette viewer**
   - Render all 4 palettes as color swatch images
   - RED: Test palette rendering produces 256-color grid PNG
   - GREEN: Implement palette visualizer
