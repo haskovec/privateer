@@ -78,7 +78,8 @@ privateer/
 │   │   ├── cockpit.zig        # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
 │   │   ├── mfd.zig            # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
 │   │   ├── radar.zig          # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
-│   │   └── damage_display.zig # Damage display (shield/armor status per facing, color-coded diagram renderer)
+│   │   ├── damage_display.zig # Damage display (shield/armor status per facing, color-coded diagram renderer)
+│   │   └── targeting.zig     # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
 │   │
 │   └── cli/                   # Offline tools & asset pipelines
 │       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)

@@ -16,6 +16,14 @@ pub const Vec3 = struct {
         return .{ .x = a.x + b.x, .y = a.y + b.y, .z = a.z + b.z };
     }
 
+    pub fn sub(a: Vec3, b: Vec3) Vec3 {
+        return .{ .x = a.x - b.x, .y = a.y - b.y, .z = a.z - b.z };
+    }
+
+    pub fn dot(a: Vec3, b: Vec3) f32 {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+
     pub fn scale(v: Vec3, s: f32) Vec3 {
         return .{ .x = v.x * s, .y = v.y * s, .z = v.z * s };
     }
@@ -181,6 +189,26 @@ test "Vec3.add sums components" {
     try testing.expectEqual(@as(f32, 5), c.x);
     try testing.expectEqual(@as(f32, 7), c.y);
     try testing.expectEqual(@as(f32, 9), c.z);
+}
+
+test "Vec3.sub subtracts components" {
+    const a = Vec3{ .x = 5, .y = 7, .z = 9 };
+    const b = Vec3{ .x = 1, .y = 2, .z = 3 };
+    const c = a.sub(b);
+    try testing.expectEqual(@as(f32, 4), c.x);
+    try testing.expectEqual(@as(f32, 5), c.y);
+    try testing.expectEqual(@as(f32, 6), c.z);
+}
+
+test "Vec3.dot computes dot product" {
+    const a = Vec3{ .x = 1, .y = 2, .z = 3 };
+    const b = Vec3{ .x = 4, .y = 5, .z = 6 };
+    try testing.expectEqual(@as(f32, 32), a.dot(b));
+}
+
+test "Vec3.dot with zero vector is zero" {
+    const a = Vec3{ .x = 1, .y = 2, .z = 3 };
+    try testing.expectEqual(@as(f32, 0), a.dot(Vec3.zero));
 }
 
 test "Vec3.scale multiplies all components" {

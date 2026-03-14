@@ -354,7 +354,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test damage display shows full shields when undamaged
   - GREEN: Implement damage diagram renderer
 
-- [ ] **6.5 Targeting system**
+- [x] **6.5 Targeting system**
   - Target selection (nearest hostile, cycle targets)
   - ITTS (In-flight Targeting and Tracking System) reticle
   - RED: Test targeting nearest hostile selects correct ship

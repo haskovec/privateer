@@ -50,6 +50,7 @@ pub const cockpit = @import("cockpit/cockpit.zig");
 pub const mfd = @import("cockpit/mfd.zig");
 pub const radar = @import("cockpit/radar.zig");
 pub const damage_display = @import("cockpit/damage_display.zig");
+pub const targeting = @import("cockpit/targeting.zig");
 
 // CLI tools
 pub const extract = @import("cli/extract.zig");
