@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 5 complete. Phase 6 (Cockpit & HUD) is in progress. See the
+Phase 0 through Phase 6 complete. Phase 7 (Combat) is next. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -79,7 +79,8 @@ privateer/
 │   │   ├── mfd.zig            # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
 │   │   ├── radar.zig          # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
 │   │   ├── damage_display.zig # Damage display (shield/armor status per facing, color-coded diagram renderer)
-│   │   └── targeting.zig     # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
+│   │   ├── targeting.zig     # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
+│   │   └── messages.zig     # In-flight message system (categorized message queue, timed expiration, HUD renderer)
 │   │
 │   └── cli/                   # Offline tools & asset pipelines
 │       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)

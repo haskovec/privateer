@@ -362,7 +362,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test ITTS lead indicator shows correct offset for moving target
   - GREEN: Implement ITTS calculation
 
-- [ ] **6.6 In-flight messages**
+- [x] **6.6 In-flight messages**
   - Message display area for communications, status, warnings
   - RED: Test "No Missiles" message displays when firing with none
   - GREEN: Implement message queue and renderer
