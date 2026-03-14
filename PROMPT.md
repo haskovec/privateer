@@ -7,4 +7,4 @@ IMPORTANT:
 - when tests pass commit the changes and push
 - update the 09-implementation-plan.md file marking the task as done
 - update the project layout in README.md to account for any new files
-
+- Whenever you create a new Python tool in the tools/ dir please update the README.md with the description of the tool
