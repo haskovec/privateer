@@ -45,6 +45,9 @@ pub const flight_physics = @import("flight/flight_physics.zig");
 pub const autopilot = @import("flight/autopilot.zig");
 pub const jump_drive = @import("flight/jump_drive.zig");
 
+// Combat
+pub const weapons = @import("combat/weapons.zig");
+
 // Cockpit & HUD
 pub const cockpit = @import("cockpit/cockpit.zig");
 pub const mfd = @import("cockpit/mfd.zig");

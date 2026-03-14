@@ -1399,6 +1399,179 @@ def gen_mfd_file():
     write("test_mfd.bin", root)
 
 
+def gen_guns_file():
+    """Generate test GUNS.IFF fixture (FORM:GUNS with TABL + UNIT records).
+
+    GUNS.IFF structure:
+        FORM:GUNS
+          TABL (N * 4 bytes: u32 LE offsets from file start to each gun record)
+          Gun records (each: u32 LE record_data_size + UNIT IFF chunk)
+
+    Each UNIT chunk data (39 bytes):
+        short_name (null-terminated, variable)
+        type_filename (8 bytes, DOS 8.3 name)
+        display_name (null-terminated, padded to fill 21 total string bytes)
+        stats (18 bytes):
+            u16 LE: velocity_factor
+            u8: 0
+            u16 LE: projectile_speed
+            u8: 0
+            u16 LE: range
+            u8: 0
+            u8: 0
+            u16 LE: energy_cost
+            u8: 0
+            u8: 0
+            u8: refire_delay
+            u8: 0
+            u16 LE: damage
+    """
+    def make_gun_unit(short_name, type_file, display_name, speed, damage, energy, refire, vel_factor=370, gun_range=870):
+        """Build a gun UNIT chunk with 21-byte string section + 18-byte stats."""
+        # Build string section (exactly 21 bytes, zero-padded)
+        strings = short_name.encode('ascii') + b'\x00'
+        strings += type_file.encode('ascii')  # 8 bytes, not null-terminated
+        strings += display_name.encode('ascii') + b'\x00'
+        # Pad to 21 bytes
+        assert len(strings) <= 21, f"String section too long: {len(strings)}"
+        strings += b'\x00' * (21 - len(strings))
+
+        # Build stats (18 bytes)
+        stats = struct.pack('<H', vel_factor)    # velocity factor
+        stats += b'\x00'                         # padding
+        stats += struct.pack('<H', speed)        # projectile speed
+        stats += b'\x00'                         # padding
+        stats += struct.pack('<H', gun_range)    # range
+        stats += b'\x00\x00'                     # padding
+        stats += struct.pack('<H', energy)       # energy cost
+        stats += b'\x00\x00'                     # padding
+        stats += bytes([refire])                 # refire delay
+        stats += b'\x00'                         # padding
+        stats += struct.pack('<H', damage)       # damage
+
+        unit_data = strings + stats
+        assert len(unit_data) == 39, f"UNIT data size wrong: {len(unit_data)}"
+
+        # Wrap as IFF UNIT chunk
+        unit_chunk = b'UNIT' + struct.pack('>I', len(unit_data)) + unit_data
+        # Pad UNIT chunk to even if needed
+        if len(unit_data) % 2 == 1:
+            unit_chunk += b'\x00'
+
+        # Record: u32 LE record_data_size + unit_chunk
+        record_data_size = len(unit_chunk)
+        return struct.pack('<I', record_data_size) + unit_chunk
+
+    # Build 3 test guns: Laser, Mass Driver, Plasma
+    guns = [
+        make_gun_unit("Lasr", "LASRTYPE", "LASER",     speed=1400, damage=20, energy=76,  refire=4,  vel_factor=370),
+        make_gun_unit("Mass", "MASSTYPE", "MASS",      speed=1100, damage=26, energy=89,  refire=5,  vel_factor=380),
+        make_gun_unit("Plas", "PLSMTYPE", "PLASMA",     speed=940,  damage=72, energy=184, refire=19, vel_factor=500),
+    ]
+
+    # Calculate offsets: FORM header(12) + TABL header(8) + TABL data(3*4=12) = 32
+    tabl_data_size = len(guns) * 4
+    form_header_size = 12  # "FORM" + size + "GUNS"
+    tabl_total = 8 + tabl_data_size  # "TABL" + size + data
+    first_gun_offset = form_header_size + tabl_total
+
+    offsets = []
+    current_offset = first_gun_offset
+    for gun in guns:
+        offsets.append(current_offset)
+        current_offset += len(gun)
+
+    # Build TABL chunk
+    tabl_data = b''
+    for off in offsets:
+        tabl_data += struct.pack('<I', off)
+    tabl_chunk = b'TABL' + struct.pack('>I', len(tabl_data)) + tabl_data
+
+    # Build FORM:GUNS
+    form_body = b'GUNS' + tabl_chunk
+    for gun in guns:
+        form_body += gun
+    data = b'FORM' + struct.pack('>I', len(form_body)) + form_body
+
+    write("test_guns.bin", data)
+
+
+def gen_weapons_file():
+    """Generate test WEAPONS.IFF fixture (FORM:WEAP with LNCH and MISL).
+
+    WEAPONS.IFF structure:
+        FORM:WEAP
+          FORM:LNCH  (launcher types)
+            UNIT (7 bytes each for simple launchers)
+          FORM:MISL  (missile types)
+            UNIT (35 bytes each)
+
+    Launcher UNIT (7 bytes):
+        byte 0: launcher type ID
+        byte 1-2: u16 LE value1
+        byte 3-4: u16 LE value2
+        byte 5-6: padding (0x0000)
+
+    Missile UNIT (35 bytes):
+        byte 0: missile type ID
+        byte 1-8: short name (8 chars)
+        byte 9-16: type filename (8 chars)
+        byte 17-24: display name (8 chars, null-padded)
+        byte 25-26: u16 LE speed
+        byte 27: lock_type
+        byte 28: padding
+        byte 29-30: u16 LE lock_range
+        byte 31-32: u16 LE damage
+        byte 33: tracking_type
+        byte 34: padding
+    """
+    # Launcher UNITs
+    def make_launcher_unit(type_id, val1, val2):
+        data = bytes([type_id]) + struct.pack('<HH', val1, val2) + b'\x00\x00'
+        return make_iff_chunk(b'UNIT', data)
+
+    lnch_units = (
+        make_launcher_unit(0x32, 360, 640) +   # Missile launcher
+        make_launcher_unit(0x33, 350, 76)       # Torpedo launcher
+    )
+    lnch_form = make_iff_form(b'LNCH', lnch_units)
+
+    # Missile UNITs
+    def make_missile_unit(type_id, short_name, type_file, display_name,
+                          speed, lock_type, lock_range, damage, tracking):
+        data = bytes([type_id])
+        # Short name: 8 bytes, padded
+        sn = short_name.encode('ascii')
+        data += sn + b'\x00' * (8 - len(sn))
+        # Type file: 8 bytes
+        tf = type_file.encode('ascii')
+        data += tf + b'\x00' * (8 - len(tf))
+        # Display name: 8 bytes, null-padded
+        dn = display_name.encode('ascii')
+        data += dn + b'\x00' * (8 - len(dn))
+        # Stats
+        data += struct.pack('<H', speed)
+        data += bytes([lock_type, 0])
+        data += struct.pack('<H', lock_range)
+        data += struct.pack('<H', damage)
+        data += bytes([tracking, 0])
+        assert len(data) == 35, f"Missile UNIT data size: {len(data)}"
+        return make_iff_chunk(b'UNIT', data)
+
+    misl_units = (
+        make_missile_unit(1, "PrtnTorp", "TORPTYPE", "TORPEDO",
+                          speed=1200, lock_type=3, lock_range=0, damage=200, tracking=5) +
+        make_missile_unit(2, "HeatSeek", "MSSLTYPE", "HEATSEEK",
+                          speed=800, lock_type=9, lock_range=3000, damage=160, tracking=2) +
+        make_missile_unit(4, "DumbFire", "MSSLTYPE", "DUMBFIRE",
+                          speed=1000, lock_type=8, lock_range=0, damage=130, tracking=1)
+    )
+    misl_form = make_iff_form(b'MISL', misl_units)
+
+    root = make_iff_form(b'WEAP', lnch_form + misl_form)
+    write("test_weapons.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1422,4 +1595,6 @@ if __name__ == "__main__":
     gen_teams_file()
     gen_cockpit_file()
     gen_mfd_file()
+    gen_guns_file()
+    gen_weapons_file()
     print("Done.")

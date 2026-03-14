@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 6 complete. Phase 7 (Combat) is next. See the
+Phase 0 through Phase 6 complete. Phase 7.1 (Weapon system) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -79,8 +79,11 @@ privateer/
 │   │   ├── mfd.zig            # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
 │   │   ├── radar.zig          # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
 │   │   ├── damage_display.zig # Damage display (shield/armor status per facing, color-coded diagram renderer)
-│   │   ├── targeting.zig     # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
-│   │   └── messages.zig     # In-flight message system (categorized message queue, timed expiration, HUD renderer)
+│   │   ├── targeting.zig      # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
+│   │   └── messages.zig       # In-flight message system (categorized message queue, timed expiration, HUD renderer)
+│   │
+│   ├── combat/                # Combat systems
+│   │   └── weapons.zig       # Weapon system (gun/missile/torpedo data parsers, projectile creation & physics)
 │   │
 │   └── cli/                   # Offline tools & asset pipelines
 │       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)
@@ -146,3 +149,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_cockpits.py` | Analyze cockpit IFF/PAK file structures from PRIV.TRE |
 | `analyze_cockpit_shap.py` | Deep analysis of cockpit SHAP sprite format and TPLT layout data |
 | `analyze_mfd.py` | Deep analysis of MFD chunks (CMFD, CHUD, DIAL) from cockpit IFF files |
+| `analyze_weapons.py` | Deep analysis of weapon data files (GUNS.IFF, WEAPONS.IFF, BEAMTYPE.IFF, TORPTYPE.IFF) |

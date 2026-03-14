@@ -372,7 +372,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 7: Combat
 *The most complex game system. Depends on rendering, physics, and ship data.*
 
-- [ ] **7.1 Weapon system**
+- [x] **7.1 Weapon system**
   - Parse WEAPONS.IFF, BEAMTYPE.IFF, TORPTYPE.IFF
   - Load weapon stats (damage, range, speed, energy cost)
   - RED: Test firing gun creates projectile with correct velocity

@@ -24,6 +24,7 @@ const nav_graph = @import("game/nav_graph.zig");
 const cockpit = @import("cockpit/cockpit.zig");
 const mfd = @import("cockpit/mfd.zig");
 const damage_display = @import("cockpit/damage_display.zig");
+const weapons = @import("combat/weapons.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -213,6 +214,31 @@ fn loadTreData(allocator: std.mem.Allocator) !?struct { data: []const u8, tre_da
     const tre_info = try iso9660.findFile(allocator, data, pvd, "PRIV.TRE");
     const tre_data = try iso9660.readFileData(data, tre_info.lba, tre_info.size);
     return .{ .data = data, .tre_data = tre_data };
+}
+
+/// Find a TRE file by directory and filename when multiple files share the same name.
+/// Returns the file data slice, or null if not found.
+fn findTreFileByPath(allocator: std.mem.Allocator, tre_data: []const u8, dir: []const u8, filename: []const u8) !?[]const u8 {
+    const header = try tre.readHeader(tre_data);
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, tre_data, @intCast(i));
+        defer entry.deinit();
+        // Check if path contains the directory fragment AND ends with the filename
+        const basename = std.fs.path.basename(entry.path);
+        if (std.ascii.eqlIgnoreCase(basename, filename)) {
+            // Check directory component
+            const has_dir = for (0..entry.path.len) |j| {
+                const remaining = entry.path[j..];
+                if (remaining.len >= dir.len and std.ascii.eqlIgnoreCase(remaining[0..dir.len], dir)) {
+                    break true;
+                }
+            } else false;
+            if (has_dir) {
+                return try tre.extractFileData(tre_data, entry.offset, entry.size);
+            }
+        }
+    }
+    return null;
 }
 
 test "integration: PCMAIN.PAL loads 256 RGB entries" {
@@ -1934,4 +1960,138 @@ test "integration: damage display renders onto framebuffer without crash" {
         if (has_shield_pixel) break;
     }
     try std.testing.expect(has_shield_pixel);
+}
+
+// --- Weapon system integration tests ---
+
+test "integration: GUNS.IFF loads 11 gun types" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GUNS.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const guns = try weapons.parseGuns(allocator, file_data);
+    defer allocator.free(guns);
+
+    try std.testing.expectEqual(@as(usize, 11), guns.len);
+}
+
+test "integration: GUNS.IFF laser has speed 1400" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GUNS.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const guns = try weapons.parseGuns(allocator, file_data);
+    defer allocator.free(guns);
+
+    // Gun[5] is Laser with speed 1400 (confirmed from raw data analysis)
+    const laser = guns[5];
+    try std.testing.expectEqualStrings("Lasr", laser.short_name[0..4]);
+    try std.testing.expectEqual(@as(u16, 1400), laser.speed);
+}
+
+test "integration: GUNS.IFF neutron has speed 960" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GUNS.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const guns = try weapons.parseGuns(allocator, file_data);
+    defer allocator.free(guns);
+
+    // Gun[0] is Neutron with speed 960
+    const neutron = guns[0];
+    try std.testing.expectEqualStrings("Neut", neutron.short_name[0..4]);
+    try std.testing.expectEqual(@as(u16, 960), neutron.speed);
+}
+
+test "integration: GUNS.IFF all guns have positive speed and damage" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GUNS.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const guns = try weapons.parseGuns(allocator, file_data);
+    defer allocator.free(guns);
+
+    for (guns) |gun| {
+        try std.testing.expect(gun.speed > 0);
+        try std.testing.expect(gun.damage > 0);
+    }
+}
+
+test "integration: WEAPONS.IFF loads launchers and missiles" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // TYPES\WEAPONS.IFF is the weapon data file (not APPEARNC\WEAPONS.IFF which is visual)
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "TYPES", "WEAPONS.IFF") orelse return;
+
+    const result = try weapons.parseWeapons(allocator, file_data);
+    defer allocator.free(result.launcher_types);
+    defer allocator.free(result.missile_types);
+
+    // Original game has 3 launcher types and 5 missile types
+    try std.testing.expectEqual(@as(usize, 3), result.launcher_types.len);
+    try std.testing.expectEqual(@as(usize, 5), result.missile_types.len);
+}
+
+test "integration: WEAPONS.IFF torpedo has speed 1200" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "TYPES", "WEAPONS.IFF") orelse return;
+
+    const result = try weapons.parseWeapons(allocator, file_data);
+    defer allocator.free(result.launcher_types);
+    defer allocator.free(result.missile_types);
+
+    // Find torpedo (ID=1)
+    var found_torpedo = false;
+    for (result.missile_types) |m| {
+        if (m.id == 1) {
+            try std.testing.expectEqual(@as(u16, 1200), m.speed);
+            try std.testing.expectEqual(weapons.TrackingType.torpedo, m.tracking);
+            found_torpedo = true;
+        }
+    }
+    try std.testing.expect(found_torpedo);
+}
+
+test "integration: WEAPONS.IFF heat-seeker has tracking type 2" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "TYPES", "WEAPONS.IFF") orelse return;
+
+    const result = try weapons.parseWeapons(allocator, file_data);
+    defer allocator.free(result.launcher_types);
+    defer allocator.free(result.missile_types);
+
+    // Find heat-seeker (ID=2)
+    var found_heat = false;
+    for (result.missile_types) |m| {
+        if (m.id == 2) {
+            try std.testing.expectEqual(weapons.TrackingType.heat_seeking, m.tracking);
+            try std.testing.expect(m.lock_range > 0);
+            found_heat = true;
+        }
+    }
+    try std.testing.expect(found_heat);
 }
