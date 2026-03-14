@@ -20,7 +20,37 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Reverse engineering and planning phase complete. Implementation has not yet started.
+Phases 0 and 1.1-1.3 complete (project setup, ISO 9660/TRE/IFF parsers). See the
+[Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
+
+## Project Layout
+
+```
+privateer/
+├── build.zig                  # Zig build configuration (exe, engine module, test suites)
+├── build.zig.zon              # Zig package dependencies (SDL3)
+├── src/
+│   ├── main.zig               # Game executable entry point
+│   ├── root.zig               # Engine library root (exports all submodules)
+│   ├── config.zig             # JSON configuration system (data paths, settings)
+│   ├── iso9660.zig            # ISO 9660 CD image parser (reads GAME.DAT)
+│   ├── tre.zig                # TRE archive reader (832-entry PRIV.TRE)
+│   ├── iff.zig                # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
+│   ├── sdl.zig                # SDL3 initialization wrapper
+│   ├── testing.zig            # Test helpers (fixture loader, binary assertions, BE readers)
+│   └── integration_tests.zig  # Integration tests against real game data
+├── tests/
+│   ├── gen_fixtures.py        # Python script to generate binary test fixtures
+│   └── fixtures/              # Binary test data (ISO, TRE, IFF samples)
+├── tools/                     # Python reverse-engineering scripts (analysis only)
+└── docs/                      # Design documents and specs (see below)
+```
+
+### Build Commands
+
+- `zig build` -- build the game executable
+- `zig build test` -- run all unit and integration tests
+- `zig build run` -- build and run the game
 
 ## Documentation
 
