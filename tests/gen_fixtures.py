@@ -311,6 +311,83 @@ def gen_sprite_rle():
     write("test_sprite_offset.bin", bytes(data))
 
 
+def gen_shp_file():
+    """Generate test SHP (shape/font) file fixtures.
+
+    SHP format:
+        Offset 0x0000: u32 LE - total file size
+        Offset 0x0004: var   - offset table (u32 LE entries pointing to sprite data)
+        ...           : var   - RLE-encoded sprite data
+
+    Number of sprites = (first_offset - 4) / 4
+
+    Fixture 1: test_shp.bin - SHP with 3 sprites
+        Sprite 0: 4x4 even-key sprite with pixels [1..16]
+        Sprite 1: 2x2 even-key sprite with pixels [0xAA,0xBB,0xCC,0xDD]
+        Sprite 2: 3x2 even-key sprite with pixels in specific pattern
+    """
+    # Build sprite data first, then compute offsets
+
+    # Sprite 0: 4x4 even-key (same pattern as test_sprite_even.bin)
+    s0 = bytearray()
+    s0 += struct.pack('<hhhh', 2, 2, 2, 2)  # header: width=4, height=4
+    s0 += struct.pack('<HHH', 8, 0, 0) + bytes([1, 2, 3, 4])
+    s0 += struct.pack('<HHH', 8, 0, 1) + bytes([5, 6, 7, 8])
+    s0 += struct.pack('<HHH', 8, 0, 2) + bytes([9, 10, 11, 12])
+    s0 += struct.pack('<HHH', 8, 0, 3) + bytes([13, 14, 15, 16])
+    s0 += struct.pack('<H', 0)  # terminator
+
+    # Sprite 1: 2x2 even-key
+    s1 = bytearray()
+    s1 += struct.pack('<hhhh', 1, 1, 1, 1)  # header: width=2, height=2
+    s1 += struct.pack('<HHH', 4, 0, 0) + bytes([0xAA, 0xBB])
+    s1 += struct.pack('<HHH', 4, 0, 1) + bytes([0xCC, 0xDD])
+    s1 += struct.pack('<H', 0)  # terminator
+
+    # Sprite 2: 3x2 even-key
+    s2 = bytearray()
+    s2 += struct.pack('<hhhh', 2, 1, 1, 1)  # header: width=3, height=2
+    s2 += struct.pack('<HHH', 6, 0, 0) + bytes([10, 20, 30])
+    s2 += struct.pack('<HHH', 6, 0, 1) + bytes([40, 50, 60])
+    s2 += struct.pack('<H', 0)  # terminator
+
+    # Layout: [file_size(4)] [off0(4)] [off1(4)] [off2(4)] [s0] [s1] [s2]
+    header_size = 4 + 3 * 4  # file_size + 3 offsets = 16 bytes
+    off0 = header_size
+    off1 = off0 + len(s0)
+    off2 = off1 + len(s1)
+    total_size = off2 + len(s2)
+
+    data = bytearray()
+    data += struct.pack('<I', total_size)
+    data += struct.pack('<I', off0)
+    data += struct.pack('<I', off1)
+    data += struct.pack('<I', off2)
+    data += s0 + s1 + s2
+
+    assert len(data) == total_size, f"SHP size mismatch: {len(data)} != {total_size}"
+    write("test_shp.bin", bytes(data))
+
+    # Fixture 2: test_shp_single.bin - SHP with just 1 sprite (edge case)
+    s_single = bytearray()
+    s_single += struct.pack('<hhhh', 1, 1, 1, 1)  # 2x2
+    s_single += struct.pack('<HHH', 4, 0, 0) + bytes([0xFF, 0xFE])
+    s_single += struct.pack('<HHH', 4, 0, 1) + bytes([0xFD, 0xFC])
+    s_single += struct.pack('<H', 0)
+
+    single_header = 4 + 1 * 4  # file_size + 1 offset = 8 bytes
+    single_off = single_header
+    single_total = single_off + len(s_single)
+
+    data2 = bytearray()
+    data2 += struct.pack('<I', single_total)
+    data2 += struct.pack('<I', single_off)
+    data2 += s_single
+
+    assert len(data2) == single_total
+    write("test_shp_single.bin", bytes(data2))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -318,4 +395,5 @@ if __name__ == "__main__":
     gen_iff_chunks()
     gen_pal_file()
     gen_sprite_rle()
+    gen_shp_file()
     print("Done.")

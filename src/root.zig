@@ -11,6 +11,7 @@ pub const tre = @import("tre.zig");
 pub const iff = @import("iff.zig");
 pub const pal = @import("pal.zig");
 pub const sprite = @import("sprite.zig");
+pub const shp = @import("shp.zig");
 pub const integration_tests = @import("integration_tests.zig");
 
 test "engine module loads" {

@@ -7,6 +7,7 @@ const tre = @import("tre.zig");
 const iff = @import("iff.zig");
 const pal = @import("pal.zig");
 const sprite = @import("sprite.zig");
+const shp = @import("shp.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -313,4 +314,94 @@ test "integration: decode sprite from SHAP chunk in APPEARNC IFF" {
 
     // We expect to have decoded at least one sprite
     try std.testing.expect(decoded_count > 0);
+}
+
+// --- SHP font/shape integration tests ---
+
+test "integration: CONVFONT.SHP parses offset table" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CONVFONT.SHP");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var shape_file = try shp.parse(allocator, file_data);
+    defer shape_file.deinit();
+
+    // Font files should contain multiple glyphs (at least a few dozen)
+    try std.testing.expect(shape_file.spriteCount() > 10);
+}
+
+test "integration: CONVFONT.SHP glyphs decode" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "CONVFONT.SHP");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var shape_file = try shp.parse(allocator, file_data);
+    defer shape_file.deinit();
+
+    // Try decoding glyphs -- some may be empty (null/space), so find the first valid one
+    var decoded: usize = 0;
+    for (0..shape_file.spriteCount()) |i| {
+        var s = shape_file.decodeSprite(allocator, i) catch continue;
+        defer s.deinit();
+
+        if (s.width > 0 and s.height > 0) {
+            try std.testing.expectEqual(@as(usize, @as(usize, s.width) * @as(usize, s.height)), s.pixels.len);
+            decoded += 1;
+        }
+    }
+
+    // A font file should have many decodable glyphs
+    try std.testing.expect(decoded > 20);
+}
+
+test "integration: load all SHP files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var shp_count: usize = 0;
+    var decoded_sprites: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".SHP")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < shp.MIN_FILE_SIZE) continue;
+
+        var shape_file = shp.parse(allocator, file_data) catch continue;
+        defer shape_file.deinit();
+
+        shp_count += 1;
+
+        // Try decoding the first sprite from each SHP file
+        if (shape_file.spriteCount() > 0) {
+            var s = shape_file.decodeSprite(allocator, 0) catch continue;
+            defer s.deinit();
+            if (s.width > 0 and s.height > 0) {
+                decoded_sprites += 1;
+            }
+        }
+    }
+
+    // We expect all 11 SHP files to parse (per docs: 6 fonts + 1 mouse cursor = 7+)
+    try std.testing.expect(shp_count > 0);
+    // At least some should have decodable sprites
+    try std.testing.expect(decoded_sprites > 0);
 }

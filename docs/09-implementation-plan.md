@@ -117,7 +117,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Integrate header + RLE decoder
   - Golden test: Decode a known sprite and compare pixel-by-pixel to reference
 
-- [ ] **1.6 SHP font/shape loader**
+- [x] **1.6 SHP font/shape loader**
   - RED: Test parsing SHP offset table from CONVFONT.SHP
   - GREEN: Implement SHP offset table parser
   - RED: Test extracting individual glyphs/shapes by index
