@@ -114,6 +114,7 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `find_file_data.py` | Locate actual file data within the TRE using offset hypothesis testing |
 | `iff_analysis.py` | Parse IFF chunk structures and catalog all FORM/chunk types |
 | `analyze_iff.py` | Deep recursive IFF chunk analysis with data extraction |
+| `analyze_sectors.py` | Analyze SECTORS/ files from PRIV.TRE to understand universe data structures |
 | `other_formats.py` | Analyze non-IFF formats (PAK, VPK, VPF, VOC, SHP, PAL, DAT) |
 | `pak_diag.py` | Diagnose PAK file offset tables and resource layouts |
 | `vpk_analysis.py` | Analyze VPK/VPF voice pack file structures and LZW compression |
