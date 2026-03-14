@@ -34,7 +34,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 0: Project Setup & Test Infrastructure
 *Everything else depends on this.*
 
-- [ ] **0.1 Initialize Zig project structure**
+- [x] **0.1 Initialize Zig project structure**
   - Create `build.zig` with build configuration
   - Directory layout: `src/`, `tests/`, `tools/`, `docs/`, `assets/`
   - RED: Write a test that imports the main module and asserts true
@@ -47,7 +47,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Write SDL3 init/shutdown wrapper
   - Verify builds on Windows (macOS deferred until core works)
 
-- [ ] **0.3 Test harness & fixtures**
+- [x] **0.3 Test harness & fixtures**
   - Build test fixture system for binary test data
   - Create helper functions: `expectBytes()`, `expectSlice()`, `expectApproxEq()`
   - RED: Test that fixture loading works with a hand-crafted 16-byte file

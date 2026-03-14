@@ -1,0 +1,12 @@
+.{
+    .name = .privateer,
+    .version = "0.0.0",
+    .fingerprint = 0x93184973ea5969f2,
+    .minimum_zig_version = "0.15.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src/",
+    },
+    .dependencies = .{},
+}
