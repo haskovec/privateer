@@ -382,7 +382,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test torpedo launch
   - GREEN: Implement torpedo system
 
-- [ ] **7.2 Projectile physics**
+- [x] **7.2 Projectile physics**
   - Projectile movement, lifetime, collision detection
   - RED: Test projectile moves in fired direction at weapon speed
   - GREEN: Implement projectile update
