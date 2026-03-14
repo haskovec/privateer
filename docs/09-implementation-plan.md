@@ -167,7 +167,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test extraction produces correct file count and sizes
   - GREEN: Implement extraction pipeline
 
-- [ ] **2.2 Sprite renderer (to PNG)**
+- [x] **2.2 Sprite renderer (to PNG)**
   - Decode RLE sprites and write to PNG files for visual verification
   - RED: Test rendering ATTITUDE.IFF sprites produces non-empty PNG
   - GREEN: Implement sprite-to-PNG pipeline (using stb_image_write or similar)

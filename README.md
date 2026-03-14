@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 and Phase 1 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker, VOC audio loader, VPK/VPF voice pack decompressor, ADL/GEN/XMIDI music loaders). Phase 2 in progress (asset extraction CLI). See the
+Phase 0 and Phase 1 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker, VOC audio loader, VPK/VPF voice pack decompressor, ADL/GEN/XMIDI music loaders). Phase 2 in progress (asset extraction CLI, sprite-to-PNG renderer). See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -42,6 +42,8 @@ privateer/
 │   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
 │   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
 │   ├── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
+│   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
+│   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

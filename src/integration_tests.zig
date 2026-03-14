@@ -13,6 +13,8 @@ const voc = @import("voc.zig");
 const vpk = @import("vpk.zig");
 const music = @import("music.zig");
 const extract = @import("extract.zig");
+const render = @import("render.zig");
+const png = @import("png.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -319,6 +321,132 @@ test "integration: decode sprite from SHAP chunk in APPEARNC IFF" {
 
     // We expect to have decoded at least one sprite
     try std.testing.expect(decoded_count > 0);
+}
+
+// --- Sprite-to-PNG rendering integration tests ---
+
+test "integration: render APPEARNC sprite to PNG" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Load PCMAIN.PAL for color mapping
+    var pal_entry = try tre.findEntry(allocator, loaded.tre_data, "PCMAIN.PAL");
+    defer pal_entry.deinit();
+    const pal_data = try tre.extractFileData(loaded.tre_data, pal_entry.offset, pal_entry.size);
+    const palette = try pal.parse(pal_data);
+
+    // Find the first APPEARNC IFF file with SHAP chunks
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var png_count: usize = 0;
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".IFF")) continue;
+        if (std.mem.indexOf(u8, e.path, "APPEARNC") == null) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < 8) continue;
+
+        var chunk = iff.parseFile(allocator, file_data) catch continue;
+        defer chunk.deinit();
+
+        const sprites = render.findSprites(allocator, chunk) catch continue;
+        defer {
+            for (sprites) |*s| {
+                var spr = s.*;
+                spr.deinit();
+            }
+            allocator.free(sprites);
+        }
+
+        for (sprites) |spr| {
+            const png_data = render.spriteToPng(allocator, spr, palette) catch continue;
+            defer allocator.free(png_data);
+
+            // Verify PNG starts with valid signature
+            if (png_data.len >= 8) {
+                if (std.mem.eql(u8, png_data[0..8], &png.SIGNATURE)) {
+                    png_count += 1;
+                }
+            }
+        }
+
+        if (png_count > 0) break;
+    }
+
+    // We should have rendered at least one sprite to PNG
+    try std.testing.expect(png_count > 0);
+}
+
+test "integration: batch render APPEARNC sprites to PNG" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Load palette
+    var pal_entry = try tre.findEntry(allocator, loaded.tre_data, "PCMAIN.PAL");
+    defer pal_entry.deinit();
+    const pal_data = try tre.extractFileData(loaded.tre_data, pal_entry.offset, pal_entry.size);
+    const palette = try pal.parse(pal_data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var total_sprites: usize = 0;
+    var total_pngs: usize = 0;
+    var iff_count: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".IFF")) continue;
+        if (std.mem.indexOf(u8, e.path, "APPEARNC") == null) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < 8) continue;
+
+        var chunk = iff.parseFile(allocator, file_data) catch continue;
+        defer chunk.deinit();
+
+        const sprites = render.findSprites(allocator, chunk) catch continue;
+        defer {
+            for (sprites) |*s| {
+                var spr = s.*;
+                spr.deinit();
+            }
+            allocator.free(sprites);
+        }
+
+        iff_count += 1;
+        total_sprites += sprites.len;
+
+        for (sprites) |spr| {
+            const png_data = render.spriteToPng(allocator, spr, palette) catch continue;
+            defer allocator.free(png_data);
+
+            if (png_data.len >= 8 and std.mem.eql(u8, png_data[0..8], &png.SIGNATURE)) {
+                total_pngs += 1;
+            }
+        }
+    }
+
+    // APPEARNC directory should contain multiple IFF files with sprites
+    try std.testing.expect(iff_count > 0);
+    try std.testing.expect(total_sprites > 0);
+    try std.testing.expect(total_pngs > 0);
+    // Most decoded sprites should render successfully
+    try std.testing.expect(total_pngs >= total_sprites / 2);
 }
 
 // --- SHP font/shape integration tests ---
