@@ -97,7 +97,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Handle padding byte
   - Integration test: Parse every IFF file in the TRE without errors
 
-- [ ] **1.4 PAL palette loader**
+- [x] **1.4 PAL palette loader**
   - RED: Test loading PCMAIN.PAL, expect 256 RGB entries
   - GREEN: Implement PAL parser (4-byte header + 768 bytes of RGB data)
   - RED: Test VGA 6-bit to 8-bit color conversion (multiply by 4)

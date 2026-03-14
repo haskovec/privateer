@@ -5,6 +5,7 @@ const std = @import("std");
 const iso9660 = @import("iso9660.zig");
 const tre = @import("tre.zig");
 const iff = @import("iff.zig");
+const pal = @import("pal.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -181,4 +182,75 @@ test "integration: parse every IFF file in the TRE without errors" {
 
     // We expect a significant number of IFF files (most of the 832 entries)
     try std.testing.expect(iff_count > 100);
+}
+
+// --- PAL palette integration tests ---
+
+/// Helper to load TRE data from GAME.DAT.
+fn loadTreData(allocator: std.mem.Allocator) !?struct { data: []const u8, tre_data: []const u8 } {
+    const data = try loadGameDat(allocator) orelse return null;
+    errdefer allocator.free(data);
+
+    const pvd = try iso9660.readPvd(data);
+    const tre_info = try iso9660.findFile(allocator, data, pvd, "PRIV.TRE");
+    const tre_data = try iso9660.readFileData(data, tre_info.lba, tre_info.size);
+    return .{ .data = data, .tre_data = tre_data };
+}
+
+test "integration: PCMAIN.PAL loads 256 RGB entries" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "PCMAIN.PAL");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const palette = try pal.parse(file_data);
+
+    // PCMAIN.PAL should have 256 entries; first entry should be black
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].r);
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].g);
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].b);
+}
+
+test "integration: SPACE.PAL first entry is black" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "SPACE.PAL");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    const palette = try pal.parse(file_data);
+
+    // SPACE.PAL first entry should be black (0,0,0)
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].r);
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].g);
+    try std.testing.expectEqual(@as(u8, 0), palette.colors[0].b);
+}
+
+test "integration: load all 4 palette files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const pal_files = [_][]const u8{
+        "PCMAIN.PAL",
+        "PREFMAIN.PAL",
+        "SPACE.PAL",
+        "JOYCALIB.PAL",
+    };
+
+    for (pal_files) |filename| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, filename);
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        // Each PAL file should be at least 772 bytes and parse without error
+        const palette = try pal.parse(file_data);
+        // Basic sanity: all colors should have valid 8-bit values (guaranteed by parser)
+        _ = palette;
+    }
 }

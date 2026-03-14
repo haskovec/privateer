@@ -197,9 +197,42 @@ def gen_iff_chunks():
     write("test_iff_cat.bin", cat)
 
 
+def gen_pal_file():
+    """Generate a test PAL file (4-byte header + 768 bytes of 6-bit RGB data).
+
+    Layout:
+        Entry 0: black (0, 0, 0)
+        Entry 1: bright red (63, 0, 0)
+        Entry 2: bright green (0, 63, 0)
+        Entry 3: bright blue (0, 0, 63)
+        Entry 4: medium gray (32, 32, 32)
+        Entries 5-254: black (0, 0, 0)
+        Entry 255: white (63, 63, 63)
+    """
+    data = bytearray()
+    # 4-byte header/flags
+    data += b'\x00\x01\x00\x00'
+
+    # 256 RGB entries (3 bytes each, VGA 6-bit values 0-63)
+    colors = [(0, 0, 0)] * 256
+    colors[0] = (0, 0, 0)       # black
+    colors[1] = (63, 0, 0)      # bright red
+    colors[2] = (0, 63, 0)      # bright green
+    colors[3] = (0, 0, 63)      # bright blue
+    colors[4] = (32, 32, 32)    # medium gray
+    colors[255] = (63, 63, 63)  # white
+
+    for r, g, b in colors:
+        data += bytes([r, g, b])
+
+    assert len(data) == 772, f"PAL file should be 772 bytes, got {len(data)}"
+    write("test_pal.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
     gen_tre_archive()
     gen_iff_chunks()
+    gen_pal_file()
     print("Done.")
