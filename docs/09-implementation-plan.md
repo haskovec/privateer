@@ -205,7 +205,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test drawing a single pixel at (160,100) with color index 15
   - GREEN: Implement pixel plotting
 
-- [ ] **3.3 Sprite upscaling pipeline**
+- [x] **3.3 Sprite upscaling pipeline**
   - Implement xBRZ or HQ4x upscaling algorithm
   - 320x200 -> 1280x800 (4x) as base upscale
   - RED: Test upscaling a 4x4 test sprite produces 16x16 output
