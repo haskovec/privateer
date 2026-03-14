@@ -400,7 +400,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test ship destruction at zero armor
   - GREEN: Implement destruction trigger
 
-- [ ] **7.4 AI flight behavior**
+- [x] **7.4 AI flight behavior**
   - Parse AIDS/*.IFF maneuver data
   - Implement AI state machine: patrol, attack, flee, escort
   - RED: Test hostile AI turns toward player
