@@ -242,10 +242,11 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 4: Scene System & Landing Screens
 *Base navigation is the core game loop outside of combat.*
 
-- [ ] **4.1 Scene data loader**
-  - Parse FORM:SCEN IFF structures (TABL, BACK, PALT, FORE, SHAP, RECT, REGN, etc.)
-  - RED: Test loading a landing scene IFF produces background + region list
-  - GREEN: Implement scene parser
+- [x] **4.1 Scene data loader**
+  - Parse GAMEFLOW.IFF (FORM:GAME > FORM:MISS > FORM:SCEN > FORM:SPRT)
+  - RED: Test loading gameflow IFF produces rooms with scenes and sprite hotspots
+  - GREEN: Implement scene parser (GameFlow, Room, Scene, SceneSprite types)
+  - Integration test: Parse real GAMEFLOW.IFF, verify rooms have scenes with sprites
 
 - [ ] **4.2 Scene renderer**
   - Render background, foreground overlay, sprites, clickable regions

@@ -897,6 +897,83 @@ def gen_font_file():
     write("test_font.bin", bytes(data))
 
 
+def make_iff_form(form_type, children_bytes):
+    """Build an IFF FORM container with correct size calculation."""
+    body = form_type + children_bytes
+    return b"FORM" + struct.pack('>I', len(body)) + body
+
+
+def gen_gameflow_file():
+    """Generate test GAMEFLOW fixture (FORM:GAME with FORM:MISS rooms).
+
+    GAMEFLOW.IFF structure:
+        FORM:GAME
+          FORM:MISS  (per room type)
+            INFO (1 byte: room type ID)
+            TUNE (1 byte: music track)
+            EFCT (2 bytes: sound effects)
+            FORM:SCEN  (per scene in room)
+              INFO (1 byte: scene ID)
+              FORM:SPRT  (per interactive sprite)
+                INFO (1 byte: sprite ID)
+                EFCT (N bytes: effect data)
+                [REQU] (optional: requirements)
+
+    Fixture: test_gameflow.bin - 2 rooms, 3 scenes, 5 sprites
+        Room 0 (type=0x01): 2 scenes
+          Scene 0: 2 sprites (IDs 1, 2)
+          Scene 1: 1 sprite (ID 3)
+        Room 1 (type=0x02): 1 scene
+          Scene 0: 2 sprites (ID 4, ID 5 with requirements)
+    """
+    # Build from inside out
+
+    # --- Room 0, Scene 0: 2 sprites ---
+    sprt0_0 = make_iff_form(b"SPRT",
+               make_iff_chunk(b"INFO", bytes([0x01]))
+               + make_iff_chunk(b"EFCT", bytes([0x10, 0x20])))
+    sprt0_1 = make_iff_form(b"SPRT",
+               make_iff_chunk(b"INFO", bytes([0x02]))
+               + make_iff_chunk(b"EFCT", bytes([0x30, 0x40])))
+    scen0_0 = make_iff_form(b"SCEN",
+               make_iff_chunk(b"INFO", bytes([0x00])) + sprt0_0 + sprt0_1)
+
+    # --- Room 0, Scene 1: 1 sprite ---
+    sprt1_0 = make_iff_form(b"SPRT",
+               make_iff_chunk(b"INFO", bytes([0x03]))
+               + make_iff_chunk(b"EFCT", bytes([0x50])))
+    scen0_1 = make_iff_form(b"SCEN",
+               make_iff_chunk(b"INFO", bytes([0x01])) + sprt1_0)
+
+    miss0 = make_iff_form(b"MISS",
+              make_iff_chunk(b"INFO", bytes([0x01]))
+              + make_iff_chunk(b"TUNE", bytes([0x03]))
+              + make_iff_chunk(b"EFCT", bytes([0x05, 0x0A]))
+              + scen0_0 + scen0_1)
+
+    # --- Room 1, Scene 0: 2 sprites (one with requirements) ---
+    sprt2_0 = make_iff_form(b"SPRT",
+               make_iff_chunk(b"INFO", bytes([0x04]))
+               + make_iff_chunk(b"EFCT", bytes([0x60, 0x70])))
+    sprt2_1 = make_iff_form(b"SPRT",
+               make_iff_chunk(b"INFO", bytes([0x05]))
+               + make_iff_chunk(b"EFCT", bytes([0x80, 0x90]))
+               + make_iff_chunk(b"REQU", bytes([0x01, 0x02, 0x03, 0x04])))
+    scen1_0 = make_iff_form(b"SCEN",
+               make_iff_chunk(b"INFO", bytes([0x00])) + sprt2_0 + sprt2_1)
+
+    miss1 = make_iff_form(b"MISS",
+              make_iff_chunk(b"INFO", bytes([0x02]))
+              + make_iff_chunk(b"TUNE", bytes([0x07]))
+              + make_iff_chunk(b"EFCT", bytes([0x0B, 0x0C]))
+              + scen1_0)
+
+    # --- Root FORM:GAME ---
+    root = make_iff_form(b"GAME", miss0 + miss1)
+
+    write("test_gameflow.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -912,4 +989,5 @@ if __name__ == "__main__":
     gen_vpk_file()
     gen_xmidi_file()
     gen_font_file()
+    gen_gameflow_file()
     print("Done.")

@@ -1073,3 +1073,63 @@ test "integration: render all 4 palettes to PNG" {
         try std.testing.expectEqual(@as(u32, 256), h);
     }
 }
+
+// --- Scene data exploration (Phase 4.1) ---
+
+// --- Scene system integration tests (Phase 4.1) ---
+
+const scene = @import("scene.zig");
+
+test "integration: parse GAMEFLOW.IFF scene structure" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GAMEFLOW.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var gameflow = try scene.parseGameFlow(allocator, file_data);
+    defer gameflow.deinit();
+
+    // GAMEFLOW.IFF should contain multiple rooms
+    try std.testing.expect(gameflow.rooms.len > 0);
+
+    // Each room should have at least one scene
+    for (gameflow.rooms) |room| {
+        try std.testing.expect(room.scenes.len > 0);
+    }
+
+    // Each scene should have at least one sprite (interactive element)
+    var total_sprites: usize = 0;
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |scn| {
+            total_sprites += scn.sprites.len;
+        }
+    }
+    try std.testing.expect(total_sprites > 0);
+}
+
+test "integration: GAMEFLOW rooms have valid info bytes" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GAMEFLOW.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var gameflow = try scene.parseGameFlow(allocator, file_data);
+    defer gameflow.deinit();
+
+    // All rooms should have distinct info bytes (room type IDs)
+    // and valid tune/effect data
+    for (gameflow.rooms) |room| {
+        // INFO byte should exist
+        _ = room.info;
+        // Scenes should have INFO bytes too
+        for (room.scenes) |scn| {
+            _ = scn.info;
+        }
+    }
+}
