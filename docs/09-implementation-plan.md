@@ -161,7 +161,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 2: Asset Pipeline & Verification Tool
 *Build a CLI tool that proves we can read every asset. Catches format bugs early.*
 
-- [ ] **2.1 Asset extraction CLI**
+- [x] **2.1 Asset extraction CLI**
   - Command: `privateer-tools extract --data-dir <path> --output <dir>`
   - Extracts all 832 files from TRE to a directory tree
   - RED: Test extraction produces correct file count and sizes

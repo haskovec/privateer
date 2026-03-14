@@ -12,6 +12,7 @@ const pak = @import("pak.zig");
 const voc = @import("voc.zig");
 const vpk = @import("vpk.zig");
 const music = @import("music.zig");
+const extract = @import("extract.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -806,4 +807,72 @@ test "integration: load all 10 music files" {
     try std.testing.expectEqual(@as(usize, 10), parsed_count);
     // Log the format breakdown (at least one format should be represented)
     try std.testing.expect(xmidi_count + midi_count + raw_count == 10);
+}
+
+// --- Asset extraction integration tests ---
+
+test "integration: extractAll produces correct file count and sizes" {
+    const allocator = std.testing.allocator;
+    const data = try loadGameDat(allocator) orelse return;
+    defer allocator.free(data);
+
+    // Create a temp directory for extraction
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+
+    const result = try extract.extractAll(allocator, data, tmp_path);
+
+    // All 832 files should be extracted with 0 failures
+    try std.testing.expectEqual(@as(u32, 832), result.files_extracted);
+    try std.testing.expectEqual(@as(u32, 0), result.files_failed);
+    try std.testing.expect(result.bytes_written > 0);
+}
+
+test "integration: extracted files match TRE entry sizes" {
+    const allocator = std.testing.allocator;
+    const data = try loadGameDat(allocator) orelse return;
+    defer allocator.free(data);
+
+    const pvd = try iso9660.readPvd(data);
+    const tre_info = try iso9660.findFile(allocator, data, pvd, "PRIV.TRE");
+    const tre_data = try iso9660.readFileData(data, tre_info.lba, tre_info.size);
+
+    // Create a temp directory for extraction
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+
+    _ = try extract.extractAll(allocator, data, tmp_path);
+
+    // Spot-check a few files: verify extracted sizes match TRE entry sizes
+    const entries = try tre.readAllEntries(allocator, tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    // Check first 10 files
+    var checked: usize = 0;
+    for (entries[0..@min(entries.len, 10)]) |entry| {
+        const raw_path = extract.normalizeTrePath(entry.path) orelse continue;
+        const clean_path = try extract.toForwardSlashes(allocator, raw_path);
+        defer allocator.free(clean_path);
+
+        const f = tmp_dir.dir.openFile(clean_path, .{}) catch continue;
+        defer f.close();
+
+        const stat = try f.stat();
+        try std.testing.expectEqual(@as(u64, entry.size), stat.size);
+        checked += 1;
+    }
+
+    try std.testing.expect(checked > 0);
 }

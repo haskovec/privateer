@@ -16,6 +16,7 @@ pub const pak = @import("pak.zig");
 pub const voc = @import("voc.zig");
 pub const vpk = @import("vpk.zig");
 pub const music = @import("music.zig");
+pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 
 test "engine module loads" {
