@@ -6,6 +6,7 @@ const iso9660 = @import("iso9660.zig");
 const tre = @import("tre.zig");
 const iff = @import("iff.zig");
 const pal = @import("pal.zig");
+const sprite = @import("sprite.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -253,4 +254,63 @@ test "integration: load all 4 palette files" {
         // Basic sanity: all colors should have valid 8-bit values (guaranteed by parser)
         _ = palette;
     }
+}
+
+// --- Sprite RLE integration tests ---
+
+/// Recursively find SHAP chunks in an IFF tree and attempt to decode them as sprites.
+/// Returns the number of successfully decoded sprites.
+fn countDecodableShapChunks(allocator: std.mem.Allocator, chunk: iff.Chunk) usize {
+    var count: usize = 0;
+
+    if (std.mem.eql(u8, &chunk.tag, "SHAP") and !chunk.isContainer()) {
+        if (chunk.data.len >= sprite.HEADER_SIZE) {
+            var s = sprite.decode(allocator, chunk.data) catch return 0;
+            defer s.deinit();
+            if (s.width > 0 and s.height > 0 and
+                s.pixels.len == @as(usize, s.width) * @as(usize, s.height))
+            {
+                return 1;
+            }
+        }
+    }
+
+    for (chunk.children) |child| {
+        count += countDecodableShapChunks(allocator, child);
+    }
+    return count;
+}
+
+test "integration: decode sprite from SHAP chunk in APPEARNC IFF" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    // Find the first APPEARNC IFF file that contains decodable SHAP chunks
+    var decoded_count: usize = 0;
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".IFF")) continue;
+        if (std.mem.indexOf(u8, e.path, "APPEARNC") == null) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < 8) continue;
+
+        var chunk = iff.parseFile(allocator, file_data) catch continue;
+        defer chunk.deinit();
+
+        decoded_count += countDecodableShapChunks(allocator, chunk);
+        if (decoded_count > 0) break;
+    }
+
+    // We expect to have decoded at least one sprite
+    try std.testing.expect(decoded_count > 0);
 }

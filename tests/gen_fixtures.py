@@ -229,10 +229,93 @@ def gen_pal_file():
     write("test_pal.bin", bytes(data))
 
 
+def gen_sprite_rle():
+    """Generate test RLE sprite fixtures.
+
+    Fixture 1: test_sprite_even.bin - 4x4 sprite using only even-key (raw) encoding.
+    Header: X2=2, X1=2, Y1=2, Y2=2 => width=4, height=4
+    All 4 rows use even-key encoding (raw pixel runs).
+    Expected pixels (row-major):
+        Row 0: [1, 2, 3, 4]
+        Row 1: [5, 6, 7, 8]
+        Row 2: [9, 10, 11, 12]
+        Row 3: [13, 14, 15, 16]
+
+    Fixture 2: test_sprite_odd.bin - 4x4 sprite using odd-key (sub-encoded) runs.
+    Header: X2=2, X1=2, Y1=2, Y2=2 => width=4, height=4
+    Row 0: odd key with repeat sub-byte (4 pixels of color 5)
+    Row 1: odd key with literal sub-byte (4 individual colors)
+    Row 2: odd key with mixed sub-bytes (2 literal + 2 repeat)
+    Row 3: odd key with repeat sub-byte (4 pixels of color 20)
+    Expected pixels:
+        Row 0: [5, 5, 5, 5]
+        Row 1: [10, 11, 12, 13]
+        Row 2: [30, 31, 40, 40]
+        Row 3: [20, 20, 20, 20]
+
+    Fixture 3: test_sprite_offset.bin - 6x2 sprite with non-zero X offsets (sparse).
+    Header: X2=3, X1=3, Y1=1, Y2=1 => width=6, height=2
+    Row 0: 3 pixels starting at x=1
+    Row 1: 2 pixels starting at x=2
+    Expected pixels:
+        Row 0: [0, 15, 16, 17, 0, 0]
+        Row 1: [0, 0, 20, 21, 0, 0]
+    """
+    # --- Fixture 1: Even-key only ---
+    data = bytearray()
+    # Header: X2=2, X1=2, Y1=2, Y2=2 (all i16 LE)
+    data += struct.pack('<hhhh', 2, 2, 2, 2)
+    # Row 0: even key=8 (8/2=4 pixels), x=0, y=0, raw pixels [1,2,3,4]
+    data += struct.pack('<HHH', 8, 0, 0) + bytes([1, 2, 3, 4])
+    # Row 1: even key=8, x=0, y=1, raw pixels [5,6,7,8]
+    data += struct.pack('<HHH', 8, 0, 1) + bytes([5, 6, 7, 8])
+    # Row 2: even key=8, x=0, y=2, raw pixels [9,10,11,12]
+    data += struct.pack('<HHH', 8, 0, 2) + bytes([9, 10, 11, 12])
+    # Row 3: even key=8, x=0, y=3, raw pixels [13,14,15,16]
+    data += struct.pack('<HHH', 8, 0, 3) + bytes([13, 14, 15, 16])
+    # Terminator
+    data += struct.pack('<H', 0)
+    write("test_sprite_even.bin", bytes(data))
+
+    # --- Fixture 2: Odd-key (sub-encoded) ---
+    data = bytearray()
+    # Header: X2=2, X1=2, Y1=2, Y2=2
+    data += struct.pack('<hhhh', 2, 2, 2, 2)
+    # Row 0: odd key=9 (9/2=4 pixels), x=0, y=0
+    #   Sub: odd byte 9 (9/2=4 repeat), color 5 => [5,5,5,5]
+    data += struct.pack('<HHH', 9, 0, 0) + bytes([9, 5])
+    # Row 1: odd key=9 (9/2=4 pixels), x=0, y=1
+    #   Sub: even byte 8 (8/2=4 literal), colors [10,11,12,13]
+    data += struct.pack('<HHH', 9, 0, 1) + bytes([8, 10, 11, 12, 13])
+    # Row 2: odd key=9 (9/2=4 pixels), x=0, y=2
+    #   Sub: even byte 4 (4/2=2 literal), colors [30,31]
+    #   Sub: odd byte 5 (5/2=2 repeat), color 40
+    data += struct.pack('<HHH', 9, 0, 2) + bytes([4, 30, 31, 5, 40])
+    # Row 3: odd key=9 (9/2=4 pixels), x=0, y=3
+    #   Sub: odd byte 9 (9/2=4 repeat), color 20 => [20,20,20,20]
+    data += struct.pack('<HHH', 9, 0, 3) + bytes([9, 20])
+    # Terminator
+    data += struct.pack('<H', 0)
+    write("test_sprite_odd.bin", bytes(data))
+
+    # --- Fixture 3: Sparse with X offsets ---
+    data = bytearray()
+    # Header: X2=3, X1=3, Y1=1, Y2=1 => width=6, height=2
+    data += struct.pack('<hhhh', 3, 3, 1, 1)
+    # Row 0: even key=6 (6/2=3 pixels), x=1, y=0, raw [15,16,17]
+    data += struct.pack('<HHH', 6, 1, 0) + bytes([15, 16, 17])
+    # Row 1: even key=4 (4/2=2 pixels), x=2, y=1, raw [20,21]
+    data += struct.pack('<HHH', 4, 2, 1) + bytes([20, 21])
+    # Terminator
+    data += struct.pack('<H', 0)
+    write("test_sprite_offset.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
     gen_tre_archive()
     gen_iff_chunks()
     gen_pal_file()
+    gen_sprite_rle()
     print("Done.")

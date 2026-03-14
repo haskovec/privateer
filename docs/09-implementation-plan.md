@@ -106,7 +106,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Verify with real palette data
   - Integration test: Load all 4 palette files
 
-- [ ] **1.5 RLE sprite decoder**
+- [x] **1.5 RLE sprite decoder**
   - RED: Test parsing sprite header (8 bytes: X2, X1, Y1, Y2 extents)
   - GREEN: Implement sprite header parser
   - RED: Test even-key RLE decoding (raw pixel runs)
