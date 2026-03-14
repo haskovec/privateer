@@ -8,5 +8,10 @@
         "build.zig.zon",
         "src/",
     },
-    .dependencies = .{},
+    .dependencies = .{
+        .sdl = .{
+            .url = "https://github.com/allyourcodebase/SDL3/archive/refs/heads/main.tar.gz",
+            .hash = "sdl-0.0.0-i4QD0WN-qQB1RKdRC9-6iZyTco2jIIr3y2DFrAz-D9CH",
+        },
+    },
 }

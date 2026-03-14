@@ -4,6 +4,7 @@
 const std = @import("std");
 
 pub const testing_helpers = @import("testing.zig");
+pub const sdl = @import("sdl.zig");
 
 test "engine module loads" {
     try std.testing.expect(true);

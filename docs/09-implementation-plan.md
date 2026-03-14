@@ -41,7 +41,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Create the main module
   - Configure debug/release build modes
 
-- [ ] **0.2 SDL3 integration**
+- [x] **0.2 SDL3 integration**
   - Add SDL3 as a dependency (Zig package or system lib)
   - RED: Test that SDL3 initializes and shuts down without error
   - GREEN: Write SDL3 init/shutdown wrapper
