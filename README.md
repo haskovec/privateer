@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0, Phase 1, and Phase 2 complete. Phase 3 (Core Rendering Engine) in progress: window creation, game loop, palette-based software renderer, and sprite upscaling pipeline done. See the
+Phase 0, Phase 1, and Phase 2 complete. Phase 3 (Core Rendering Engine) in progress: window creation, game loop, palette-based software renderer, sprite upscaling pipeline, and sprite blitting with scaling done. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout

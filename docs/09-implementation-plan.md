@@ -214,7 +214,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Tune upscaling algorithm parameters
   - Support configurable scale factor (2x, 3x, 4x)
 
-- [ ] **3.4 Sprite rendering with scaling**
+- [x] **3.4 Sprite rendering with scaling**
   - Draw decoded RLE sprites at arbitrary positions and scales
   - Distance-based scaling for space objects
   - RED: Test sprite renders at correct position

@@ -10,6 +10,7 @@ const sdl = @import("sdl.zig");
 const c = sdl.raw;
 const pal = @import("pal.zig");
 const window_mod = @import("window.zig");
+const sprite_mod = @import("sprite.zig");
 
 /// Internal framebuffer dimensions (original game resolution).
 pub const WIDTH = window_mod.BASE_WIDTH; // 320
@@ -90,6 +91,72 @@ pub const Framebuffer = struct {
             self.rgba[i * 4 + 1] = color.g;
             self.rgba[i * 4 + 2] = color.b;
             self.rgba[i * 4 + 3] = 255;
+        }
+    }
+
+    /// Blit a decoded sprite onto the framebuffer at the given center position.
+    /// The position (center_x, center_y) is where the sprite's origin goes;
+    /// the sprite header extents determine the offset from that point.
+    /// Transparent pixels (index 0) are skipped. Out-of-bounds pixels are clipped.
+    pub fn blitSprite(self: *Framebuffer, spr: sprite_mod.Sprite, center_x: i32, center_y: i32) void {
+        self.blitSpriteScaled(spr, center_x, center_y, 1, 1);
+    }
+
+    /// Blit a decoded sprite with scaling (nearest-neighbor).
+    /// Scale is expressed as a fraction: scale_numer / scale_denom.
+    /// (1/1 = 100%, 1/2 = 50%, 2/1 = 200%)
+    /// Transparent pixels (index 0) are skipped. Out-of-bounds pixels are clipped.
+    pub fn blitSpriteScaled(
+        self: *Framebuffer,
+        spr: sprite_mod.Sprite,
+        center_x: i32,
+        center_y: i32,
+        scale_numer: u16,
+        scale_denom: u16,
+    ) void {
+        if (scale_numer == 0 or scale_denom == 0) return;
+
+        const src_w: i32 = @intCast(spr.width);
+        const src_h: i32 = @intCast(spr.height);
+        const numer: i32 = @intCast(scale_numer);
+        const denom: i32 = @intCast(scale_denom);
+
+        // Scaled destination dimensions
+        const dst_w = @divTrunc(src_w * numer, denom);
+        const dst_h = @divTrunc(src_h * numer, denom);
+        if (dst_w <= 0 or dst_h <= 0) return;
+
+        // Compute top-left using scaled center offsets from the sprite header
+        const scaled_x1 = @divTrunc(@as(i32, spr.header.x1) * numer, denom);
+        const scaled_y1 = @divTrunc(@as(i32, spr.header.y1) * numer, denom);
+        const top_x = center_x - scaled_x1;
+        const top_y = center_y - scaled_y1;
+
+        // Clip destination rect to framebuffer bounds
+        const start_dx: i32 = @max(0, -top_x);
+        const start_dy: i32 = @max(0, -top_y);
+        const end_dx: i32 = @min(dst_w, @as(i32, WIDTH) - top_x);
+        const end_dy: i32 = @min(dst_h, @as(i32, HEIGHT) - top_y);
+        if (start_dx >= end_dx or start_dy >= end_dy) return;
+
+        // Blit with nearest-neighbor sampling from source
+        var dy: i32 = start_dy;
+        while (dy < end_dy) : (dy += 1) {
+            const src_y: usize = @intCast(@divTrunc(dy * denom, numer));
+            const fb_y: usize = @intCast(top_y + dy);
+            if (src_y >= spr.height) continue;
+
+            var dx: i32 = start_dx;
+            while (dx < end_dx) : (dx += 1) {
+                const src_x: usize = @intCast(@divTrunc(dx * denom, numer));
+                if (src_x >= spr.width) continue;
+
+                const color = spr.pixels[src_y * @as(usize, spr.width) + src_x];
+                if (color == 0) continue; // transparent
+
+                const fb_x: usize = @intCast(top_x + dx);
+                self.pixels[fb_y * WIDTH + fb_x] = color;
+            }
         }
     }
 
@@ -280,4 +347,232 @@ test "present without texture does nothing" {
     var fb = Framebuffer.create();
     // No texture created — present should be a no-op, not crash
     fb.present(win.renderer);
+}
+
+// --- Sprite blitting tests (Phase 3.4) ---
+
+test "blitSprite renders sprite at correct position" {
+    var fb = Framebuffer.create();
+
+    // 4x4 sprite with center at (2,2) from each edge
+    var pixels = [_]u8{
+        0, 1, 1, 0,
+        1, 2, 2, 1,
+        1, 2, 2, 1,
+        0, 1, 1, 0,
+    };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 2, .x1 = 2, .y1 = 2, .y2 = 2 },
+        .width = 4,
+        .height = 4,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Blit at center (10, 10) → top-left at (10-2, 10-2) = (8, 8)
+    fb.blitSprite(spr, 10, 10);
+
+    // Center area should have color 2
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(10, 10));
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(9, 9));
+    // Edge pixels should have color 1
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(9, 8));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(10, 8));
+    // Transparent pixels (index 0) should NOT be written
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(8, 8));
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(11, 8));
+    // Pixels outside sprite should be untouched
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(7, 7));
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(12, 12));
+}
+
+test "blitSprite skips transparent pixels preserving background" {
+    var fb = Framebuffer.create();
+    // Fill background with color 42
+    fb.clear(42);
+
+    var pixels = [_]u8{ 0, 5, 0, 5 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 1, .x1 = 1, .y1 = 1, .y2 = 1 },
+        .width = 2,
+        .height = 2,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    fb.blitSprite(spr, 100, 100);
+
+    // Transparent pixels preserve background color
+    try std.testing.expectEqual(@as(u8, 42), fb.getPixel(99, 99));
+    try std.testing.expectEqual(@as(u8, 42), fb.getPixel(99, 100));
+    // Opaque pixels are written
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(100, 99));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(100, 100));
+}
+
+test "blitSprite clips at framebuffer edges" {
+    var fb = Framebuffer.create();
+
+    var pixels = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 2, .x1 = 1, .y1 = 1, .y2 = 2 },
+        .width = 3,
+        .height = 3,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Center at (0, 0) → top-left at (-1, -1), clips top-left corner
+    fb.blitSprite(spr, 0, 0);
+
+    // Only the bottom-right 2x2 of the sprite should be visible
+    // src(1,1)=5, src(2,1)=6, src(1,2)=8, src(2,2)=9
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 6), fb.getPixel(1, 0));
+    try std.testing.expectEqual(@as(u8, 8), fb.getPixel(0, 1));
+    try std.testing.expectEqual(@as(u8, 9), fb.getPixel(1, 1));
+}
+
+test "blitSprite fully off-screen is no-op" {
+    var fb = Framebuffer.create();
+
+    var pixels = [_]u8{ 1, 2, 3, 4 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 1, .x1 = 1, .y1 = 1, .y2 = 1 },
+        .width = 2,
+        .height = 2,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Way off-screen: should not modify any framebuffer pixels
+    fb.blitSprite(spr, -100, -100);
+    fb.blitSprite(spr, 500, 500);
+
+    for (fb.pixels) |p| {
+        try std.testing.expectEqual(@as(u8, 0), p);
+    }
+}
+
+test "blitSpriteScaled at 50% produces half-size output" {
+    var fb = Framebuffer.create();
+
+    // 4x4 sprite with 2x2 blocks of color
+    var pixels = [_]u8{
+        1, 1, 2, 2,
+        1, 1, 2, 2,
+        3, 3, 4, 4,
+        3, 3, 4, 4,
+    };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 2, .x1 = 2, .y1 = 2, .y2 = 2 },
+        .width = 4,
+        .height = 4,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Scale 1/2 = 50%. Scaled dims: 2x2.
+    // Scaled center offset: x1=1, y1=1.
+    // Top-left: (100-1, 100-1) = (99, 99)
+    fb.blitSpriteScaled(spr, 100, 100, 1, 2);
+
+    // Nearest-neighbor samples: (0,0)→src(0,0)=1, (1,0)→src(2,0)=2,
+    //                           (0,1)→src(0,2)=3, (1,1)→src(2,2)=4
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(99, 99));
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(100, 99));
+    try std.testing.expectEqual(@as(u8, 3), fb.getPixel(99, 100));
+    try std.testing.expectEqual(@as(u8, 4), fb.getPixel(100, 100));
+    // Surrounding pixels untouched
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(98, 99));
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(101, 99));
+}
+
+test "blitSpriteScaled at 200% produces double-size output" {
+    var fb = Framebuffer.create();
+
+    // 2x2 sprite
+    var pixels = [_]u8{ 1, 2, 3, 4 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 1, .x1 = 1, .y1 = 1, .y2 = 1 },
+        .width = 2,
+        .height = 2,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Scale 2/1 = 200%. Scaled dims: 4x4.
+    // Scaled center offset: x1=2, y1=2.
+    // Top-left: (100-2, 100-2) = (98, 98)
+    fb.blitSpriteScaled(spr, 100, 100, 2, 1);
+
+    // Each source pixel maps to 2x2 destination block
+    // src(0,0)=1 → dst(98,98), (99,98), (98,99), (99,99)
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(98, 98));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(99, 98));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(98, 99));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(99, 99));
+    // src(1,0)=2 → dst(100,98), (101,98), (100,99), (101,99)
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(100, 98));
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(101, 98));
+    // src(0,1)=3 → dst(98,100), (99,100)
+    try std.testing.expectEqual(@as(u8, 3), fb.getPixel(98, 100));
+    try std.testing.expectEqual(@as(u8, 3), fb.getPixel(99, 100));
+    // src(1,1)=4 → dst(100,100), (101,100), (100,101), (101,101)
+    try std.testing.expectEqual(@as(u8, 4), fb.getPixel(100, 100));
+    try std.testing.expectEqual(@as(u8, 4), fb.getPixel(101, 101));
+    // Outside the 4x4 area
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(97, 98));
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(102, 98));
+}
+
+test "blitSpriteScaled with zero scale is no-op" {
+    var fb = Framebuffer.create();
+
+    var pixels = [_]u8{ 1, 2, 3, 4 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 1, .x1 = 1, .y1 = 1, .y2 = 1 },
+        .width = 2,
+        .height = 2,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    fb.blitSpriteScaled(spr, 100, 100, 0, 1);
+    fb.blitSpriteScaled(spr, 100, 100, 1, 0);
+
+    for (fb.pixels) |p| {
+        try std.testing.expectEqual(@as(u8, 0), p);
+    }
+}
+
+test "blitSpriteScaled clips correctly at edges" {
+    var fb = Framebuffer.create();
+
+    var pixels = [_]u8{ 1, 2, 3, 4 };
+    const spr = sprite_mod.Sprite{
+        .header = .{ .x2 = 1, .x1 = 1, .y1 = 1, .y2 = 1 },
+        .width = 2,
+        .height = 2,
+        .pixels = &pixels,
+        .allocator = std.testing.allocator,
+    };
+
+    // Scale 2x, center at (319, 199) → most of the sprite is off-screen
+    // Scaled dims 4x4, top-left at (317, 197)
+    fb.blitSpriteScaled(spr, 319, 199, 2, 1);
+
+    // Top-left block of scaled sprite should be visible at (317,197)-(318,198)
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(317, 197));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(318, 197));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(317, 198));
+    try std.testing.expectEqual(@as(u8, 1), fb.getPixel(318, 198));
+    // Right column: src(1,0)=2 at (319,197), (319,198)
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(319, 197));
+    try std.testing.expectEqual(@as(u8, 2), fb.getPixel(319, 198));
+    // Bottom row visible: src(0,1)=3 at (317,199), (318,199)
+    try std.testing.expectEqual(@as(u8, 3), fb.getPixel(317, 199));
+    try std.testing.expectEqual(@as(u8, 3), fb.getPixel(318, 199));
+    // src(1,1)=4 at (319,199)
+    try std.testing.expectEqual(@as(u8, 4), fb.getPixel(319, 199));
 }
