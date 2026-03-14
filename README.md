@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 7 complete. Phase 8.1 (Commodity system) complete. See the
+Phase 0 through Phase 7 complete. Phase 8.1 (Commodity system) and 8.2 (Commodity exchange) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -70,7 +70,8 @@ privateer/
 │   │   └── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
 │   ├── economy/               # Economy & trading systems
-│   │   └── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
+│   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
+│   │   └── exchange.zig       # Commodity exchange (buy/sell transactions, credit validation, cargo space checks)
 │   │
 │   ├── flight/                # Real-time flight systems
 │   │   ├── flight_physics.zig # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)

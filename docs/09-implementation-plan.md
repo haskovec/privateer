@@ -443,7 +443,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test price calculation with base type modifier
   - GREEN: Implement price formula
 
-- [ ] **8.2 Commodity exchange UI**
+- [x] **8.2 Commodity exchange UI**
   - Buy/sell interface at bases
   - RED: Test buying commodity reduces credits and adds to cargo
   - GREEN: Implement buy transaction

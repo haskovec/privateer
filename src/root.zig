@@ -42,6 +42,7 @@ pub const nav_map = @import("game/nav_map.zig");
 
 // Economy & Trading
 pub const commodities = @import("economy/commodities.zig");
+pub const exchange = @import("economy/exchange.zig");
 
 // Flight systems
 pub const flight_physics = @import("flight/flight_physics.zig");
