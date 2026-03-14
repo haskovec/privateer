@@ -690,6 +690,101 @@ def gen_vpk_file():
     write("test_vpk_single.bin", bytes(data2))
 
 
+def make_iff_chunk(tag, data):
+    """Build an IFF leaf chunk with odd-byte padding."""
+    chunk = tag + struct.pack('>I', len(data)) + data
+    if len(data) % 2 == 1:
+        chunk += b'\x00'  # pad to even boundary
+    return chunk
+
+
+def gen_xmidi_file():
+    """Generate XMIDI (Extended MIDI) test fixtures.
+
+    XMIDI structure (IFF-wrapped):
+        FORM:XDIR
+          INFO  (u16 LE: sequence count)
+          CAT :XMID
+            FORM:XMID  (per sequence)
+              TIMB  (u16 LE: timbre count + count * {u8 patch, u8 bank})
+              EVNT  (raw XMIDI event bytes)
+
+    Fixture 1: test_xmidi.bin - Single-sequence XMIDI with 2 timbres
+    Fixture 2: test_xmidi_multi.bin - Two-sequence XMIDI
+    Fixture 3: test_xmidi_no_timb.bin - Single-sequence XMIDI without TIMB chunk
+    Fixture 4: test_midi.bin - Standard MIDI file (MThd + MTrk)
+    """
+    # --- Fixture 1: Single-sequence XMIDI ---
+    # EVNT data: minimal XMIDI events (end-of-track meta event)
+    evnt_data = bytes([0xFF, 0x2F, 0x00])
+    evnt_chunk = make_iff_chunk(b"EVNT", evnt_data)
+
+    # TIMB data: 2 timbres (patch, bank pairs)
+    timb_data = struct.pack('<H', 2) + bytes([0, 0, 10, 1])  # patch 0/bank 0, patch 10/bank 1
+    timb_chunk = make_iff_chunk(b"TIMB", timb_data)
+
+    # FORM:XMID
+    xmid_content = b"XMID" + timb_chunk + evnt_chunk
+    xmid_form = b"FORM" + struct.pack('>I', len(xmid_content)) + xmid_content
+
+    # CAT:XMID
+    cat_content = b"XMID" + xmid_form
+    cat_chunk = b"CAT " + struct.pack('>I', len(cat_content)) + cat_content
+
+    # INFO chunk (1 sequence, u16 LE)
+    info_data = struct.pack('<H', 1)
+    info_chunk = make_iff_chunk(b"INFO", info_data)
+
+    # FORM:XDIR (root)
+    xdir_content = b"XDIR" + info_chunk + cat_chunk
+    root = b"FORM" + struct.pack('>I', len(xdir_content)) + xdir_content
+
+    write("test_xmidi.bin", root)
+
+    # --- Fixture 2: Multi-sequence XMIDI ---
+    evnt2_data = bytes([0x90, 48, 80, 24, 0xFF, 0x2F, 0x00])
+    evnt2_chunk = make_iff_chunk(b"EVNT", evnt2_data)
+    timb2_data = struct.pack('<H', 1) + bytes([5, 0])
+    timb2_chunk = make_iff_chunk(b"TIMB", timb2_data)
+
+    xmid2_content = b"XMID" + timb2_chunk + evnt2_chunk
+    xmid2_form = b"FORM" + struct.pack('>I', len(xmid2_content)) + xmid2_content
+
+    # CAT:XMID with 2 sequences
+    cat2_content = b"XMID" + xmid_form + xmid2_form
+    cat2 = b"CAT " + struct.pack('>I', len(cat2_content)) + cat2_content
+
+    info2_data = struct.pack('<H', 2)
+    info2_chunk = make_iff_chunk(b"INFO", info2_data)
+
+    xdir2_content = b"XDIR" + info2_chunk + cat2
+    root2 = b"FORM" + struct.pack('>I', len(xdir2_content)) + xdir2_content
+
+    write("test_xmidi_multi.bin", root2)
+
+    # --- Fixture 3: XMIDI without TIMB ---
+    evnt3_chunk = make_iff_chunk(b"EVNT", bytes([0xFF, 0x2F, 0x00]))
+    xmid3_content = b"XMID" + evnt3_chunk
+    xmid3_form = b"FORM" + struct.pack('>I', len(xmid3_content)) + xmid3_content
+    cat3_content = b"XMID" + xmid3_form
+    cat3 = b"CAT " + struct.pack('>I', len(cat3_content)) + cat3_content
+    info3_chunk = make_iff_chunk(b"INFO", struct.pack('<H', 1))
+    xdir3_content = b"XDIR" + info3_chunk + cat3
+    root3 = b"FORM" + struct.pack('>I', len(xdir3_content)) + xdir3_content
+
+    write("test_xmidi_no_timb.bin", root3)
+
+    # --- Fixture 4: Standard MIDI file ---
+    # MThd: format=1, tracks=1, division=120 ticks/quarter-note
+    mthd_data = struct.pack('>HHH', 1, 1, 120)
+    mthd = b"MThd" + struct.pack('>I', len(mthd_data)) + mthd_data
+    # MTrk: delta=0 + end-of-track meta event
+    mtrk_events = bytes([0x00, 0xFF, 0x2F, 0x00])
+    mtrk = b"MTrk" + struct.pack('>I', len(mtrk_events)) + mtrk_events
+
+    write("test_midi.bin", mthd + mtrk)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -701,4 +796,5 @@ if __name__ == "__main__":
     gen_pak_file()
     gen_voc_file()
     gen_vpk_file()
+    gen_xmidi_file()
     print("Done.")

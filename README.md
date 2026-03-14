@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phases 0 and 1.1-1.9 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker, VOC audio loader, VPK/VPF voice pack decompressor). See the
+Phase 0 and Phase 1 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker, VOC audio loader, VPK/VPF voice pack decompressor, ADL/GEN/XMIDI music loaders). See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -41,6 +41,7 @@ privateer/
 │   ├── pak.zig                # PAK resource unpacker (two-level offset tables + resources)
 │   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
 │   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
+│   ├── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
 │   ├── sdl.zig                # SDL3 initialization wrapper
 │   ├── testing.zig            # Test helpers (fixture loader, binary assertions, BE readers)
 │   └── integration_tests.zig  # Integration tests against real game data

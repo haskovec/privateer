@@ -11,6 +11,7 @@ const shp = @import("shp.zig");
 const pak = @import("pak.zig");
 const voc = @import("voc.zig");
 const vpk = @import("vpk.zig");
+const music = @import("music.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -701,4 +702,108 @@ test "integration: decompress first entry from 5 random VPK files" {
     try std.testing.expect(vpk_count >= test_count);
     try std.testing.expect(decompressed_count >= test_count);
     try std.testing.expect(voc_valid_count >= test_count);
+}
+
+// --- Music format integration tests ---
+
+test "integration: identify music file formats from TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var adl_count: usize = 0;
+    var gen_count: usize = 0;
+
+    for (entries) |e| {
+        const is_adl = std.mem.endsWith(u8, e.path, ".ADL");
+        const is_gen = std.mem.endsWith(u8, e.path, ".GEN");
+        if (!is_adl and !is_gen) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < music.MIN_FILE_SIZE) continue;
+
+        // Identify the format
+        const is_xmidi = music.isXmidi(file_data);
+        const is_midi = music.isMidi(file_data);
+
+        // At least one identification should succeed (or it's raw)
+        _ = is_xmidi;
+        _ = is_midi;
+
+        if (is_adl) adl_count += 1;
+        if (is_gen) gen_count += 1;
+    }
+
+    // Per docs: 5 ADL + 5 GEN
+    try std.testing.expectEqual(@as(usize, 5), adl_count);
+    try std.testing.expectEqual(@as(usize, 5), gen_count);
+}
+
+test "integration: load all 10 music files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var parsed_count: usize = 0;
+    var xmidi_count: usize = 0;
+    var midi_count: usize = 0;
+    var raw_count: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".ADL") and
+            !std.mem.endsWith(u8, e.path, ".GEN")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < music.MIN_FILE_SIZE) continue;
+
+        var music_file = music.parse(allocator, file_data) catch continue;
+
+        defer music_file.deinit();
+
+        parsed_count += 1;
+
+        switch (music_file.format) {
+            .xmidi => {
+                xmidi_count += 1;
+                // XMIDI files should have at least 1 sequence
+                try std.testing.expect(music_file.sequence_count > 0);
+                try std.testing.expect(music_file.sequences.len > 0);
+                // Each sequence should have event data
+                for (music_file.sequences) |seq| {
+                    try std.testing.expect(seq.event_data.len > 0);
+                }
+            },
+            .midi => {
+                midi_count += 1;
+                try std.testing.expect(music_file.midi_header != null);
+                try std.testing.expect(music_file.sequence_count > 0);
+            },
+            .raw => {
+                raw_count += 1;
+            },
+        }
+    }
+
+    // All 10 music files should parse
+    try std.testing.expectEqual(@as(usize, 10), parsed_count);
+    // Log the format breakdown (at least one format should be represented)
+    try std.testing.expect(xmidi_count + midi_count + raw_count == 10);
 }

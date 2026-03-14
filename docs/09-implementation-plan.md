@@ -147,7 +147,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement LZW decompressor
   - Integration test: Decompress first entry from 5 random VPK files
 
-- [ ] **1.10 Music format loaders (ADL/GEN/XMIDI)**
+- [x] **1.10 Music format loaders (ADL/GEN/XMIDI)**
   - RED: Test parsing XMIDI XDIR/XMID/TIMB chunks from IFF
   - GREEN: Implement XMIDI chunk reader
   - RED: Test ADL file identification
