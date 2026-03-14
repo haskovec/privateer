@@ -3,45 +3,60 @@
 
 const std = @import("std");
 
+// Foundation
 pub const testing_helpers = @import("testing.zig");
 pub const sdl = @import("sdl.zig");
 pub const config = @import("config.zig");
-pub const iso9660 = @import("iso9660.zig");
-pub const tre = @import("tre.zig");
-pub const iff = @import("iff.zig");
-pub const pal = @import("pal.zig");
-pub const sprite = @import("sprite.zig");
-pub const shp = @import("shp.zig");
-pub const pak = @import("pak.zig");
-pub const voc = @import("voc.zig");
-pub const vpk = @import("vpk.zig");
-pub const music = @import("music.zig");
-pub const png = @import("png.zig");
-pub const render = @import("render.zig");
-pub const palette_viewer = @import("palette_viewer.zig");
-pub const validate = @import("validate.zig");
-pub const window = @import("window.zig");
-pub const framebuffer = @import("framebuffer.zig");
-pub const upscale = @import("upscale.zig");
-pub const viewport = @import("viewport.zig");
-pub const text = @import("text.zig");
-pub const scene = @import("scene.zig");
-pub const scene_renderer = @import("scene_renderer.zig");
-pub const click_region = @import("click_region.zig");
-pub const game_state = @import("game_state.zig");
-pub const midgame = @import("midgame.zig");
-pub const universe = @import("universe.zig");
-pub const bases = @import("bases.zig");
-pub const nav_graph = @import("nav_graph.zig");
-pub const nav_map = @import("nav_map.zig");
-pub const flight_physics = @import("flight_physics.zig");
-pub const autopilot = @import("autopilot.zig");
-pub const jump_drive = @import("jump_drive.zig");
-pub const cockpit = @import("cockpit.zig");
-pub const mfd = @import("mfd.zig");
-pub const radar = @import("radar.zig");
-pub const damage_display = @import("damage_display.zig");
-pub const extract = @import("extract.zig");
+
+// File format parsers
+pub const iso9660 = @import("formats/iso9660.zig");
+pub const tre = @import("formats/tre.zig");
+pub const iff = @import("formats/iff.zig");
+pub const pal = @import("formats/pal.zig");
+pub const sprite = @import("formats/sprite.zig");
+pub const shp = @import("formats/shp.zig");
+pub const pak = @import("formats/pak.zig");
+pub const voc = @import("formats/voc.zig");
+pub const vpk = @import("formats/vpk.zig");
+pub const music = @import("formats/music.zig");
+
+// Rendering pipeline
+pub const png = @import("render/png.zig");
+pub const render = @import("render/render.zig");
+pub const window = @import("render/window.zig");
+pub const framebuffer = @import("render/framebuffer.zig");
+pub const upscale = @import("render/upscale.zig");
+pub const viewport = @import("render/viewport.zig");
+pub const text = @import("render/text.zig");
+pub const scene_renderer = @import("render/scene_renderer.zig");
+
+// Game systems
+pub const scene = @import("game/scene.zig");
+pub const click_region = @import("game/click_region.zig");
+pub const game_state = @import("game/game_state.zig");
+pub const midgame = @import("game/midgame.zig");
+pub const universe = @import("game/universe.zig");
+pub const bases = @import("game/bases.zig");
+pub const nav_graph = @import("game/nav_graph.zig");
+pub const nav_map = @import("game/nav_map.zig");
+
+// Flight systems
+pub const flight_physics = @import("flight/flight_physics.zig");
+pub const autopilot = @import("flight/autopilot.zig");
+pub const jump_drive = @import("flight/jump_drive.zig");
+
+// Cockpit & HUD
+pub const cockpit = @import("cockpit/cockpit.zig");
+pub const mfd = @import("cockpit/mfd.zig");
+pub const radar = @import("cockpit/radar.zig");
+pub const damage_display = @import("cockpit/damage_display.zig");
+
+// CLI tools
+pub const extract = @import("cli/extract.zig");
+pub const validate = @import("cli/validate.zig");
+pub const palette_viewer = @import("cli/palette_viewer.zig");
+
+// Tests
 pub const integration_tests = @import("integration_tests.zig");
 
 test "engine module loads" {

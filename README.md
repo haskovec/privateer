@@ -33,45 +33,59 @@ privateer/
 │   ├── main.zig               # Game executable entry point
 │   ├── root.zig               # Engine library root (exports all submodules)
 │   ├── config.zig             # JSON configuration system (data paths, settings)
-│   ├── iso9660.zig            # ISO 9660 CD image parser (reads GAME.DAT)
-│   ├── tre.zig                # TRE archive reader (832-entry PRIV.TRE)
-│   ├── iff.zig                # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
-│   ├── sprite.zig             # RLE sprite decoder (Origin's proprietary run-length encoding)
-│   ├── shp.zig                # SHP shape/font file parser (offset table + RLE sprites)
-│   ├── pak.zig                # PAK resource unpacker (two-level offset tables + resources)
-│   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
-│   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
-│   ├── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
-│   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
-│   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
-│   ├── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
-│   ├── validate.zig           # Data validation pipeline (all parsers → error report)
-│   ├── window.zig             # Window creation, game loop, fullscreen toggle (SDL3)
-│   ├── framebuffer.zig        # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
-│   ├── upscale.zig            # Edge-aware pixel art upscaler (Scale2x/3x, 2x/3x/4x factors)
-│   ├── viewport.zig           # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
-│   ├── text.zig               # Text rendering engine (SHP font loading, string rendering)
-│   ├── scene.zig              # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
-│   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
-│   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
-│   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
-│   ├── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
-│   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
-│   ├── bases.zig              # Base registry loader (BASES.IFF: base names, types, indices)
-│   ├── nav_graph.zig          # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
-│   ├── nav_map.zig            # Nav map display (sector map renderer, hit-testing, autopilot selection)
-│   ├── flight_physics.zig     # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
-│   ├── autopilot.zig          # Autopilot system (nav point steering, arrival detection, hostile interruption)
-│   ├── jump_drive.zig         # Jump drive system (inter-system travel, adjacency validation, cooldown)
-│   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
-│   ├── mfd.zig                # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
-│   ├── radar.zig              # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
-│   ├── damage_display.zig    # Damage display (shield/armor status per facing, color-coded diagram renderer)
-│   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
-│   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper
 │   ├── testing.zig            # Test helpers (fixture loader, binary assertions, BE readers)
-│   └── integration_tests.zig  # Integration tests against real game data
+│   ├── integration_tests.zig  # Integration tests against real game data
+│   │
+│   ├── formats/               # Binary file format parsers (read original game data)
+│   │   ├── iso9660.zig        # ISO 9660 CD image parser (reads GAME.DAT)
+│   │   ├── tre.zig            # TRE archive reader (832-entry PRIV.TRE)
+│   │   ├── iff.zig            # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
+│   │   ├── sprite.zig         # RLE sprite decoder (Origin's proprietary run-length encoding)
+│   │   ├── shp.zig            # SHP shape/font file parser (offset table + RLE sprites)
+│   │   ├── pak.zig            # PAK resource unpacker (two-level offset tables + resources)
+│   │   ├── pal.zig            # PAL palette file parser (256-color VGA palettes)
+│   │   ├── voc.zig            # VOC audio loader (Creative Voice File, 8-bit PCM)
+│   │   ├── vpk.zig            # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
+│   │   └── music.zig          # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
+│   │
+│   ├── render/                # Rendering pipeline & display
+│   │   ├── framebuffer.zig    # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
+│   │   ├── window.zig         # Window creation, game loop, fullscreen toggle (SDL3)
+│   │   ├── upscale.zig        # Edge-aware pixel art upscaler (Scale2x/3x, 2x/3x/4x factors)
+│   │   ├── viewport.zig       # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
+│   │   ├── text.zig           # Text rendering engine (SHP font loading, string rendering)
+│   │   ├── render.zig         # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
+│   │   ├── scene_renderer.zig # Scene renderer (PAK sprite backgrounds, compositing pipeline)
+│   │   └── png.zig            # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
+│   │
+│   ├── game/                  # World data & game flow
+│   │   ├── universe.zig       # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
+│   │   ├── bases.zig          # Base registry loader (BASES.IFF: base names, types, indices)
+│   │   ├── nav_graph.zig      # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
+│   │   ├── nav_map.zig        # Nav map display (sector map renderer, hit-testing, autopilot selection)
+│   │   ├── scene.zig          # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
+│   │   ├── game_state.zig     # Game state machine (state transitions, action handling, scene tracking)
+│   │   ├── click_region.zig   # Click region system (EFCT action parser, hit-testing, scene transitions)
+│   │   └── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │
+│   ├── flight/                # Real-time flight systems
+│   │   ├── flight_physics.zig # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
+│   │   ├── autopilot.zig      # Autopilot system (nav point steering, arrival detection, hostile interruption)
+│   │   └── jump_drive.zig     # Jump drive system (inter-system travel, adjacency validation, cooldown)
+│   │
+│   ├── cockpit/               # Cockpit & HUD displays
+│   │   ├── cockpit.zig        # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
+│   │   ├── mfd.zig            # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
+│   │   ├── radar.zig          # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
+│   │   └── damage_display.zig # Damage display (shield/armor status per facing, color-coded diagram renderer)
+│   │
+│   └── cli/                   # Offline tools & asset pipelines
+│       ├── extract.zig        # Asset extraction pipeline (GAME.DAT → directory tree)
+│       ├── extract_cli.zig    # Asset extraction CLI entry point (privateer-extract)
+│       ├── validate.zig       # Data validation pipeline (all parsers → error report)
+│       └── palette_viewer.zig # Palette viewer (256-color grid → PNG swatch images)
+│
 ├── tests/
 │   ├── gen_fixtures.py        # Python script to generate binary test fixtures
 │   └── fixtures/              # Binary test data (ISO, TRE, IFF samples)

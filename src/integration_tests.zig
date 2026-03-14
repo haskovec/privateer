@@ -2,28 +2,28 @@
 //! These tests are skipped if the game data directory is not found.
 
 const std = @import("std");
-const iso9660 = @import("iso9660.zig");
-const tre = @import("tre.zig");
-const iff = @import("iff.zig");
-const pal = @import("pal.zig");
-const sprite = @import("sprite.zig");
-const shp = @import("shp.zig");
-const pak = @import("pak.zig");
-const voc = @import("voc.zig");
-const vpk = @import("vpk.zig");
-const music = @import("music.zig");
-const extract = @import("extract.zig");
-const render = @import("render.zig");
-const png = @import("png.zig");
-const validate = @import("validate.zig");
-const palette_viewer = @import("palette_viewer.zig");
-const midgame = @import("midgame.zig");
-const universe = @import("universe.zig");
-const bases = @import("bases.zig");
-const nav_graph = @import("nav_graph.zig");
-const cockpit = @import("cockpit.zig");
-const mfd = @import("mfd.zig");
-const damage_display = @import("damage_display.zig");
+const iso9660 = @import("formats/iso9660.zig");
+const tre = @import("formats/tre.zig");
+const iff = @import("formats/iff.zig");
+const pal = @import("formats/pal.zig");
+const sprite = @import("formats/sprite.zig");
+const shp = @import("formats/shp.zig");
+const pak = @import("formats/pak.zig");
+const voc = @import("formats/voc.zig");
+const vpk = @import("formats/vpk.zig");
+const music = @import("formats/music.zig");
+const extract = @import("cli/extract.zig");
+const render = @import("render/render.zig");
+const png = @import("render/png.zig");
+const validate = @import("cli/validate.zig");
+const palette_viewer = @import("cli/palette_viewer.zig");
+const midgame = @import("game/midgame.zig");
+const universe = @import("game/universe.zig");
+const bases = @import("game/bases.zig");
+const nav_graph = @import("game/nav_graph.zig");
+const cockpit = @import("cockpit/cockpit.zig");
+const mfd = @import("cockpit/mfd.zig");
+const damage_display = @import("cockpit/damage_display.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1085,9 +1085,9 @@ test "integration: render all 4 palettes to PNG" {
 
 // --- Scene system integration tests (Phase 4.1) ---
 
-const scene = @import("scene.zig");
-const scene_renderer = @import("scene_renderer.zig");
-const framebuffer_mod = @import("framebuffer.zig");
+const scene = @import("game/scene.zig");
+const scene_renderer = @import("render/scene_renderer.zig");
+const framebuffer_mod = @import("render/framebuffer.zig");
 
 test "integration: parse GAMEFLOW.IFF scene structure" {
     const allocator = std.testing.allocator;
@@ -1264,7 +1264,7 @@ test "integration: scene PAK resources with palettes decode correctly" {
 
 // --- Click region / interaction system integration tests (Phase 4.3) ---
 
-const click_region = @import("click_region.zig");
+const click_region = @import("game/click_region.zig");
 
 test "integration: parse GAMEFLOW.IFF sprite actions" {
     const allocator = std.testing.allocator;
