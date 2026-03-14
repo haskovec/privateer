@@ -27,6 +27,7 @@ pub const viewport = @import("viewport.zig");
 pub const text = @import("text.zig");
 pub const scene = @import("scene.zig");
 pub const scene_renderer = @import("scene_renderer.zig");
+pub const click_region = @import("click_region.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

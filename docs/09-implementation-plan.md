@@ -253,11 +253,11 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test rendering a scene produces non-black framebuffer
   - GREEN: Implement scene rendering pipeline
 
-- [ ] **4.3 Click region / interaction system**
-  - RECT/REGN chunks define clickable areas on scenes
+- [x] **4.3 Click region / interaction system**
+  - Sprite EFCT data defines actions (scene transitions, merchant, conversation, etc.)
   - RED: Test clicking coordinates inside a region returns correct region ID
   - GREEN: Implement hit-testing against region rects
-  - Connect regions to scene transitions (room to room)
+  - Parse EFCT action types and connect to scene transitions (room to room)
 
 - [ ] **4.4 Game state machine**
   - States: TITLE, SPACE_FLIGHT, LANDED, CONVERSATION, COMBAT, DEAD, LOADING

@@ -1254,3 +1254,81 @@ test "integration: scene PAK resources with palettes decode correctly" {
     try std.testing.expect(spr.height > 50);
     try std.testing.expect(spr.pixels.len > 0);
 }
+
+// --- Click region / interaction system integration tests (Phase 4.3) ---
+
+const click_region = @import("click_region.zig");
+
+test "integration: parse GAMEFLOW.IFF sprite actions" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GAMEFLOW.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var gameflow = try scene.parseGameFlow(allocator, file_data);
+    defer gameflow.deinit();
+
+    // Every sprite should have parseable EFCT data
+    var scene_transitions: usize = 0;
+    var no_actions: usize = 0;
+    var special_actions: usize = 0;
+    var scripted_actions: usize = 0;
+
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |scn| {
+            for (scn.sprites) |spr| {
+                const action = click_region.parseAction(spr.effect);
+                switch (action) {
+                    .none => no_actions += 1,
+                    .scene_transition => scene_transitions += 1,
+                    .scripted => scripted_actions += 1,
+                    else => special_actions += 1,
+                }
+            }
+        }
+    }
+
+    // There should be many scene transitions (most sprites are navigation)
+    try std.testing.expect(scene_transitions > 50);
+    // Some decorative sprites have no action
+    try std.testing.expect(no_actions > 0);
+    // Some special actions (merchant, conversation, etc.)
+    try std.testing.expect(special_actions > 0);
+}
+
+test "integration: scene transition targets are valid scene IDs" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "GAMEFLOW.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var gameflow = try scene.parseGameFlow(allocator, file_data);
+    defer gameflow.deinit();
+
+    // Build set of all valid scene IDs
+    var valid_scenes = std.AutoHashMap(u8, void).init(allocator);
+    defer valid_scenes.deinit();
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |scn| {
+            try valid_scenes.put(scn.info, {});
+        }
+    }
+
+    // Verify all scene transitions point to valid scenes
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |scn| {
+            for (scn.sprites) |spr| {
+                const action = click_region.parseAction(spr.effect);
+                if (action == .scene_transition) {
+                    try std.testing.expect(valid_scenes.contains(action.scene_transition));
+                }
+            }
+        }
+    }
+}
