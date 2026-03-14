@@ -62,13 +62,15 @@ privateer/
 │   ├── game/                  # World data & game flow
 │   │   ├── universe.zig       # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
 │   │   ├── bases.zig          # Base registry loader (BASES.IFF: base names, types, indices)
-│   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
 │   │   ├── nav_graph.zig      # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
 │   │   ├── nav_map.zig        # Nav map display (sector map renderer, hit-testing, autopilot selection)
 │   │   ├── scene.zig          # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   │   ├── game_state.zig     # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── click_region.zig   # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   └── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │
+│   ├── economy/               # Economy & trading systems
+│   │   └── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
 │   │
 │   ├── flight/                # Real-time flight systems
 │   │   ├── flight_physics.zig # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)

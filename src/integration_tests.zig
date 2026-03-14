@@ -25,7 +25,7 @@ const cockpit = @import("cockpit/cockpit.zig");
 const mfd = @import("cockpit/mfd.zig");
 const damage_display = @import("cockpit/damage_display.zig");
 const weapons = @import("combat/weapons.zig");
-const commodities = @import("game/commodities.zig");
+const commodities = @import("economy/commodities.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
