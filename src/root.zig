@@ -21,6 +21,7 @@ pub const render = @import("render.zig");
 pub const palette_viewer = @import("palette_viewer.zig");
 pub const validate = @import("validate.zig");
 pub const window = @import("window.zig");
+pub const framebuffer = @import("framebuffer.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

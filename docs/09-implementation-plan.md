@@ -197,7 +197,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement window + event loop
   - Support fullscreen toggle (Alt+Enter)
 
-- [ ] **3.2 Palette-based software renderer**
+- [x] **3.2 Palette-based software renderer**
   - 320x200 internal framebuffer (8-bit indexed color)
   - Palette lookup to produce 32-bit RGBA for display
   - RED: Test filling framebuffer with palette index 0 produces black screen
