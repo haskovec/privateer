@@ -451,6 +451,87 @@ def gen_pak_file():
     write("test_pak_l2.bin", bytes(data))
 
 
+def gen_voc_file():
+    """Generate test VOC (Creative Voice File) fixtures.
+
+    VOC format:
+        Offset 0x0000: 19 bytes - "Creative Voice File" + 0x1A
+        Offset 0x0014: u16 LE  - data offset (from start of file to first data block)
+        Offset 0x0016: u16 LE  - version number (e.g. 0x010A = 1.10)
+        Offset 0x0018: u16 LE  - validity check (~version + 0x1234)
+        Data blocks follow:
+            Type 0x00: Terminator
+            Type 0x01: Sound data
+                3 bytes LE: block size (not counting type+size bytes)
+                1 byte: frequency divisor (sr = 1000000 / (256 - divisor))
+                1 byte: codec (0 = 8-bit unsigned PCM)
+                N bytes: PCM audio data
+            Type 0x02: Sound data continuation
+                3 bytes LE: block size
+                N bytes: PCM audio data
+
+    Fixture 1: test_voc.bin - Simple VOC with one sound data block
+        11025 Hz, 8-bit unsigned PCM, 16 samples of a simple waveform
+
+    Fixture 2: test_voc_multi.bin - VOC with two sound data blocks
+        Block 1: 8 samples of PCM data
+        Block 2 (continuation): 8 more samples
+    """
+    # --- Fixture 1: Simple single-block VOC ---
+    data = bytearray()
+    # Header
+    data += b"Creative Voice File\x1a"       # 20 bytes: signature
+    data += struct.pack('<H', 26)             # data offset = 26 (standard)
+    data += struct.pack('<H', 0x010A)         # version 1.10
+    data += struct.pack('<H', (~0x010A + 0x1234) & 0xFFFF)  # validity check
+
+    # Sound data block (type 1)
+    pcm_samples = bytes([128, 160, 192, 224, 255, 224, 192, 160,
+                         128, 96, 64, 32, 0, 32, 64, 96])   # 16 samples
+    block_size = 2 + len(pcm_samples)  # freq_divisor(1) + codec(1) + samples
+    data += bytes([0x01])                                    # block type
+    data += struct.pack('<I', block_size)[:3]                # 3-byte LE size
+    # Frequency divisor: sr = 1000000 / (256 - divisor) => divisor = 256 - 1000000/11025 ≈ 165
+    freq_divisor = 256 - (1000000 // 11025)                  # = 165
+    data += bytes([freq_divisor])                            # frequency divisor
+    data += bytes([0x00])                                    # codec = 8-bit unsigned PCM
+    data += pcm_samples
+
+    # Terminator
+    data += bytes([0x00])
+
+    write("test_voc.bin", bytes(data))
+
+    # --- Fixture 2: Multi-block VOC (type 1 + type 2 continuation) ---
+    data = bytearray()
+    # Header
+    data += b"Creative Voice File\x1a"
+    data += struct.pack('<H', 26)
+    data += struct.pack('<H', 0x010A)
+    data += struct.pack('<H', (~0x010A + 0x1234) & 0xFFFF)
+
+    # Block 1: Sound data (type 1) with 8 samples
+    pcm1 = bytes([128, 160, 192, 224, 255, 224, 192, 160])
+    block1_size = 2 + len(pcm1)
+    data += bytes([0x01])
+    data += struct.pack('<I', block1_size)[:3]
+    data += bytes([freq_divisor])
+    data += bytes([0x00])
+    data += pcm1
+
+    # Block 2: Sound continuation (type 2) with 8 more samples
+    pcm2 = bytes([128, 96, 64, 32, 0, 32, 64, 96])
+    block2_size = len(pcm2)
+    data += bytes([0x02])
+    data += struct.pack('<I', block2_size)[:3]
+    data += pcm2
+
+    # Terminator
+    data += bytes([0x00])
+
+    write("test_voc_multi.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -460,4 +541,5 @@ if __name__ == "__main__":
     gen_sprite_rle()
     gen_shp_file()
     gen_pak_file()
+    gen_voc_file()
     print("Done.")

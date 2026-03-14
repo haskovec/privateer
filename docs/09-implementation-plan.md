@@ -133,7 +133,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement full PAK extraction
   - Integration test: Unpack all 32 PAK files
 
-- [ ] **1.8 VOC audio loader**
+- [x] **1.8 VOC audio loader**
   - RED: Test parsing VOC header ("Creative Voice File" signature)
   - GREEN: Implement VOC header parser
   - RED: Test extracting PCM data block (type 1, 8-bit unsigned, 11025 Hz)

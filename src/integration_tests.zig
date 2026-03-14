@@ -9,6 +9,7 @@ const pal = @import("pal.zig");
 const sprite = @import("sprite.zig");
 const shp = @import("shp.zig");
 const pak = @import("pak.zig");
+const voc = @import("voc.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -487,4 +488,84 @@ test "integration: unpack all PAK files" {
     // Per docs: 32 PAK files
     try std.testing.expect(pak_count > 0);
     try std.testing.expect(total_resources > 0);
+}
+
+// --- VOC audio integration tests ---
+
+test "integration: parse a VOC file from TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    // Find the first VOC file and parse it
+    var found = false;
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".VOC")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < voc.MIN_FILE_SIZE) continue;
+
+        var voc_file = voc.parse(allocator, file_data) catch continue;
+        defer voc_file.deinit();
+
+        // VOC files should be 8-bit unsigned PCM at ~11025 Hz
+        try std.testing.expectEqual(voc.CODEC_PCM_8BIT, voc_file.codec);
+        try std.testing.expect(voc_file.sample_rate > 10000);
+        try std.testing.expect(voc_file.sample_rate < 12000);
+        try std.testing.expect(voc_file.samples.len > 0);
+
+        found = true;
+        break;
+    }
+
+    try std.testing.expect(found);
+}
+
+test "integration: load all VOC files, verify sample rates" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var voc_count: usize = 0;
+    var total_samples: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".VOC")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < voc.MIN_FILE_SIZE) continue;
+
+        var voc_file = voc.parse(allocator, file_data) catch continue;
+        defer voc_file.deinit();
+
+        // All Privateer VOC files should be 11025 Hz, 8-bit PCM
+        try std.testing.expectEqual(voc.CODEC_PCM_8BIT, voc_file.codec);
+        try std.testing.expect(voc_file.sample_rate > 10000);
+        try std.testing.expect(voc_file.sample_rate < 12000);
+
+        voc_count += 1;
+        total_samples += voc_file.samples.len;
+    }
+
+    // Per docs: 17 VOC files in DATA\SPEECH\MID01\
+    try std.testing.expect(voc_count > 0);
+    try std.testing.expect(total_samples > 0);
 }
