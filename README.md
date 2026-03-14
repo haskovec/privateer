@@ -54,6 +54,7 @@ privateer/
 │   ├── scene.zig              # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
 │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
+│   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

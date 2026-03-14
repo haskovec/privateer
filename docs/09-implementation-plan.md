@@ -259,7 +259,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement hit-testing against region rects
   - Parse EFCT action types and connect to scene transitions (room to room)
 
-- [ ] **4.4 Game state machine**
+- [x] **4.4 Game state machine**
   - States: TITLE, SPACE_FLIGHT, LANDED, CONVERSATION, COMBAT, DEAD, LOADING
   - RED: Test state transitions (SPACE_FLIGHT -> LANDED on successful landing)
   - GREEN: Implement state machine
