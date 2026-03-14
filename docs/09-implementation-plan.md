@@ -300,7 +300,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test clicking a system on the nav map sets autopilot destination
   - GREEN: Implement nav map interaction
 
-- [ ] **5.4 Space flight physics**
+- [x] **5.4 Space flight physics**
   - Player ship movement: thrust, rotation, velocity, momentum
   - RED: Test applying thrust increases velocity in facing direction
   - GREEN: Implement basic Newtonian physics

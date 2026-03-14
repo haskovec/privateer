@@ -60,6 +60,7 @@ privateer/
 │   ├── bases.zig              # Base registry loader (BASES.IFF: base names, types, indices)
 │   ├── nav_graph.zig          # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
 │   ├── nav_map.zig            # Nav map display (sector map renderer, hit-testing, autopilot selection)
+│   ├── flight_physics.zig     # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper
