@@ -190,7 +190,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 3: Core Rendering Engine
 *Get pixels on screen. Everything visual depends on this.*
 
-- [ ] **3.1 Window creation & main loop**
+- [x] **3.1 Window creation & main loop**
   - SDL3 window at 1280x960 (4x base resolution)
   - 60fps game loop with fixed timestep
   - RED: Test window creates at correct size
