@@ -451,6 +451,55 @@ def gen_pak_file():
     write("test_pak_l2.bin", bytes(data))
 
 
+def gen_pak_noend():
+    """Generate PAK file with no explicit 0x00 end marker.
+
+    Many real PAK files have offset tables that butt directly against data,
+    with no terminator. The table ends when pos reaches the first data offset.
+
+    Fixture: test_pak_noend.bin - 3 E0 entries, no 0x00 terminator
+        Table: [off0 E0][off1 E0][off2 E0] -> data starts immediately after
+    """
+    # Layout: [file_size(4)] [3 entries(12)] [res0(6)] [res1(4)] [res2(8)]
+    # Offsets:  0              4               16        22        26
+    # Total: 34 bytes
+    data = bytearray()
+    data += struct.pack('<I', 34)                          # file_size = 34
+    data += bytes([16, 0, 0, 0xE0])                        # entry 0: offset=16, E0
+    data += bytes([22, 0, 0, 0xE0])                        # entry 1: offset=22, E0
+    data += bytes([26, 0, 0, 0xE0])                        # entry 2: offset=26, E0
+    # No terminator! Data starts right here at offset 16
+    data += bytes([0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6])   # resource 0 (6 bytes)
+    data += bytes([0xB1, 0xB2, 0xB3, 0xB4])                # resource 1 (4 bytes)
+    data += bytes([0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8])  # resource 2 (8 bytes)
+
+    assert len(data) == 34, f"PAK noend size mismatch: {len(data)} != 34"
+    write("test_pak_noend.bin", bytes(data))
+
+
+def gen_pak_ff_marker():
+    """Generate PAK file with 0xFF unused/sentinel markers.
+
+    SPEECH.PAK uses 0xFF markers for unused slots that should be skipped.
+
+    Fixture: test_pak_ff.bin - E0 entries with FF entries interspersed
+    """
+    # Layout: [file_size(4)] [off0 E0][off1 FF][off2 E0][terminator] [res0(4)] [res1(4)]
+    # Offsets:  0              4        8        12       16           20        24
+    # Total: 28 bytes
+    data = bytearray()
+    data += struct.pack('<I', 28)                          # file_size = 28
+    data += bytes([20, 0, 0, 0xE0])                        # entry 0: offset=20, E0
+    data += bytes([20, 0, 0, 0xFF])                        # entry 1: offset=20, FF (unused)
+    data += bytes([24, 0, 0, 0xE0])                        # entry 2: offset=24, E0
+    data += bytes([0, 0, 0, 0])                            # terminator
+    data += bytes([0xD1, 0xD2, 0xD3, 0xD4])                # resource 0 (4 bytes)
+    data += bytes([0xE1, 0xE2, 0xE3, 0xE4])                # resource 1 (4 bytes)
+
+    assert len(data) == 28, f"PAK FF size mismatch: {len(data)} != 28"
+    write("test_pak_ff.bin", bytes(data))
+
+
 def gen_voc_file():
     """Generate test VOC (Creative Voice File) fixtures.
 
@@ -794,6 +843,8 @@ if __name__ == "__main__":
     gen_sprite_rle()
     gen_shp_file()
     gen_pak_file()
+    gen_pak_noend()
+    gen_pak_ff_marker()
     gen_voc_file()
     gen_vpk_file()
     gen_xmidi_file()

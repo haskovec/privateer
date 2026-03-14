@@ -178,7 +178,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test palette rendering produces 256-color grid PNG
   - GREEN: Implement palette visualizer
 
-- [ ] **2.4 Data validation suite**
+- [x] **2.4 Data validation suite**
   - Run all integration tests against the real game data
   - Report: number of files parsed, errors, warnings
   - RED: Test that validation reports 0 errors on known-good data

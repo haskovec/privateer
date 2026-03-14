@@ -15,6 +15,8 @@ const music = @import("music.zig");
 const extract = @import("extract.zig");
 const render = @import("render.zig");
 const png = @import("png.zig");
+const validate = @import("validate.zig");
+const palette_viewer = @import("palette_viewer.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1003,4 +1005,71 @@ test "integration: extracted files match TRE entry sizes" {
     }
 
     try std.testing.expect(checked > 0);
+}
+
+// --- Data validation suite (Phase 2.4 gate for Phase 3) ---
+
+test "integration: data validation suite reports 0 errors on game data" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const result = try validate.validateAll(allocator, loaded.tre_data);
+
+    // Report results
+    std.debug.print("\n=== Data Validation Report ===\n", .{});
+    std.debug.print("Total files:     {}\n", .{result.total_files});
+    std.debug.print("IFF parsed:      {} (errors: {})\n", .{ result.iff_parsed, result.iff_errors });
+    std.debug.print("PAL parsed:      {} (errors: {})\n", .{ result.pal_parsed, result.pal_errors });
+    std.debug.print("SHP parsed:      {} (errors: {})\n", .{ result.shp_parsed, result.shp_errors });
+    std.debug.print("PAK parsed:      {} (errors: {})\n", .{ result.pak_parsed, result.pak_errors });
+    std.debug.print("VOC parsed:      {} (errors: {})\n", .{ result.voc_parsed, result.voc_errors });
+    std.debug.print("VPK/VPF parsed:  {} (errors: {})\n", .{ result.vpk_parsed, result.vpk_errors });
+    std.debug.print("Music parsed:    {} (errors: {})\n", .{ result.music_parsed, result.music_errors });
+    std.debug.print("Other files:     {}\n", .{result.other_files});
+    std.debug.print("Warnings:        {}\n", .{result.warnings});
+    std.debug.print("Total parsed:    {}\n", .{result.totalParsed()});
+    std.debug.print("Total errors:    {}\n", .{result.totalErrors()});
+    std.debug.print("==============================\n", .{});
+
+    // Gate check: 0 errors required for Phase 3
+    try std.testing.expectEqual(@as(u32, 832), result.total_files);
+    try std.testing.expectEqual(@as(u32, 0), result.totalErrors());
+    try std.testing.expectEqual(@as(u32, 0), result.warnings);
+}
+
+// --- Palette viewer integration tests (Phase 2.3) ---
+
+test "integration: render all 4 palettes to PNG" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const pal_files = [_][]const u8{
+        "PCMAIN.PAL",
+        "PREFMAIN.PAL",
+        "SPACE.PAL",
+        "JOYCALIB.PAL",
+    };
+
+    for (pal_files) |filename| {
+        var entry = try tre.findEntry(allocator, loaded.tre_data, filename);
+        defer entry.deinit();
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        const palette = try pal.parse(file_data);
+
+        // Render to PNG
+        const png_data = try palette_viewer.paletteToPng(allocator, palette);
+        defer allocator.free(png_data);
+
+        // Verify valid PNG
+        try std.testing.expectEqualSlices(u8, &png.SIGNATURE, png_data[0..8]);
+
+        // Verify 256x256 dimensions in IHDR
+        const w = std.mem.readInt(u32, png_data[16..20], .big);
+        const h = std.mem.readInt(u32, png_data[20..24], .big);
+        try std.testing.expectEqual(@as(u32, 256), w);
+        try std.testing.expectEqual(@as(u32, 256), h);
+    }
 }

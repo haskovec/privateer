@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 and Phase 1 complete (project setup, ISO 9660/TRE/IFF parsers, PAL palette loader, RLE sprite decoder, SHP shape/font loader, PAK resource unpacker, VOC audio loader, VPK/VPF voice pack decompressor, ADL/GEN/XMIDI music loaders). Phase 2 in progress (asset extraction CLI, sprite-to-PNG renderer, palette viewer). See the
+Phase 0, Phase 1, and Phase 2 complete (project setup, all data format parsers, asset extraction CLI, sprite-to-PNG renderer, palette viewer, data validation suite with 0 errors across all 832 game files). Phase 3 gate passed. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -45,6 +45,7 @@ privateer/
 │   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
 │   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
 │   ├── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
+│   ├── validate.zig           # Data validation pipeline (all parsers → error report)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

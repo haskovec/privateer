@@ -18,6 +18,8 @@ pub const ENTRY_SIZE: usize = 4;
 pub const MARKER_SUBTABLE: u8 = 0xC1;
 /// Marker: offset points directly to resource data.
 pub const MARKER_DATA: u8 = 0xE0;
+/// Marker: unused/invalid slot (skip this entry).
+pub const MARKER_UNUSED: u8 = 0xFF;
 /// Marker: end of offset table.
 pub const MARKER_END: u8 = 0x00;
 
@@ -77,34 +79,46 @@ fn readOffset3(data: []const u8, pos: usize) u32 {
         (@as(u32, data[pos + 2]) << 16);
 }
 
-/// Parse a PAK file from raw bytes.
-/// Returns a PakFile with a flat list of resource entries.
-/// Caller must call deinit() on the returned PakFile.
-/// The data slice is NOT owned -- caller must keep it alive.
 /// Scan an offset table (L1 or L2) and count data (E0) entries.
-/// For L1 tables, also recurses into C1 sub-tables.
-/// Set `recurse` to true for L1 tables, false for L2 sub-tables.
+/// For L1 tables, also recurses into C1 sub-tables. If a C1 entry points to
+/// a location that doesn't contain valid sub-table entries, it is treated as
+/// a direct data pointer instead (some game files use C1 for data sections).
+/// Tables may lack an explicit 0x00 end marker; scanning stops when the read
+/// position reaches or exceeds the minimum offset seen so far (implicit end).
 fn countEntries(data: []const u8, table_start: usize, recurse: bool) PakError!usize {
     var count: usize = 0;
     var pos = table_start;
-    while (pos + ENTRY_SIZE <= data.len) {
+    var min_offset: usize = data.len;
+    while (pos + ENTRY_SIZE <= data.len and pos < min_offset) {
         const marker = data[pos + 3];
         if (marker == MARKER_END) break;
 
-        const offset = readOffset3(data, pos);
+        const offset: usize = readOffset3(data, pos);
         pos += ENTRY_SIZE;
 
         switch (marker) {
             MARKER_DATA => {
                 if (offset >= data.len) return PakError.OffsetOutOfBounds;
+                if (offset < min_offset) min_offset = offset;
                 count += 1;
             },
             MARKER_SUBTABLE => {
                 if (!recurse) return PakError.InvalidMarker;
                 if (offset >= data.len) return PakError.OffsetOutOfBounds;
-                count += try countEntries(data, offset, false);
+                if (offset < min_offset) min_offset = offset;
+                // Try scanning as a sub-table; if no valid entries found,
+                // treat this C1 entry as a direct data pointer.
+                const sub_count = countEntries(data, offset, false) catch 0;
+                if (sub_count > 0) {
+                    count += sub_count;
+                } else {
+                    count += 1; // fallback: treat as data
+                }
             },
-            else => return PakError.InvalidMarker,
+            MARKER_UNUSED => {
+                // Skip unused/sentinel entries (e.g. SPEECH.PAK)
+            },
+            else => break, // Unknown marker = implicit end of table
         }
     }
     return count;
@@ -115,25 +129,39 @@ fn countEntries(data: []const u8, table_start: usize, recurse: bool) PakError!us
 fn collectOffsets(data: []const u8, table_start: usize, recurse: bool, offsets: []u32, write_idx: usize) PakError!usize {
     var idx = write_idx;
     var pos = table_start;
-    while (pos + ENTRY_SIZE <= data.len) {
+    var min_offset: usize = data.len;
+    while (pos + ENTRY_SIZE <= data.len and pos < min_offset) {
         const marker = data[pos + 3];
         if (marker == MARKER_END) break;
 
-        const offset = readOffset3(data, pos);
+        const offset: usize = readOffset3(data, pos);
         pos += ENTRY_SIZE;
 
         switch (marker) {
             MARKER_DATA => {
                 if (offset >= data.len) return PakError.OffsetOutOfBounds;
-                offsets[idx] = offset;
+                if (offset < min_offset) min_offset = offset;
+                offsets[idx] = @intCast(offset);
                 idx += 1;
             },
             MARKER_SUBTABLE => {
                 if (!recurse) return PakError.InvalidMarker;
                 if (offset >= data.len) return PakError.OffsetOutOfBounds;
-                idx = try collectOffsets(data, offset, false, offsets, idx);
+                if (offset < min_offset) min_offset = offset;
+                // Try scanning as a sub-table; if no valid entries found,
+                // treat this C1 entry as a direct data pointer.
+                const sub_count = countEntries(data, offset, false) catch 0;
+                if (sub_count > 0) {
+                    idx = try collectOffsets(data, offset, false, offsets, idx);
+                } else {
+                    offsets[idx] = @intCast(offset);
+                    idx += 1;
+                }
             },
-            else => return PakError.InvalidMarker,
+            MARKER_UNUSED => {
+                // Skip unused/sentinel entries
+            },
+            else => break, // Unknown marker = implicit end of table
         }
     }
     return idx;
@@ -317,4 +345,54 @@ test "parse stores file size from header" {
     defer pak.deinit();
 
     try std.testing.expectEqual(@as(u32, 40), pak.file_size);
+}
+
+test "parse PAK with no end marker (implicit table end)" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_pak_noend.bin");
+    defer allocator.free(data);
+
+    var pak = try parse(allocator, data);
+    defer pak.deinit();
+
+    try std.testing.expectEqual(@as(u32, 34), pak.file_size);
+    try std.testing.expectEqual(@as(usize, 3), pak.resourceCount());
+
+    // Resource 0: offset=16, size=6
+    try std.testing.expectEqual(@as(u32, 16), pak.entries[0].offset);
+    try std.testing.expectEqual(@as(u32, 6), pak.entries[0].size);
+
+    // Resource 1: offset=22, size=4
+    try std.testing.expectEqual(@as(u32, 22), pak.entries[1].offset);
+    try std.testing.expectEqual(@as(u32, 4), pak.entries[1].size);
+
+    // Resource 2: offset=26, size=8
+    try std.testing.expectEqual(@as(u32, 26), pak.entries[2].offset);
+    try std.testing.expectEqual(@as(u32, 8), pak.entries[2].size);
+
+    // Verify resource data
+    const r0 = try pak.getResource(0);
+    try testing_helpers.expectBytes(&[_]u8{ 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6 }, r0);
+
+    const r1 = try pak.getResource(1);
+    try testing_helpers.expectBytes(&[_]u8{ 0xB1, 0xB2, 0xB3, 0xB4 }, r1);
+}
+
+test "parse PAK with FF unused marker entries" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_pak_ff.bin");
+    defer allocator.free(data);
+
+    var pak = try parse(allocator, data);
+    defer pak.deinit();
+
+    try std.testing.expectEqual(@as(u32, 28), pak.file_size);
+    // FF entries are skipped, so only 2 data entries
+    try std.testing.expectEqual(@as(usize, 2), pak.resourceCount());
+
+    const r0 = try pak.getResource(0);
+    try testing_helpers.expectBytes(&[_]u8{ 0xD1, 0xD2, 0xD3, 0xD4 }, r0);
+
+    const r1 = try pak.getResource(1);
+    try testing_helpers.expectBytes(&[_]u8{ 0xE1, 0xE2, 0xE3, 0xE4 }, r1);
 }
