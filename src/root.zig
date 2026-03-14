@@ -6,6 +6,9 @@ const std = @import("std");
 pub const testing_helpers = @import("testing.zig");
 pub const sdl = @import("sdl.zig");
 pub const config = @import("config.zig");
+pub const iso9660 = @import("iso9660.zig");
+pub const tre = @import("tre.zig");
+pub const integration_tests = @import("integration_tests.zig");
 
 test "engine module loads" {
     try std.testing.expect(true);

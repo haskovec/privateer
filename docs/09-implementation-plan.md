@@ -65,7 +65,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 1: Data Format Parsers (Critical Path)
 *Must be rock-solid before any game logic. Every parser gets thorough tests.*
 
-- [ ] **1.1 ISO 9660 reader**
+- [x] **1.1 ISO 9660 reader**
   - RED: Test reading GAME.DAT primary volume descriptor, expect "CD001" signature
   - GREEN: Implement ISO PVD parser
   - RED: Test reading root directory, expect 6 entries including PRIV.TRE
@@ -74,7 +74,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement file extraction by name
   - Integration test: Verify PRIV.TRE size = 89,486,108 bytes
 
-- [ ] **1.2 TRE archive reader**
+- [x] **1.2 TRE archive reader**
   - RED: Test parsing TRE header, expect count=832, toc_size=86688
   - GREEN: Implement header parser
   - RED: Test parsing entry 0, expect path="..\\..\\DATA\\AIDS\\ATTITUDE.IFF",
