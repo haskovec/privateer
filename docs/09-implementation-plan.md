@@ -285,7 +285,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test each quadrant contains correct number of systems
   - GREEN: Validate against known Gemini Sector layout
 
-- [ ] **5.2 Sector/system data model**
+- [x] **5.2 Sector/system data model**
   - Represent systems, nav points, jump connections, bases
   - RED: Test system lookup by name returns correct quadrant/coordinates
   - GREEN: Implement system data model

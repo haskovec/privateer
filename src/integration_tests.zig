@@ -19,6 +19,8 @@ const validate = @import("validate.zig");
 const palette_viewer = @import("palette_viewer.zig");
 const midgame = @import("midgame.zig");
 const universe = @import("universe.zig");
+const bases = @import("bases.zig");
+const nav_graph = @import("nav_graph.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -1507,7 +1509,7 @@ test "integration: each quadrant contains systems" {
     try std.testing.expect(total > 50);
 }
 
-test "integration: universe systems have valid coordinates and factions" {
+test "integration: universe systems have valid coordinates and names" {
     const allocator = std.testing.allocator;
     const loaded = try loadTreData(allocator) orelse return;
     defer allocator.free(loaded.data);
@@ -1519,18 +1521,123 @@ test "integration: universe systems have valid coordinates and factions" {
     var univ = try universe.parseUniverse(allocator, file_data);
     defer univ.deinit();
 
-    // All systems should have valid coordinate data
+    // All systems should have valid data
     for (univ.quadrants) |q| {
+        // Quadrant should have a name
+        try std.testing.expect(q.name.len > 0);
         for (q.systems) |sys| {
+            // Each system has a name
+            try std.testing.expect(sys.name.len > 0);
             // Coordinates should be within reasonable range for a map grid
-            _ = sys.x;
-            _ = sys.y;
-            _ = sys.faction;
-            _ = sys.hazard;
+            try std.testing.expect(sys.x > -200 and sys.x < 200);
+            try std.testing.expect(sys.y > -200 and sys.y < 200);
         }
     }
 
     // Some systems should have bases
     const base_count = univ.totalBases();
     try std.testing.expect(base_count > 0);
+
+    // Should be able to find known systems by name
+    const troy = univ.findSystemByName("Troy");
+    try std.testing.expect(troy != null);
+    try std.testing.expect(troy.?.hasBase());
+
+    const oxford = univ.findSystemByName("Oxford");
+    try std.testing.expect(oxford != null);
+}
+
+// --- BASES.IFF integration tests (Phase 5.2) ---
+
+test "integration: BASES.IFF parses all bases with names" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "BASES.IFF");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var registry = try bases.parseBases(allocator, file_data);
+    defer registry.deinit();
+
+    // Should have a substantial number of bases
+    try std.testing.expect(registry.bases.len > 30);
+
+    // All bases should have names
+    for (registry.bases) |base| {
+        try std.testing.expect(base.name.len > 0);
+    }
+
+    // Should be able to find known bases
+    const perry = registry.findByName("Perry Naval Base");
+    try std.testing.expect(perry != null);
+
+    const oxford = registry.findByName("Oxford");
+    try std.testing.expect(oxford != null);
+}
+
+// --- TABLE.DAT integration tests (Phase 5.2) ---
+
+test "integration: TABLE.DAT parses as 69x69 distance matrix" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "TABLE.DAT");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var graph = try nav_graph.parseNavGraph(allocator, file_data);
+    defer graph.deinit();
+
+    // 69 star systems in the Gemini Sector
+    try std.testing.expectEqual(@as(u16, 69), graph.system_count);
+
+    // Self-distances should be 0
+    for (0..69) |i| {
+        try std.testing.expectEqual(@as(u8, 0), graph.getDistance(@intCast(i), @intCast(i)).?);
+    }
+
+    // Most systems should have at least one adjacent neighbor
+    var connected_count: usize = 0;
+    for (0..69) |i| {
+        const adj = try graph.getAdjacentSystems(@intCast(i), allocator);
+        defer allocator.free(adj);
+        if (adj.len > 0) connected_count += 1;
+    }
+    // At least 60 of 69 systems should be connected
+    try std.testing.expect(connected_count >= 60);
+}
+
+// --- Cross-data integration test (Phase 5.2) ---
+
+test "integration: universe system indices match nav graph dimensions" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Load universe
+    var q_entry = try tre.findEntry(allocator, loaded.tre_data, "QUADRANT.IFF");
+    defer q_entry.deinit();
+    const q_data = try tre.extractFileData(loaded.tre_data, q_entry.offset, q_entry.size);
+    var univ = try universe.parseUniverse(allocator, q_data);
+    defer univ.deinit();
+
+    // Load nav graph
+    var t_entry = try tre.findEntry(allocator, loaded.tre_data, "TABLE.DAT");
+    defer t_entry.deinit();
+    const t_data = try tre.extractFileData(loaded.tre_data, t_entry.offset, t_entry.size);
+    var graph = try nav_graph.parseNavGraph(allocator, t_data);
+    defer graph.deinit();
+
+    // Total systems should match nav graph dimension
+    try std.testing.expectEqual(@as(usize, graph.system_count), univ.totalSystems());
+
+    // All system indices should be valid in the nav graph
+    for (univ.quadrants) |q| {
+        for (q.systems) |sys| {
+            try std.testing.expect(sys.index < graph.system_count);
+        }
+    }
 }

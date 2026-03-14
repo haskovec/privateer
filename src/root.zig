@@ -31,6 +31,8 @@ pub const click_region = @import("click_region.zig");
 pub const game_state = @import("game_state.zig");
 pub const midgame = @import("midgame.zig");
 pub const universe = @import("universe.zig");
+pub const bases = @import("bases.zig");
+pub const nav_graph = @import("nav_graph.zig");
 pub const extract = @import("extract.zig");
 pub const integration_tests = @import("integration_tests.zig");
 

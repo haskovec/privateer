@@ -56,7 +56,9 @@ privateer/
 │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
 │   ├── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
-│   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, bases)
+│   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
+│   ├── bases.zig              # Base registry loader (BASES.IFF: base names, types, indices)
+│   ├── nav_graph.zig          # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
 │   ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │   ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │   ├── sdl.zig                # SDL3 initialization wrapper

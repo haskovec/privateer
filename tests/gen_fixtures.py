@@ -1029,61 +1029,174 @@ def gen_midgame_pak():
 def gen_quadrant_file():
     """Generate test QUADRANT.IFF fixture (FORM:UNIV with FORM:QUAD > FORM:SYST).
 
-    QUADRANT.IFF structure:
+    Real QUADRANT.IFF format (from original game data analysis):
         FORM:UNIV
-          INFO (universe metadata)
+          INFO (1 byte: number of quadrants)
           FORM:QUAD (per quadrant)
-            INFO (quadrant metadata)
+            INFO (4+ bytes: x(i16 LE), y(i16 LE), name(null-terminated))
             FORM:SYST (per star system)
-              INFO (system properties: coordinates, faction, hazard level)
-              [BASE] (optional: base present at this system)
+              INFO (5+ bytes: index(u8), x(i16 LE), y(i16 LE), name(null-terminated))
+              [BASE] (optional: list of base indices, one byte each)
 
     Fixture: test_quadrant.bin - 2 quadrants, 5 systems total
-        Quadrant 0: 3 systems
-          System 0: coords (10, 20), faction 1, hazard 2, has base (type 3)
-          System 1: coords (30, 40), faction 2, hazard 1, no base
-          System 2: coords (50, 60), faction 1, hazard 3, has base (type 1)
-        Quadrant 1: 2 systems
-          System 0: coords (70, 80), faction 3, hazard 1, no base
-          System 1: coords (90, 100), faction 2, hazard 2, has base (type 2)
+        Quadrant 0 "Alpha" at (-50, 50): 3 systems
+          System idx=0 "Troy" at (-30, 40), bases [0, 1]
+          System idx=1 "Palan" at (-60, 20), no base
+          System idx=2 "Oxford" at (-40, 70), base [2]
+        Quadrant 1 "Beta" at (50, -50): 2 systems
+          System idx=3 "Perry" at (30, -40), base [3]
+          System idx=4 "Junction" at (60, -20), no base
     """
-    def make_syst(x, y, faction, hazard, base_type=None):
+    def make_syst(index, x, y, name, base_indices=None):
         """Build a FORM:SYST with INFO and optional BASE chunk."""
-        # INFO: 4 bytes - x(u8), y(u8), faction(u8), hazard(u8)
-        info = make_iff_chunk(b"INFO", bytes([x, y, faction, hazard]))
+        # INFO: index(u8), x(i16 LE), y(i16 LE), name(null-terminated)
+        info_data = bytes([index])
+        info_data += struct.pack('<h', x)  # i16 LE
+        info_data += struct.pack('<h', y)  # i16 LE
+        info_data += name.encode('ascii') + b'\x00'
+        info = make_iff_chunk(b"INFO", info_data)
         children = info
-        if base_type is not None:
-            # BASE: 1 byte - base type
-            children += make_iff_chunk(b"BASE", bytes([base_type]))
+        if base_indices is not None:
+            # BASE: list of base indices (one byte each)
+            children += make_iff_chunk(b"BASE", bytes(base_indices))
         return make_iff_form(b"SYST", children)
 
-    def make_quad(systems_bytes):
+    def make_quad(x, y, name, systems_bytes):
         """Build a FORM:QUAD with INFO and SYST children."""
-        # Count systems by scanning for FORM headers with SYST type
-        # INFO: just a placeholder byte for quadrant metadata
-        info = make_iff_chunk(b"INFO", bytes([0x00]))
+        # INFO: x(i16 LE), y(i16 LE), name(null-terminated)
+        info_data = struct.pack('<h', x) + struct.pack('<h', y)
+        info_data += name.encode('ascii') + b'\x00'
+        info = make_iff_chunk(b"INFO", info_data)
         return make_iff_form(b"QUAD", info + systems_bytes)
 
-    # Quadrant 0: 3 systems
+    # Quadrant 0 "Alpha": 3 systems
     q0_systems = (
-        make_syst(10, 20, 1, 2, base_type=3) +
-        make_syst(30, 40, 2, 1) +
-        make_syst(50, 60, 1, 3, base_type=1)
+        make_syst(0, -30, 40, "Troy", base_indices=[0, 1]) +
+        make_syst(1, -60, 20, "Palan") +
+        make_syst(2, -40, 70, "Oxford", base_indices=[2])
     )
-    quad0 = make_quad(q0_systems)
+    quad0 = make_quad(-50, 50, "Alpha", q0_systems)
 
-    # Quadrant 1: 2 systems
+    # Quadrant 1 "Beta": 2 systems
     q1_systems = (
-        make_syst(70, 80, 3, 1) +
-        make_syst(90, 100, 2, 2, base_type=2)
+        make_syst(3, 30, -40, "Perry", base_indices=[3]) +
+        make_syst(4, 60, -20, "Junction")
     )
-    quad1 = make_quad(q1_systems)
+    quad1 = make_quad(50, -50, "Beta", q1_systems)
 
     # Universe root: INFO + 2 quadrants
     univ_info = make_iff_chunk(b"INFO", bytes([0x02]))  # 2 quadrants
     root = make_iff_form(b"UNIV", univ_info + quad0 + quad1)
 
     write("test_quadrant.bin", root)
+
+
+def gen_bases_file():
+    """Generate test BASES.IFF fixture (FORM:BASE with DATA + INFO entries).
+
+    Real BASES.IFF format:
+        FORM:BASE
+          DATA (N bytes: counts per base type)
+          INFO (per base: index(u8), type(u8), name(null-terminated))
+
+    Fixture: test_bases.bin - 4 bases
+        Base 0: "Achilles" type 3 (mining)
+        Base 1: "Helen" type 4 (refinery)
+        Base 2: "Oxford" type 6 (unique)
+        Base 3: "Perry Naval Base" type 6 (unique)
+    """
+    def make_base_info(index, base_type, name):
+        data = bytes([index, base_type])
+        data += name.encode('ascii') + b'\x00'
+        return make_iff_chunk(b"INFO", data)
+
+    # DATA chunk: 6 bytes (counts per base type 0-5, we just put placeholder)
+    data_chunk = make_iff_chunk(b"DATA", bytes([0, 0, 0, 1, 1, 0]))
+
+    bases = (
+        make_base_info(0, 3, "Achilles") +
+        make_base_info(1, 4, "Helen") +
+        make_base_info(2, 6, "Oxford") +
+        make_base_info(3, 6, "Perry Naval Base")
+    )
+
+    root = make_iff_form(b"BASE", data_chunk + bases)
+    write("test_bases.bin", root)
+
+
+def gen_nav_table():
+    """Generate test TABLE.DAT fixture (distance matrix).
+
+    Real TABLE.DAT format: N*N byte matrix where entry[i*N+j] is the
+    jump distance from system i to system j. 0=self, 1=adjacent, 0xFF=unreachable.
+
+    Fixture: test_table.bin - 5x5 matrix for 5 test systems
+        System 0 (Troy) <-> System 1 (Palan): distance 1 (adjacent)
+        System 0 (Troy) <-> System 2 (Oxford): distance 2
+        System 1 (Palan) <-> System 2 (Oxford): distance 1 (adjacent)
+        System 2 (Oxford) <-> System 3 (Perry): distance 1 (adjacent)
+        System 3 (Perry) <-> System 4 (Junction): distance 1 (adjacent)
+        System 0 <-> System 3: distance 3
+        System 0 <-> System 4: distance 4
+        System 1 <-> System 3: distance 2
+        System 1 <-> System 4: distance 3
+        System 2 <-> System 4: distance 2
+    """
+    N = 5
+    # Initialize with 0xFF (unreachable) then fill in
+    matrix = [0xFF] * (N * N)
+
+    def set_dist(a, b, d):
+        matrix[a * N + b] = d
+        matrix[b * N + a] = d
+
+    # Self distances
+    for i in range(N):
+        matrix[i * N + i] = 0
+
+    # Adjacent pairs (distance 1)
+    set_dist(0, 1, 1)  # Troy <-> Palan
+    set_dist(1, 2, 1)  # Palan <-> Oxford
+    set_dist(2, 3, 1)  # Oxford <-> Perry
+    set_dist(3, 4, 1)  # Perry <-> Junction
+
+    # Derived distances
+    set_dist(0, 2, 2)  # Troy -> Palan -> Oxford
+    set_dist(0, 3, 3)  # Troy -> Palan -> Oxford -> Perry
+    set_dist(0, 4, 4)  # Troy -> ... -> Junction
+    set_dist(1, 3, 2)  # Palan -> Oxford -> Perry
+    set_dist(1, 4, 3)  # Palan -> Oxford -> Perry -> Junction
+    set_dist(2, 4, 2)  # Oxford -> Perry -> Junction
+
+    write("test_table.bin", bytes(matrix))
+
+
+def gen_teams_file():
+    """Generate test TEAMS.IFF fixture (FORM:TEAM with FRMN chunks).
+
+    Real TEAMS.IFF format:
+        FORM:TEAM
+          FRMN (per faction: inter-faction disposition values as i16 LE pairs)
+
+    Fixture: test_teams.bin - 3 factions (simplified)
+        Faction 0 (Confed): neutral to self, friendly to Militia, hostile to Pirates
+        Faction 1 (Militia): friendly to Confed, neutral to self, hostile to Pirates
+        Faction 2 (Pirates): hostile to Confed, hostile to Militia, neutral to self
+    """
+    # Each FRMN chunk has pairs of i16 LE values for faction relationships
+    # Format appears to be: disposition values toward each other faction
+    def make_frmn(values):
+        data = b''
+        for v in values:
+            data += struct.pack('<h', v)
+        return make_iff_chunk(b"FRMN", data)
+
+    frmn0 = make_frmn([0, 0, 0])       # Confed: neutral baseline
+    frmn1 = make_frmn([800, 0, 0])      # Militia: friendly to Confed
+    frmn2 = make_frmn([-800, -800, 0])  # Pirates: hostile to both
+
+    root = make_iff_form(b"TEAM", frmn0 + frmn1 + frmn2)
+    write("test_teams.bin", root)
 
 
 if __name__ == "__main__":
@@ -1104,4 +1217,7 @@ if __name__ == "__main__":
     gen_gameflow_file()
     gen_midgame_pak()
     gen_quadrant_file()
+    gen_bases_file()
+    gen_nav_table()
+    gen_teams_file()
     print("Done.")
