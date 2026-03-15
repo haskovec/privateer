@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 10 complete, Phase 11 in progress (11.1-11.3 done). See the
+Phase 0 through Phase 11 complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -114,7 +114,8 @@ privateer/
 │   │
 │   ├── audio/                   # Audio playback system
 │   │   ├── audio.zig            # SDL3 audio engine (device management, PCM stream playback, U8→S16 conversion)
-│   │   └── sound_effects.zig    # Sound effects system (waveform synthesis, sound bank, multi-channel mixer, event dispatch)
+│   │   ├── sound_effects.zig    # Sound effects system (waveform synthesis, sound bank, multi-channel mixer, event dispatch)
+│   │   └── music_player.zig     # Music playback system (XMIDI decoder, PCM synthesis, looping player, game-state music machine)
 │   │
 │   └── cli/                     # Offline tools & asset pipelines
 │       ├── extract.zig          # Asset extraction pipeline (GAME.DAT → directory tree)

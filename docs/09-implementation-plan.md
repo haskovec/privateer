@@ -577,7 +577,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test synthesis produces correct waveforms and sample counts
   - GREEN: Implement SoundBank, SoundMixer, and event dispatch
 
-- [ ] **11.4 Music playback**
+- [x] **11.4 Music playback**
   - Convert XMIDI/GEN to standard MIDI or synthesize directly
   - Play background music (base tune, combat, credits, opening, victory)
   - RED: Test base music plays when landed
