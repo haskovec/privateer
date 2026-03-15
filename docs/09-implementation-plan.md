@@ -615,7 +615,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test loose file in mod dir overrides TRE file
   - GREEN: Implement mod file priority system
 
-- [ ] **13.2 Config override files**
+- [x] **13.2 Config override files**
   - JSON/TOML files for game balance values (ship stats, prices, weapon damage)
   - RED: Test config override changes ship max speed
   - GREEN: Implement config overlay system

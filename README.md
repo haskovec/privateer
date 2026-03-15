@@ -70,6 +70,7 @@ privateer/
 │   │   ├── save_slots.zig     # Save slot manager (10 slots, file I/O, metadata extraction, slot listing)
 │   │   ├── auto_save.zig      # Auto-save system (landing hook, dedicated autosave.sav file, load/delete)
 │   │   ├── mod_loader.zig     # Mod file loader (priority override: mod dir files take precedence over TRE archive)
+│   │   ├── config_overrides.zig # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
 │   │   ├── click_region.zig     # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   └── midgame.zig          # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
