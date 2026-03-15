@@ -46,6 +46,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(extract_exe);
 
+    // Asset repacking CLI tool
+    const repack_exe = b.addExecutable(.{
+        .name = "privateer-repack",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cli/repack_cli.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "privateer", .module = engine_mod },
+            },
+        }),
+    });
+    b.installArtifact(repack_exe);
+
     // Run step
     const run_step = b.step("run", "Run the game");
     const run_cmd = b.addRunArtifact(exe);
@@ -62,6 +76,15 @@ pub fn build(b: *std.Build) void {
     extract_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         extract_cmd.addArgs(args);
+    }
+
+    // Repack step
+    const repack_step = b.step("repack", "Run the asset repacking tool");
+    const repack_cmd = b.addRunArtifact(repack_exe);
+    repack_step.dependOn(&repack_cmd.step);
+    repack_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        repack_cmd.addArgs(args);
     }
 
     // Engine module tests
@@ -82,9 +105,16 @@ pub fn build(b: *std.Build) void {
     });
     const run_extract_tests = b.addRunArtifact(extract_tests);
 
+    // Repack CLI tests
+    const repack_tests = b.addTest(.{
+        .root_module = repack_exe.root_module,
+    });
+    const run_repack_tests = b.addRunArtifact(repack_tests);
+
     // Test step runs all test suites
     const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
     test_step.dependOn(&run_extract_tests.step);
+    test_step.dependOn(&run_repack_tests.step);
 }

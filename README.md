@@ -139,6 +139,8 @@ privateer/
 │   └── cli/                       # Offline tools & asset pipelines
 │       ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
 │       ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
+│       ├── repack.zig             # Asset repacking pipeline (directory tree → GAME.DAT)
+│       ├── repack_cli.zig         # Asset repacking CLI entry point (privateer-repack)
 │       ├── validate.zig           # Data validation pipeline (all parsers → error report)
 │       └── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
 │
@@ -155,6 +157,7 @@ privateer/
 - `zig build test` -- run all unit and integration tests
 - `zig build run` -- build and run the game
 - `zig build extract -- --data-dir <path> --output <dir>` -- extract all game assets from GAME.DAT
+- `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
 
 ## Documentation
 

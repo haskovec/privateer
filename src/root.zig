@@ -106,6 +106,7 @@ pub const asset_watcher = @import("modding/asset_watcher.zig");
 
 // CLI tools
 pub const extract = @import("cli/extract.zig");
+pub const repack = @import("cli/repack.zig");
 pub const validate = @import("cli/validate.zig");
 pub const palette_viewer = @import("cli/palette_viewer.zig");
 

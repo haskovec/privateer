@@ -126,7 +126,31 @@ extracted/
   ...
 ```
 
-## 5. Run the Game
+## 5. Repack Modded Assets (Optional)
+
+After extracting and modifying game assets (sprites, data files, etc.), you can
+repack them into a new `GAME.DAT` for distribution or testing:
+
+```bash
+zig build repack -- --input ./extracted --output ./GAME.DAT
+```
+
+This builds a new `PRIV.TRE` archive from the directory tree and wraps it in a
+valid ISO 9660 image. The resulting `GAME.DAT` can be used as a drop-in
+replacement for the original.
+
+**Modding workflow:**
+```bash
+# 1. Extract original assets
+zig build extract -- --data-dir /path/to/original --output ./modded
+
+# 2. Edit files in ./modded/ (replace sprites, tweak IFF data, etc.)
+
+# 3. Repack into a new GAME.DAT
+zig build repack -- --input ./modded --output ./GAME_MODDED.DAT
+```
+
+## 6. Run the Game
 
 ```bash
 zig build run
