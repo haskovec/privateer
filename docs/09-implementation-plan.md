@@ -620,7 +620,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test config override changes ship max speed
   - GREEN: Implement config overlay system
 
-- [ ] **13.3 Asset hot-reloading (dev mode)**
+- [x] **13.3 Asset hot-reloading (dev mode)**
   - Watch mod directory for changes and reload assets
   - RED: Test modifying a sprite file updates the display
   - GREEN: Implement file watcher + reload
