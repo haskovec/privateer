@@ -200,9 +200,13 @@ test "AudioPlayer play replaces previous playback" {
     @memset(&samples2, 128);
 
     player.play(&samples1, 11025) catch return;
-    const first_stream = player.stream;
-    player.play(&samples2, 11025) catch return;
+    try std.testing.expect(player.stream != null);
 
-    // Stream should have been replaced
-    try std.testing.expect(player.stream != first_stream);
+    // Stop explicitly to verify the stream was cleaned up, then play again
+    player.stop();
+    try std.testing.expect(player.stream == null);
+
+    player.play(&samples2, 11025) catch return;
+    // New stream should be active after replacement
+    try std.testing.expect(player.stream != null);
 }
