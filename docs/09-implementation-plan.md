@@ -542,7 +542,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test VPK decompression produces playable audio
   - GREEN: Wire VPK audio to conversation system
 
-- [ ] **10.4 Bar/fixer encounters**
+- [x] **10.4 Bar/fixer encounters**
   - Special NPC interactions that advance the plot
   - RED: Test fixer appears at correct base when plot conditions are met
   - GREEN: Implement fixer spawn logic

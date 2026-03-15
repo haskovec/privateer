@@ -79,7 +79,8 @@ privateer/
 │   ├── conversations/           # Conversation & dialogue system
 │   │   ├── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
 │   │   ├── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
-│   │   └── conversation_audio.zig # Conversation audio (VPK→VOC→PCM pipeline, voice clip playback per dialogue line)
+│   │   ├── conversation_audio.zig # Conversation audio (VPK→VOC→PCM pipeline, voice clip playback per dialogue line)
+│   │   └── bar_encounters.zig   # Bar/fixer encounter system (plot state tracking, fixer spawn logic, mission progression)
 │   │
 │   ├── economy/                 # Economy & trading systems
 │   │   ├── commodities.zig      # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
