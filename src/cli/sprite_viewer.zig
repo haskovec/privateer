@@ -34,11 +34,20 @@ pub const SpriteFileInfo = struct {
 };
 
 /// Detect the format of a file by extension, with magic-byte fallback.
+/// If the extension suggests a format but magic bytes indicate a different one,
+/// the magic bytes win — this handles files with wrong/misleading extensions.
 pub fn detectFormat(filename: []const u8, data: []const u8) FileFormat {
-    // Try extension first
+    const sniffed = sniffFormat(data);
+
+    // If magic bytes give a definitive answer, trust them over the extension.
+    // This handles cases like a .SHP file that's actually IFF, or a renamed file.
+    if (sniffed != .unknown) return sniffed;
+
+    // Fall back to extension when magic bytes are inconclusive
+    // (e.g. SHP and PAK don't always have unique magic signatures)
     if (extensionFormat(filename)) |fmt| return fmt;
-    // Magic-byte sniffing
-    return sniffFormat(data);
+
+    return .unknown;
 }
 
 /// Detect format from file extension (case-insensitive).
@@ -158,7 +167,34 @@ fn countPakSprites(allocator: std.mem.Allocator, data: []const u8) u32 {
 }
 
 /// Decode all sprites from a file. Returns decoded sprites that caller must deinit.
+/// If decoding fails with the detected format, tries the other formats as fallback.
 pub fn decodeSprites(
+    allocator: std.mem.Allocator,
+    data: []const u8,
+    format: FileFormat,
+) ![]sprite_mod.Sprite {
+    // Try the detected format first
+    if (format != .unknown) {
+        if (decodeWithFormat(allocator, data, format)) |sprites| {
+            if (sprites.len > 0) return sprites;
+            allocator.free(sprites);
+        } else |_| {}
+    }
+
+    // Fallback: try all other formats
+    const fallbacks = [_]FileFormat{ .iff, .shp, .pak };
+    for (fallbacks) |fb| {
+        if (fb == format) continue;
+        if (decodeWithFormat(allocator, data, fb)) |sprites| {
+            if (sprites.len > 0) return sprites;
+            allocator.free(sprites);
+        } else |_| {}
+    }
+
+    return error.InvalidFormat;
+}
+
+fn decodeWithFormat(
     allocator: std.mem.Allocator,
     data: []const u8,
     format: FileFormat,
@@ -457,6 +493,14 @@ test "detectFormat identifies IFF by extension" {
 test "detectFormat identifies PAK by extension" {
     const data = [_]u8{0} ** 16;
     try std.testing.expectEqual(FileFormat.pak, detectFormat("CLUNKCK.PAK", &data));
+}
+
+test "detectFormat trusts magic bytes over wrong extension" {
+    // File named .SHP but data starts with FORM (IFF magic)
+    var data: [16]u8 = undefined;
+    @memset(&data, 0);
+    @memcpy(data[0..4], "FORM");
+    try std.testing.expectEqual(FileFormat.iff, detectFormat("misnamed.SHP", &data));
 }
 
 test "sniffFormat detects IFF by FORM magic" {
