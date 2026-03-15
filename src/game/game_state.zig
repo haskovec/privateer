@@ -24,6 +24,8 @@ pub const State = enum {
     dead,
     /// Playing a midgame animation sequence (landing/launch/jump/death).
     animation,
+    /// Options/settings menu.
+    options,
 };
 
 /// Error returned when an invalid state transition is attempted.
@@ -57,14 +59,15 @@ pub const GameStateMachine = struct {
     /// the current state. Self-transitions are not allowed.
     pub fn canTransition(self: *const GameStateMachine, target: State) bool {
         return switch (self.state) {
-            .title => target == .loading,
+            .title => target == .loading or target == .options,
             .loading => target == .space_flight or target == .landed,
             .space_flight => target == .landed or target == .combat or target == .dead or target == .loading or target == .animation,
-            .landed => target == .space_flight or target == .conversation or target == .loading or target == .animation,
+            .landed => target == .space_flight or target == .conversation or target == .loading or target == .animation or target == .options,
             .conversation => target == .landed,
             .combat => target == .space_flight or target == .dead,
             .dead => target == .title,
             .animation => target == .space_flight or target == .landed,
+            .options => target == .title or target == .landed,
         };
     }
 
@@ -531,6 +534,45 @@ test "completeAnimation from non-animation state returns error" {
     try sm.transition(.loading);
     try sm.transition(.landed);
     try std.testing.expectError(error.InvalidTransition, sm.completeAnimation(.space_flight));
+}
+
+// Options state
+
+test "transition from title to options succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.options);
+    try std.testing.expectEqual(State.options, sm.state);
+}
+
+test "transition from options to title succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.options);
+    try sm.transition(.title);
+    try std.testing.expectEqual(State.title, sm.state);
+}
+
+test "transition from landed to options succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    try sm.transition(.options);
+    try std.testing.expectEqual(State.options, sm.state);
+}
+
+test "transition from options to landed succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    sm.setScene(2, 5);
+    try sm.transition(.options);
+    try sm.transition(.landed);
+    try std.testing.expectEqual(State.landed, sm.state);
+}
+
+test "transition from options to space_flight is rejected" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.options);
+    try std.testing.expectError(error.InvalidTransition, sm.transition(.space_flight));
 }
 
 test "completeAnimation to invalid target returns error" {

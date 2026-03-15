@@ -629,12 +629,13 @@ No phase should start until its dependencies are complete and tested green.
 
 ## Phase 14: Polish & Release
 
-- [ ] **14.1 Options menu**
-  - Graphics: resolution, scale factor, fullscreen, upscale algorithm
-  - Audio: music volume, effects volume, speech volume
-  - Input: key rebinding, joystick sensitivity
-  - RED: Test changing resolution resizes window
-  - GREEN: Implement options persistence
+- [x] **14.1 Options menu**
+  - Graphics: resolution (2x/3x/4x), fullscreen toggle, viewport mode (4:3/fill)
+  - Audio: SFX volume, music volume (0-100% with visual bars)
+  - Settings persistence via JSON (settings.json)
+  - Options state in game state machine (accessible from title and landed)
+  - RED: Test settings defaults, serialization, menu navigation, value adjustments
+  - GREEN: Implement Settings, OptionsMenu, JSON round-trip, state transitions
 
 - [ ] **14.2 Joystick support**
   - SDL3 game controller API

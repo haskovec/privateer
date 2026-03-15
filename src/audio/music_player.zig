@@ -52,6 +52,7 @@ pub fn musicForGameState(state: game_state.State) ?MusicState {
         .combat => .combat,
         .dead => .none,
         .animation => null,
+        .options => null,
     };
 }
 

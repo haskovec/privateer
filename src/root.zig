@@ -92,6 +92,10 @@ pub const save_game = @import("persistence/save_game.zig");
 pub const save_slots = @import("persistence/save_slots.zig");
 pub const auto_save = @import("persistence/auto_save.zig");
 
+// Settings & UI
+pub const settings = @import("settings.zig");
+pub const options_menu = @import("ui/options_menu.zig");
+
 // Modding support
 pub const mod_loader = @import("modding/mod_loader.zig");
 pub const config_overrides = @import("modding/config_overrides.zig");

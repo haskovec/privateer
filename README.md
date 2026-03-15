@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 12 complete. Phase 13 (Modding Support) in progress. See the
+Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -78,6 +78,10 @@ privateer/
 │   │   ├── mod_loader.zig         # Mod file loader (priority override: mod dir files take precedence over TRE archive)
 │   │   ├── config_overrides.zig   # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
 │   │   └── asset_watcher.zig      # Asset hot-reloading (polls mod dir for file changes, dev mode)
+│   │
+│   ├── settings.zig               # Persistent game settings (graphics, audio; JSON serialization)
+│   ├── ui/                        # UI screens
+│   │   └── options_menu.zig       # Options menu (resolution, fullscreen, viewport, volume controls)
 │   │
 │   ├── missions/                  # Mission system
 │   │   ├── missions.zig           # Random mission generator (RNDM templates, base-type filtering, reward generation)
