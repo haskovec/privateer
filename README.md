@@ -20,8 +20,8 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress. See the
-[Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
+Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.2 done).
+See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
 
@@ -79,7 +79,11 @@ privateer/
 │   │   ├── config_overrides.zig   # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
 │   │   └── asset_watcher.zig      # Asset hot-reloading (polls mod dir for file changes, dev mode)
 │   │
-│   ├── settings.zig               # Persistent game settings (graphics, audio; JSON serialization)
+│   ├── settings.zig               # Persistent game settings (graphics, audio, input; JSON serialization)
+│   │
+│   ├── input/                     # Input handling
+│   │   └── joystick.zig           # Joystick/gamepad support (SDL3 gamepad API, deadzone, axis mapping, button edge detection)
+│   │
 │   ├── ui/                        # UI screens
 │   │   └── options_menu.zig       # Options menu (resolution, fullscreen, viewport, volume controls)
 │   │

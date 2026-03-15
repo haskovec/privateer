@@ -6,6 +6,7 @@ const std = @import("std");
 const viewport = @import("render/viewport.zig");
 const upscale_mod = @import("render/upscale.zig");
 const window_mod = @import("render/window.zig");
+const joystick_mod = @import("input/joystick.zig");
 
 /// All user-configurable game settings.
 pub const Settings = struct {
@@ -23,6 +24,10 @@ pub const Settings = struct {
     /// Music volume.
     music_volume: f32,
 
+    // Input
+    /// Joystick deadzone (0.0 to 1.0, fraction of axis range).
+    joystick_deadzone: f32,
+
     /// Create settings with default values.
     pub fn defaults() Settings {
         return .{
@@ -31,6 +36,7 @@ pub const Settings = struct {
             .viewport_mode = .fit_4_3,
             .sfx_volume = 1.0,
             .music_volume = 0.7,
+            .joystick_deadzone = joystick_mod.DEFAULT_DEADZONE,
         };
     }
 
@@ -44,10 +50,11 @@ pub const Settings = struct {
         return window_mod.BASE_HEIGHT * self.scale_factor.multiplier();
     }
 
-    /// Clamp volume values to valid range [0.0, 1.0].
+    /// Clamp volume and deadzone values to valid range [0.0, 1.0].
     pub fn sanitize(self: *Settings) void {
         self.sfx_volume = std.math.clamp(self.sfx_volume, 0.0, 1.0);
         self.music_volume = std.math.clamp(self.music_volume, 0.0, 1.0);
+        self.joystick_deadzone = std.math.clamp(self.joystick_deadzone, 0.0, 1.0);
     }
 };
 
@@ -65,7 +72,8 @@ pub fn toJson(allocator: std.mem.Allocator, settings: Settings) ![]u8 {
         .fit_4_3 => "fit_4_3",
     }});
     try std.fmt.format(buf.writer(allocator), "  \"sfx_volume\": {d:.2},\n", .{settings.sfx_volume});
-    try std.fmt.format(buf.writer(allocator), "  \"music_volume\": {d:.2}\n", .{settings.music_volume});
+    try std.fmt.format(buf.writer(allocator), "  \"music_volume\": {d:.2},\n", .{settings.music_volume});
+    try std.fmt.format(buf.writer(allocator), "  \"joystick_deadzone\": {d:.2}\n", .{settings.joystick_deadzone});
     try buf.appendSlice(allocator, "}");
 
     return buf.toOwnedSlice(allocator);
@@ -116,6 +124,11 @@ pub fn fromJson(json_str: []const u8) !Settings {
         if (v == .integer) settings.music_volume = @floatFromInt(v.integer);
     }
 
+    if (root.object.get("joystick_deadzone")) |v| {
+        if (v == .float) settings.joystick_deadzone = @floatCast(v.float);
+        if (v == .integer) settings.joystick_deadzone = @floatFromInt(v.integer);
+    }
+
     settings.sanitize();
     return settings;
 }
@@ -153,6 +166,7 @@ test "defaults returns expected values" {
     try std.testing.expectEqual(viewport.Mode.fit_4_3, s.viewport_mode);
     try std.testing.expectApproxEqAbs(@as(f32, 1.0), s.sfx_volume, 0.001);
     try std.testing.expectApproxEqAbs(@as(f32, 0.7), s.music_volume, 0.001);
+    try std.testing.expectApproxEqAbs(joystick_mod.DEFAULT_DEADZONE, s.joystick_deadzone, 0.001);
 }
 
 test "windowWidth and windowHeight compute correctly" {
@@ -192,6 +206,7 @@ test "toJson produces valid JSON" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"viewport_mode\": \"fit_4_3\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"sfx_volume\": 1.00") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"music_volume\": 0.70") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"joystick_deadzone\": 0.15") != null);
 }
 
 test "fromJson round-trips with toJson" {
@@ -202,6 +217,7 @@ test "fromJson round-trips with toJson" {
         .viewport_mode = .fill,
         .sfx_volume = 0.5,
         .music_volume = 0.3,
+        .joystick_deadzone = 0.25,
     };
     const json = try toJson(allocator, original);
     defer allocator.free(json);
@@ -212,6 +228,7 @@ test "fromJson round-trips with toJson" {
     try std.testing.expectEqual(original.viewport_mode, restored.viewport_mode);
     try std.testing.expectApproxEqAbs(original.sfx_volume, restored.sfx_volume, 0.01);
     try std.testing.expectApproxEqAbs(original.music_volume, restored.music_volume, 0.01);
+    try std.testing.expectApproxEqAbs(original.joystick_deadzone, restored.joystick_deadzone, 0.01);
 }
 
 test "fromJson returns defaults for empty JSON" {

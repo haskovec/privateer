@@ -5,6 +5,7 @@
 const std = @import("std");
 const sdl = @import("../sdl.zig");
 const c = sdl.raw;
+const joystick_mod = @import("../input/joystick.zig");
 
 /// Original game resolution.
 pub const BASE_WIDTH = 320;
@@ -27,6 +28,7 @@ pub const Window = struct {
     height: c_int,
     fullscreen: bool,
     quit_requested: bool,
+    joystick: joystick_mod.Joystick,
 
     pub const CreateError = error{
         WindowCreateFailed,
@@ -59,6 +61,7 @@ pub const Window = struct {
             .height = height,
             .fullscreen = false,
             .quit_requested = false,
+            .joystick = joystick_mod.Joystick.init(joystick_mod.DEFAULT_DEADZONE),
         };
     }
 
@@ -69,6 +72,7 @@ pub const Window = struct {
 
     /// Destroy the window and release all resources.
     pub fn destroy(self: *Window) void {
+        self.joystick.close();
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.sdl_window);
     }
@@ -81,6 +85,7 @@ pub const Window = struct {
 
     /// Process all pending SDL events. Returns false if quit was requested.
     pub fn pollEvents(self: *Window) bool {
+        self.joystick.beginFrame();
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -99,10 +104,22 @@ pub const Window = struct {
                     self.width = event.window.data1;
                     self.height = event.window.data2;
                 },
+                c.SDL_EVENT_GAMEPAD_ADDED,
+                c.SDL_EVENT_GAMEPAD_REMOVED,
+                c.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
+                c.SDL_EVENT_GAMEPAD_BUTTON_UP,
+                => {
+                    self.joystick.handleEvent(&event);
+                },
                 else => {},
             }
         }
         return true;
+    }
+
+    /// Get the current joystick flight input for this frame.
+    pub fn getFlightInput(self: *const Window) joystick_mod.FlightInput {
+        return self.joystick.readFlightInput();
     }
 
     /// Run the main game loop with a fixed timestep.

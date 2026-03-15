@@ -10,9 +10,9 @@ pub const InitError = error{
     SdlInitFailed,
 };
 
-/// Initialize SDL3 with video and audio subsystems.
+/// Initialize SDL3 with video, audio, and gamepad subsystems.
 pub fn init() InitError!void {
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO)) {
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO | c.SDL_INIT_GAMEPAD)) {
         std.log.err("SDL_Init failed: {s}", .{c.SDL_GetError()});
         return InitError.SdlInitFailed;
     }

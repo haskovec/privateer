@@ -637,11 +637,14 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test settings defaults, serialization, menu navigation, value adjustments
   - GREEN: Implement Settings, OptionsMenu, JSON round-trip, state transitions
 
-- [ ] **14.2 Joystick support**
-  - SDL3 game controller API
-  - Analog stick for flight, buttons for weapons/systems
-  - RED: Test joystick input maps to ship rotation
-  - GREEN: Implement joystick binding
+- [x] **14.2 Joystick support**
+  - SDL3 game controller API (auto-detect, hot-plug via SDL_EVENT_GAMEPAD_ADDED/REMOVED)
+  - Left stick for yaw/pitch with configurable deadzone and smooth rescaling
+  - Right trigger for throttle (0-1), shoulder buttons for fire/afterburner
+  - Face buttons for missile fire, target cycle, autopilot, nav map (edge-detected)
+  - Persistent deadzone setting in settings.json
+  - RED: Test axis normalization, deadzone, button edge detection, trigger mapping
+  - GREEN: Implement Joystick module, integrate with Window event loop
 
 - [ ] **14.3 Performance optimization**
   - Profile rendering pipeline

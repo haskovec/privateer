@@ -317,6 +317,7 @@ test "OptionsMenu init copies settings" {
         .viewport_mode = .fill,
         .sfx_volume = 0.5,
         .music_volume = 0.3,
+        .joystick_deadzone = 0.15,
     };
     const menu = OptionsMenu.init(s);
     try std.testing.expectEqual(upscale_mod.ScaleFactor.x3, menu.editing.scale_factor);
