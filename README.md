@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 8 complete. See the
+Phase 0 through Phase 8 complete, Phase 9 in progress. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -67,7 +67,8 @@ privateer/
 │   │   ├── scene.zig          # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   │   ├── game_state.zig     # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── click_region.zig   # Click region system (EFCT action parser, hit-testing, scene transitions)
-│   │   └── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │   ├── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │   └── missions.zig      # Random mission generator (RNDM templates, base-type filtering, reward generation)
 │   │
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)

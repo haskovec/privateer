@@ -479,7 +479,7 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 9: Mission System
 *Gives the gameplay purpose and progression.*
 
-- [ ] **9.1 Random mission generator**
+- [x] **9.1 Random mission generator**
   - Parse SKELETON.IFF and RNDM*.IFF templates
   - Generate missions based on current location and faction standings
   - RED: Test mission generator produces valid mission at agricultural base

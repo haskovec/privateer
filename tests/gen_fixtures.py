@@ -1876,6 +1876,75 @@ def gen_attitude_file():
     write("test_attitude.bin", root)
 
 
+def gen_mission_templates_file():
+    """Generate test mission templates fixture (FORM:RNDM with FORM:MISN entries).
+
+    Random mission template data for the mission computer.
+
+    Structure:
+        FORM:RNDM
+          FORM:MISN (per mission template)
+            INFO (4 bytes: type(u8), difficulty(u8), base_type_mask(u16 LE))
+                 type: 0=patrol, 1=scout, 2=defend, 3=attack, 4=bounty, 5=cargo
+                 difficulty: 1-5
+                 base_type_mask: bit mask of base types that offer this mission
+                   bit 0 = agricultural (type 1)
+                   bit 1 = mining (type 2)
+                   bit 2 = refinery (type 3)
+                   bit 3 = pleasure (type 4)
+                   bit 4 = pirate (type 5)
+                   bit 5 = military (type 6)
+            TEXT (null-terminated briefing template string)
+            PAYS (8 bytes: min_reward(i32 LE), max_reward(i32 LE))
+
+    Fixture: test_mission_templates.bin - 4 mission templates
+        Template 0: Patrol, difficulty 1, all base types (mask=0x3F)
+                    reward 5000-15000
+        Template 1: Cargo delivery, difficulty 1, agricultural/mining/refinery (mask=0x07)
+                    reward 3000-10000
+        Template 2: Bounty hunt, difficulty 3, pirate/military (mask=0x30)
+                    reward 10000-25000
+        Template 3: Defend, difficulty 2, agricultural/mining/military (mask=0x23)
+                    reward 8000-20000
+    """
+    def make_mission_template(mission_type, difficulty, base_type_mask, text, min_reward, max_reward):
+        info = make_iff_chunk(b"INFO", struct.pack('<BBH', mission_type, difficulty, base_type_mask))
+        text_chunk = make_iff_chunk(b"TEXT", text.encode('ascii') + b'\x00')
+        pays = make_iff_chunk(b"PAYS", struct.pack('<ii', min_reward, max_reward))
+        return make_iff_form(b"MISN", info + text_chunk + pays)
+
+    # Template 0: Patrol - available at all base types
+    patrol = make_mission_template(
+        mission_type=0, difficulty=1, base_type_mask=0x3F,
+        text="Patrol the designated nav points in the sector.",
+        min_reward=5000, max_reward=15000,
+    )
+
+    # Template 1: Cargo delivery - agricultural, mining, refinery
+    cargo = make_mission_template(
+        mission_type=5, difficulty=1, base_type_mask=0x07,
+        text="Deliver cargo to the specified destination.",
+        min_reward=3000, max_reward=10000,
+    )
+
+    # Template 2: Bounty hunt - pirate and military bases
+    bounty = make_mission_template(
+        mission_type=4, difficulty=3, base_type_mask=0x30,
+        text="Track down and destroy the target.",
+        min_reward=10000, max_reward=25000,
+    )
+
+    # Template 3: Defend - agricultural, mining, military
+    defend = make_mission_template(
+        mission_type=2, difficulty=2, base_type_mask=0x23,
+        text="Defend the convoy from hostile attackers.",
+        min_reward=8000, max_reward=20000,
+    )
+
+    root = make_iff_form(b"RNDM", patrol + cargo + bounty + defend)
+    write("test_mission_templates.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1907,4 +1976,5 @@ if __name__ == "__main__":
     gen_shipstuf_file()
     gen_landfee_file()
     gen_attitude_file()
+    gen_mission_templates_file()
     print("Done.")
