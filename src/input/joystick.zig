@@ -187,6 +187,23 @@ pub const Joystick = struct {
     }
 };
 
+/// Merge two FlightInput sources (e.g. keyboard + gamepad).
+/// Analog axes use "larger absolute value wins"; booleans OR-merge;
+/// throttle uses @max so a resting gamepad trigger doesn't drag keyboard throttle down.
+pub fn mergeFlightInput(a: FlightInput, b: FlightInput) FlightInput {
+    return .{
+        .yaw = if (@abs(a.yaw) >= @abs(b.yaw)) a.yaw else b.yaw,
+        .pitch = if (@abs(a.pitch) >= @abs(b.pitch)) a.pitch else b.pitch,
+        .throttle = @max(a.throttle, b.throttle),
+        .afterburner = a.afterburner or b.afterburner,
+        .fire_guns = a.fire_guns or b.fire_guns,
+        .fire_missile = a.fire_missile or b.fire_missile,
+        .cycle_target = a.cycle_target or b.cycle_target,
+        .autopilot = a.autopilot or b.autopilot,
+        .nav_map = a.nav_map or b.nav_map,
+    };
+}
+
 /// Default deadzone value (15% of axis range).
 pub const DEFAULT_DEADZONE: f32 = 0.15;
 
@@ -391,4 +408,68 @@ test "readFlightInput returns zero input when no gamepad connected" {
 test "DEFAULT_DEADZONE is reasonable value" {
     try testing.expect(DEFAULT_DEADZONE > 0.05);
     try testing.expect(DEFAULT_DEADZONE < 0.5);
+}
+
+// mergeFlightInput tests
+
+test "mergeFlightInput: keyboard-only passthrough" {
+    const kb = FlightInput{ .yaw = -1.0, .pitch = 1.0, .throttle = 0.5, .afterburner = true };
+    const gp = FlightInput{};
+    const merged = mergeFlightInput(kb, gp);
+    try testing.expectEqual(@as(f32, -1.0), merged.yaw);
+    try testing.expectEqual(@as(f32, 1.0), merged.pitch);
+    try testing.expectApproxEqAbs(@as(f32, 0.5), merged.throttle, 0.01);
+    try testing.expect(merged.afterburner);
+}
+
+test "mergeFlightInput: gamepad-only passthrough" {
+    const kb = FlightInput{};
+    const gp = FlightInput{ .yaw = 0.5, .pitch = -0.3, .throttle = 0.8, .fire_guns = true };
+    const merged = mergeFlightInput(kb, gp);
+    try testing.expectApproxEqAbs(@as(f32, 0.5), merged.yaw, 0.01);
+    try testing.expectApproxEqAbs(@as(f32, -0.3), merged.pitch, 0.01);
+    try testing.expectApproxEqAbs(@as(f32, 0.8), merged.throttle, 0.01);
+    try testing.expect(merged.fire_guns);
+}
+
+test "mergeFlightInput: larger absolute value wins for axes" {
+    const kb = FlightInput{ .yaw = -1.0, .pitch = 0.2 };
+    const gp = FlightInput{ .yaw = 0.5, .pitch = -0.8 };
+    const merged = mergeFlightInput(kb, gp);
+    try testing.expectEqual(@as(f32, -1.0), merged.yaw); // |-1| > |0.5|
+    try testing.expectEqual(@as(f32, -0.8), merged.pitch); // |-0.8| > |0.2|
+}
+
+test "mergeFlightInput: throttle uses max" {
+    const kb = FlightInput{ .throttle = 0.6 };
+    const gp = FlightInput{ .throttle = 0.0 }; // resting trigger
+    const merged = mergeFlightInput(kb, gp);
+    try testing.expectApproxEqAbs(@as(f32, 0.6), merged.throttle, 0.01);
+}
+
+test "mergeFlightInput: booleans OR-merge" {
+    const kb = FlightInput{ .afterburner = true, .fire_guns = false, .fire_missile = true };
+    const gp = FlightInput{ .afterburner = false, .fire_guns = true, .fire_missile = false };
+    const merged = mergeFlightInput(kb, gp);
+    try testing.expect(merged.afterburner);
+    try testing.expect(merged.fire_guns);
+    try testing.expect(merged.fire_missile);
+}
+
+test "mergeFlightInput: both zero produces zero" {
+    const a = FlightInput{};
+    const b = FlightInput{};
+    const merged = mergeFlightInput(a, b);
+    try testing.expectEqual(@as(f32, 0), merged.yaw);
+    try testing.expectEqual(@as(f32, 0), merged.pitch);
+    try testing.expectEqual(@as(f32, 0), merged.throttle);
+    try testing.expect(!merged.afterburner);
+    try testing.expect(!merged.fire_guns);
+}
+
+test "mergeFlightInput: equal absolute values picks first" {
+    const a = FlightInput{ .yaw = 0.5 };
+    const b = FlightInput{ .yaw = -0.5 };
+    const merged = mergeFlightInput(a, b);
+    try testing.expectEqual(@as(f32, 0.5), merged.yaw); // a wins on tie
 }

@@ -9,9 +9,9 @@ modern reimplementation of Wing Commander: Privateer (1993).
 2. **Original game files** -- a legal copy of Wing Commander: Privateer containing
    `GAME.DAT` (the ISO 9660 image with `PRIV.TRE` inside). Common sources include
    the GOG or EA release.
-3. **A gamepad is recommended** for space flight (Xbox, PlayStation, or any
-   SDL3-compatible controller). Keyboard flight controls are planned but not yet
-   implemented.
+3. **A gamepad is optional** for space flight (Xbox, PlayStation, or any
+   SDL3-compatible controller). Keyboard flight controls are fully supported
+   and both input methods work simultaneously.
 
 ## Quick Start
 
@@ -87,23 +87,25 @@ defaults to 15% and can be adjusted in `privateer.json`:
 }
 ```
 
-### Original Keyboard Reference
+### Keyboard -- Space Flight
 
-The original DOS game used these keyboard controls. Keyboard flight input is
-planned for a future update:
+Keyboard flight controls match the original DOS game. Both keyboard and gamepad
+can be used simultaneously — the engine merges inputs automatically.
 
 | Key               | Action              |
 |-------------------|---------------------|
-| Arrow keys        | Steer (yaw and pitch) |
-| +/-               | Increase/decrease speed |
-| Tab               | Afterburner         |
-| Space / Enter     | Fire guns           |
-| F (or specific key) | Fire missile     |
+| Arrow Left/Right  | Yaw (turn left/right) |
+| Arrow Up/Down     | Pitch (nose up/down)  |
+| + / =             | Increase throttle (held) |
+| -                 | Decrease throttle (held) |
+| Tab               | Afterburner (hold)  |
+| Space / Enter     | Fire guns (hold)    |
+| F                 | Fire missile        |
 | T                 | Cycle target        |
 | A                 | Autopilot           |
 | N                 | Nav map             |
-| G                 | Toggle gun selection |
-| Alt + Enter       | Toggle fullscreen (this engine) |
+
+Note: Alt + Enter is reserved for fullscreen toggle and will not fire guns.
 
 ## Graphics Options
 

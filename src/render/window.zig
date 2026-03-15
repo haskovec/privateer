@@ -6,6 +6,7 @@ const std = @import("std");
 const sdl = @import("../sdl.zig");
 const c = sdl.raw;
 const joystick_mod = @import("../input/joystick.zig");
+const keyboard_mod = @import("../input/keyboard.zig");
 
 /// Original game resolution.
 pub const BASE_WIDTH = 320;
@@ -29,6 +30,7 @@ pub const Window = struct {
     fullscreen: bool,
     quit_requested: bool,
     joystick: joystick_mod.Joystick,
+    keyboard: keyboard_mod.Keyboard,
 
     pub const CreateError = error{
         WindowCreateFailed,
@@ -62,6 +64,7 @@ pub const Window = struct {
             .fullscreen = false,
             .quit_requested = false,
             .joystick = joystick_mod.Joystick.init(joystick_mod.DEFAULT_DEADZONE),
+            .keyboard = keyboard_mod.Keyboard.init(),
         };
     }
 
@@ -86,6 +89,7 @@ pub const Window = struct {
     /// Process all pending SDL events. Returns false if quit was requested.
     pub fn pollEvents(self: *Window) bool {
         self.joystick.beginFrame();
+        self.keyboard.beginFrame();
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -93,12 +97,16 @@ pub const Window = struct {
                     self.quit_requested = true;
                     return false;
                 },
-                c.SDL_EVENT_KEY_DOWN => {
+                c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => {
                     const key = event.key;
                     // Alt+Enter toggles fullscreen
-                    if (key.key == c.SDLK_RETURN and (key.mod & c.SDL_KMOD_ALT) != 0) {
+                    if (event.type == c.SDL_EVENT_KEY_DOWN and
+                        key.key == c.SDLK_RETURN and (key.mod & c.SDL_KMOD_ALT) != 0)
+                    {
                         self.toggleFullscreen();
                     }
+                    // Route all key events to keyboard handler
+                    self.keyboard.handleEvent(&event);
                 },
                 c.SDL_EVENT_WINDOW_RESIZED => {
                     self.width = event.window.data1;
@@ -117,9 +125,13 @@ pub const Window = struct {
         return true;
     }
 
-    /// Get the current joystick flight input for this frame.
-    pub fn getFlightInput(self: *const Window) joystick_mod.FlightInput {
-        return self.joystick.readFlightInput();
+    /// Get the merged flight input (keyboard + gamepad) for this frame.
+    /// Uses a fixed dt of 1/60s for keyboard throttle ramping.
+    pub fn getFlightInput(self: *Window) joystick_mod.FlightInput {
+        const dt: f32 = 1.0 / @as(f32, @floatFromInt(TARGET_FPS));
+        const kb_input = self.keyboard.readFlightInput(dt);
+        const gp_input = self.joystick.readFlightInput();
+        return joystick_mod.mergeFlightInput(kb_input, gp_input);
     }
 
     /// Run the main game loop with a fixed timestep.

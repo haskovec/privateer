@@ -94,6 +94,7 @@ pub const auto_save = @import("persistence/auto_save.zig");
 
 // Input
 pub const joystick = @import("input/joystick.zig");
+pub const keyboard = @import("input/keyboard.zig");
 
 // Settings & UI
 pub const settings = @import("settings.zig");
