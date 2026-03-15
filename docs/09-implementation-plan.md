@@ -646,7 +646,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test axis normalization, deadzone, button edge detection, trigger mapping
   - GREEN: Implement Joystick module, integrate with Window event loop
 
-- [ ] **14.3 Performance optimization**
+- [x] **14.3 Performance optimization**
   - Profile rendering pipeline
   - Optimize sprite upscaling (cache upscaled sprites)
   - Optimize IFF loading (memory-map TRE file)

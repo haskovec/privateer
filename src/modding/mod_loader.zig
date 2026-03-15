@@ -73,7 +73,7 @@ pub const ModLoader = struct {
         }
 
         // Fall back to TRE by extracting the basename
-        const basename = std.fs.path.basename(normalized);
+        const basename = tre.dosBasename(normalized);
         const data = try self.loadFromTre(basename);
         return .{ .data = data, .source = .tre };
     }
@@ -86,7 +86,7 @@ pub const ModLoader = struct {
             var entry = try tre.readEntry(self.allocator, self.tre_data, @intCast(i));
             defer entry.deinit();
 
-            const basename = std.fs.path.basename(entry.path);
+            const basename = tre.dosBasename(entry.path);
             if (std.ascii.eqlIgnoreCase(basename, filename)) {
                 const normalized = extract.normalizeTrePath(entry.path) orelse continue;
                 const fwd = try extract.toForwardSlashes(self.allocator, normalized);

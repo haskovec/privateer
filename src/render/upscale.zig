@@ -60,6 +60,121 @@ pub fn upscale(
     };
 }
 
+// --- Sprite cache ---
+
+/// Cache key combining source data identity and scale factor.
+const CacheKey = struct {
+    data_ptr: usize,
+    data_len: usize,
+    width: u32,
+    height: u32,
+    factor: ScaleFactor,
+};
+
+/// Cached upscaled sprite entry.
+const CacheEntry = struct {
+    key: CacheKey,
+    image: CachedImage,
+};
+
+/// A cached upscaled image (not owned by caller -- owned by cache).
+pub const CachedImage = struct {
+    width: u32,
+    height: u32,
+    pixels: []u8,
+};
+
+/// LRU cache for upscaled sprites. Avoids redundant upscaling of the same
+/// source data at the same scale factor across frames.
+pub const SpriteCache = struct {
+    allocator: std.mem.Allocator,
+    entries: std.ArrayListUnmanaged(CacheEntry),
+    max_entries: usize,
+
+    const DEFAULT_MAX_ENTRIES: usize = 256;
+
+    pub fn init(allocator: std.mem.Allocator) SpriteCache {
+        return initWithCapacity(allocator, DEFAULT_MAX_ENTRIES);
+    }
+
+    pub fn initWithCapacity(allocator: std.mem.Allocator, max_entries: usize) SpriteCache {
+        return .{
+            .allocator = allocator,
+            .entries = .empty,
+            .max_entries = max_entries,
+        };
+    }
+
+    pub fn deinit(self: *SpriteCache) void {
+        for (self.entries.items) |entry| {
+            self.allocator.free(entry.image.pixels);
+        }
+        self.entries.deinit(self.allocator);
+    }
+
+    /// Look up a cached upscaled sprite, or perform the upscale and cache it.
+    /// The returned CachedImage is valid until the cache is modified or deinited.
+    pub fn getOrUpscale(
+        self: *SpriteCache,
+        src: []const u8,
+        width: u32,
+        height: u32,
+        factor: ScaleFactor,
+    ) !CachedImage {
+        const key = CacheKey{
+            .data_ptr = @intFromPtr(src.ptr),
+            .data_len = src.len,
+            .width = width,
+            .height = height,
+            .factor = factor,
+        };
+
+        // Search for existing entry
+        for (self.entries.items, 0..) |entry, i| {
+            if (std.meta.eql(entry.key, key)) {
+                // Move to end (most recently used)
+                if (i < self.entries.items.len - 1) {
+                    const found = self.entries.orderedRemove(i);
+                    try self.entries.append(self.allocator, found);
+                }
+                return self.entries.items[self.entries.items.len - 1].image;
+            }
+        }
+
+        // Cache miss: perform upscale
+        var result = try upscale(self.allocator, src, width, height, factor);
+        // We take ownership of the pixels; don't let UpscaledImage free them
+        const cached = CachedImage{
+            .width = result.width,
+            .height = result.height,
+            .pixels = result.pixels,
+        };
+        // Prevent deinit from freeing pixels we now own
+        result.pixels = &.{};
+
+        // Evict oldest if at capacity
+        if (self.entries.items.len >= self.max_entries) {
+            const evicted = self.entries.orderedRemove(0);
+            self.allocator.free(evicted.image.pixels);
+        }
+
+        try self.entries.append(self.allocator, .{ .key = key, .image = cached });
+        return cached;
+    }
+
+    pub fn count(self: *const SpriteCache) usize {
+        return self.entries.items.len;
+    }
+
+    /// Clear all cached entries and free their memory.
+    pub fn clear(self: *SpriteCache) void {
+        for (self.entries.items) |entry| {
+            self.allocator.free(entry.image.pixels);
+        }
+        self.entries.clearRetainingCapacity();
+    }
+};
+
 // --- Internal helpers ---
 
 /// Compare two RGBA pixels for equality.
@@ -472,6 +587,88 @@ test "scale factor multiplier values" {
     try std.testing.expectEqual(@as(u32, 2), ScaleFactor.x2.multiplier());
     try std.testing.expectEqual(@as(u32, 3), ScaleFactor.x3.multiplier());
     try std.testing.expectEqual(@as(u32, 4), ScaleFactor.x4.multiplier());
+}
+
+// === Sprite cache tests ===
+
+test "SpriteCache: cache hit returns same pixels as fresh upscale" {
+    const allocator = std.testing.allocator;
+    const R = rgba(255, 0, 0, 255);
+    const G = rgba(0, 255, 0, 255);
+    const src = buildImage(2, 2, .{
+        .{ R, G },
+        .{ G, R },
+    });
+
+    var cache = SpriteCache.init(allocator);
+    defer cache.deinit();
+
+    // First call: cache miss, performs upscale
+    const result1 = try cache.getOrUpscale(&src, 2, 2, .x2);
+    // Second call: cache hit, returns cached data
+    const result2 = try cache.getOrUpscale(&src, 2, 2, .x2);
+
+    try std.testing.expectEqual(result1.width, result2.width);
+    try std.testing.expectEqual(result1.height, result2.height);
+    try std.testing.expectEqualSlices(u8, result1.pixels, result2.pixels);
+    // Pointers should be identical (same cached allocation)
+    try std.testing.expectEqual(result1.pixels.ptr, result2.pixels.ptr);
+}
+
+test "SpriteCache: different scale factors produce different entries" {
+    const allocator = std.testing.allocator;
+    const W = rgba(255, 255, 255, 255);
+    const src = buildImage(2, 2, .{
+        .{ W, W },
+        .{ W, W },
+    });
+
+    var cache = SpriteCache.init(allocator);
+    defer cache.deinit();
+
+    const r2 = try cache.getOrUpscale(&src, 2, 2, .x2);
+    const r3 = try cache.getOrUpscale(&src, 2, 2, .x3);
+
+    try std.testing.expectEqual(@as(u32, 4), r2.width);
+    try std.testing.expectEqual(@as(u32, 6), r3.width);
+}
+
+test "SpriteCache: different source data produces different entries" {
+    const allocator = std.testing.allocator;
+    const R = rgba(255, 0, 0, 255);
+    const B = rgba(0, 0, 255, 255);
+    const src1 = buildImage(1, 1, .{.{R}});
+    const src2 = buildImage(1, 1, .{.{B}});
+
+    var cache = SpriteCache.init(allocator);
+    defer cache.deinit();
+
+    const r1 = try cache.getOrUpscale(&src1, 1, 1, .x2);
+    const r2 = try cache.getOrUpscale(&src2, 1, 1, .x2);
+
+    // Different source data should produce different results
+    try std.testing.expect(!std.mem.eql(u8, r1.pixels, r2.pixels));
+}
+
+test "SpriteCache: evicts entries when capacity exceeded" {
+    const allocator = std.testing.allocator;
+
+    var cache = SpriteCache.initWithCapacity(allocator, 2);
+    defer cache.deinit();
+
+    const R = rgba(255, 0, 0, 255);
+    const G = rgba(0, 255, 0, 255);
+    const B = rgba(0, 0, 255, 255);
+    const src1 = buildImage(1, 1, .{.{R}});
+    const src2 = buildImage(1, 1, .{.{G}});
+    const src3 = buildImage(1, 1, .{.{B}});
+
+    _ = try cache.getOrUpscale(&src1, 1, 1, .x2);
+    _ = try cache.getOrUpscale(&src2, 1, 1, .x2);
+    // This should evict the oldest entry
+    _ = try cache.getOrUpscale(&src3, 1, 1, .x2);
+
+    try std.testing.expectEqual(@as(usize, 2), cache.count());
 }
 
 // === Edge cases ===

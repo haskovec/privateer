@@ -95,13 +95,26 @@ pub fn extractFileData(data: []const u8, entry_offset: u32, entry_size: u32) Tre
     return data[file_start..file_end];
 }
 
+/// Extract the filename portion from a DOS-style path (handles both / and \ separators).
+pub fn dosBasename(path: []const u8) []const u8 {
+    var last_sep: usize = 0;
+    var found = false;
+    for (path, 0..) |c, i| {
+        if (c == '\\' or c == '/') {
+            last_sep = i;
+            found = true;
+        }
+    }
+    return if (found) path[last_sep + 1 ..] else path;
+}
+
 /// Find a TRE entry by path suffix (case-insensitive match on the filename portion).
 pub fn findEntry(allocator: std.mem.Allocator, data: []const u8, filename: []const u8) !TreEntry {
     const header = try readHeader(data);
     for (0..header.entry_count) |i| {
         var entry = try readEntry(allocator, data, @intCast(i));
         // Check if the path ends with the requested filename
-        const basename = std.fs.path.basename(entry.path);
+        const basename = dosBasename(entry.path);
         if (std.ascii.eqlIgnoreCase(basename, filename)) {
             return entry;
         }
@@ -109,6 +122,110 @@ pub fn findEntry(allocator: std.mem.Allocator, data: []const u8, filename: []con
     }
     return TreError.ReadError; // not found
 }
+
+/// Memory-mapped TRE archive handle.
+/// Uses mmap for zero-copy access to the archive data, avoiding
+/// a full allocation + copy of the ~90 MB file.
+pub const MappedTre = struct {
+    data: []align(std.heap.page_size_min) u8,
+
+    /// Memory-map a TRE file from disk. The returned data slice is valid until
+    /// `deinit()` is called. No allocator is needed for the mapping itself.
+    pub fn open(path: []const u8) !MappedTre {
+        const file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+        const stat = try file.stat();
+        const data = try std.posix.mmap(
+            null,
+            stat.size,
+            std.posix.PROT.READ,
+            std.posix.MAP{ .TYPE = .SHARED },
+            file.handle,
+            0,
+        );
+        return .{ .data = data };
+    }
+
+    /// Unmap the file.
+    pub fn deinit(self: *MappedTre) void {
+        std.posix.munmap(self.data);
+    }
+};
+
+/// Indexed TRE archive for O(1) filename lookups.
+/// Pre-parses all entries and builds a hash map keyed by lowercase basename.
+pub const TreIndex = struct {
+    allocator: std.mem.Allocator,
+    entries: []TreEntry,
+    /// Map from lowercase basename to index in entries array.
+    name_map: std.StringHashMapUnmanaged(usize),
+    /// Storage for lowercase key strings.
+    key_storage: std.ArrayListUnmanaged([]u8),
+
+    pub fn build(allocator: std.mem.Allocator, data: []const u8) !TreIndex {
+        const entries = try readAllEntries(allocator, data);
+        errdefer {
+            for (entries) |*e| {
+                var entry = e.*;
+                entry.deinit();
+            }
+            allocator.free(entries);
+        }
+
+        var name_map: std.StringHashMapUnmanaged(usize) = .empty;
+        var key_storage: std.ArrayListUnmanaged([]u8) = .empty;
+        errdefer {
+            for (key_storage.items) |k| allocator.free(k);
+            key_storage.deinit(allocator);
+            name_map.deinit(allocator);
+        }
+
+        for (entries, 0..) |entry, i| {
+            const basename = dosBasename(entry.path);
+            const lower = try allocator.alloc(u8, basename.len);
+            for (basename, 0..) |c, j| {
+                lower[j] = std.ascii.toLower(c);
+            }
+            try key_storage.append(allocator, lower);
+            try name_map.put(allocator, lower, i);
+        }
+
+        return .{
+            .allocator = allocator,
+            .entries = entries,
+            .name_map = name_map,
+            .key_storage = key_storage,
+        };
+    }
+
+    pub fn deinit(self: *TreIndex) void {
+        for (self.entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        self.allocator.free(self.entries);
+        for (self.key_storage.items) |k| self.allocator.free(k);
+        self.key_storage.deinit(self.allocator);
+        self.name_map.deinit(self.allocator);
+    }
+
+    /// Find entry by filename (case-insensitive basename match). Returns null if not found.
+    pub fn findEntry(self: *const TreIndex, filename: []const u8) ?*const TreEntry {
+        // Convert lookup key to lowercase on the stack
+        var buf: [128]u8 = undefined;
+        if (filename.len > buf.len) return null;
+        for (filename, 0..) |c, i| {
+            buf[i] = std.ascii.toLower(c);
+        }
+        const key = buf[0..filename.len];
+        const idx = self.name_map.get(key) orelse return null;
+        return &self.entries[idx];
+    }
+
+    pub fn count(self: *const TreIndex) usize {
+        return self.entries.len;
+    }
+};
 
 // --- Tests ---
 
@@ -213,4 +330,126 @@ test "findEntry locates file by name" {
 test "readHeader rejects too-small data" {
     const data = [_]u8{ 0, 0, 0 };
     try std.testing.expectError(TreError.InvalidHeader, readHeader(&data));
+}
+
+// --- TreIndex tests ---
+
+test "TreIndex: build from entries and lookup by filename" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(data);
+
+    var index = try TreIndex.build(allocator, data);
+    defer index.deinit();
+
+    const entry = index.findEntry("ATTITUDE.IFF");
+    try std.testing.expect(entry != null);
+    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.?.path);
+}
+
+test "TreIndex: case-insensitive lookup" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(data);
+
+    var index = try TreIndex.build(allocator, data);
+    defer index.deinit();
+
+    const entry = index.findEntry("attitude.iff");
+    try std.testing.expect(entry != null);
+    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.?.path);
+}
+
+test "TreIndex: lookup nonexistent file returns null" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(data);
+
+    var index = try TreIndex.build(allocator, data);
+    defer index.deinit();
+
+    const entry = index.findEntry("NONEXISTENT.IFF");
+    try std.testing.expect(entry == null);
+}
+
+test "TreIndex: extract file data via indexed entry" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(data);
+
+    var index = try TreIndex.build(allocator, data);
+    defer index.deinit();
+
+    const entry = index.findEntry("ATTITUDE.IFF").?;
+    const file_data = try extractFileData(data, entry.offset, entry.size);
+    try std.testing.expectEqualStrings("FORM", file_data[0..4]);
+}
+
+test "TreIndex: all entries accessible" {
+    const allocator = std.testing.allocator;
+    const data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(data);
+
+    var index = try TreIndex.build(allocator, data);
+    defer index.deinit();
+
+    try std.testing.expect(index.findEntry("ATTITUDE.IFF") != null);
+    try std.testing.expect(index.findEntry("BEHAVIOR.IFF") != null);
+    try std.testing.expect(index.findEntry("GALAXY.PAK") != null);
+    try std.testing.expectEqual(@as(usize, 3), index.count());
+}
+
+// --- MappedTre tests ---
+
+test "MappedTre: memory-map fixture file and parse header" {
+    // Write fixture to a temp file so we can mmap it
+    const allocator = std.testing.allocator;
+    const fixture = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(fixture);
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    {
+        const f = try tmp_dir.dir.createFile("test.tre", .{});
+        defer f.close();
+        try f.writeAll(fixture);
+    }
+
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
+    defer allocator.free(tmp_path);
+
+    var mapped = try MappedTre.open(tmp_path);
+    defer mapped.deinit();
+
+    // Should be able to parse the header from mapped data
+    const header = try readHeader(mapped.data);
+    try std.testing.expectEqual(@as(u32, 3), header.entry_count);
+}
+
+test "MappedTre: build TreIndex from mapped data" {
+    const allocator = std.testing.allocator;
+    const fixture = try testing_helpers.loadFixture(allocator, "test_tre.bin");
+    defer allocator.free(fixture);
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    {
+        const f = try tmp_dir.dir.createFile("test.tre", .{});
+        defer f.close();
+        try f.writeAll(fixture);
+    }
+
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
+    defer allocator.free(tmp_path);
+
+    var mapped = try MappedTre.open(tmp_path);
+    defer mapped.deinit();
+
+    var index = try TreIndex.build(allocator, mapped.data);
+    defer index.deinit();
+
+    try std.testing.expect(index.findEntry("ATTITUDE.IFF") != null);
+    try std.testing.expectEqual(@as(usize, 3), index.count());
 }
