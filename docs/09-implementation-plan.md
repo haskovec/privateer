@@ -508,7 +508,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test script execution triggers correct events
   - GREEN: Implement script interpreter
 
-- [ ] **9.5 Plot missions (Series 0-9)**
+- [x] **9.5 Plot missions (Series 0-7)**
   - Implement all plot mission series from MISSIONS/ directory
   - RED: Test each mission can be loaded and script is valid
   - GREEN: Implement per-mission verification

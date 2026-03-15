@@ -125,15 +125,14 @@ Landing/takeoff animations and mid-game cinematics.
 | File | Description |
 |------|-------------|
 | BFILMNGR.IFF | Mission file manager |
-| PLOTMSNS.IFF | Plot mission master list |
+| PLOTMSNS.IFF | Plot mission master list (24 entries) |
 | S0MA.IFF | Series 0 Mission A |
 | S1MA-S1MD.IFF | Series 1 Missions A-D |
 | S2MA-S2MD.IFF | Series 2 Missions A-D |
-| S3MA-S3MC.IFF | Series 3 Missions A-C |
-| S4MA-S4MC.IFF | Series 4 Missions A-C |
-| S5MA-S5MC.IFF | Series 5 Missions A-C |
-| S6MA-S6MC.IFF | Series 6 Missions A-C |
-| S9MA.IFF | Series 9 Mission A |
+| S3MA-S3MD.IFF | Series 3 Missions A-D |
+| S4MA-S4MD.IFF | Series 4 Missions A-D |
+| S5MA-S5MD.IFF | Series 5 Missions A-D |
+| S7MA-S7MB.IFF | Series 7 Missions A-B (finale) |
 | SKELETON.IFF | Mission template/skeleton |
 
 ### DATA/MOUSE/ (1 SHP file)

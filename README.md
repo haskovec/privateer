@@ -73,7 +73,8 @@ privateer/
 │   │   ├── missions.zig       # Random mission generator (RNDM templates, base-type filtering, reward generation)
 │   │   ├── mission_computer.zig # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
 │   │   ├── mission_tracker.zig # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
-│   │   └── plot_missions.zig  # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
+│   │   ├── plot_missions.zig  # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
+│   │   └── plot_series.zig   # Plot mission series catalog & validation (series S0-S7 grouping, structural verification)
 │   │
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)

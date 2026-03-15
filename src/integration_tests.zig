@@ -2223,3 +2223,197 @@ test "integration: all plot mission files parse without errors" {
     // We should have parsed at least 23 plot mission files
     try std.testing.expect(parsed_count >= 23);
 }
+
+// --- Plot mission series verification (Phase 9.5) ---
+
+const plot_series = @import("missions/plot_series.zig");
+
+test "integration: plot mission files group into expected series counts" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var ids_buf: [64]plot_series.MissionId = undefined;
+    var ids_count: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        // Only consider MISSIONS/ directory files
+        const is_mission = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 8 and std.ascii.eqlIgnoreCase(remaining[0..8], "MISSIONS")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_mission) continue;
+
+        if (plot_series.MissionId.fromFilename(basename)) |id| {
+            ids_buf[ids_count] = id;
+            ids_count += 1;
+        }
+    }
+
+    const counts = plot_series.countBySeries(ids_buf[0..ids_count]);
+
+    // Print actual counts for diagnostics
+    std.debug.print("\nPlot mission series counts (total {d} missions):\n", .{ids_count});
+    for (0..10) |s| {
+        if (counts[s] > 0) {
+            std.debug.print("  Series {d}: {d} missions\n", .{ s, counts[s] });
+        }
+    }
+
+    // Verify each known series has the expected number of missions
+    for (plot_series.SERIES) |s| {
+        if (counts[s.series] != s.expected_count) {
+            std.debug.print("Series {d}: expected {d} missions, found {d}\n", .{ s.series, s.expected_count, counts[s.series] });
+        }
+        try std.testing.expectEqual(s.expected_count, counts[s.series]);
+    }
+}
+
+test "integration: PLOTMSNS.IFF has 24 mission entries" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const list_data = try findTreFileByPath(allocator, loaded.tre_data, "MISSIONS", "PLOTMSNS.IFF") orelse return;
+    var list = try plot_missions.parsePlotMissionList(allocator, list_data);
+    defer list.deinit();
+
+    try std.testing.expectEqual(@as(usize, 24), list.count());
+}
+
+test "integration: all plot missions pass structural validation" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var validated_count: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        const is_mission = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 8 and std.ascii.eqlIgnoreCase(remaining[0..8], "MISSIONS")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_mission) continue;
+        if (plot_series.MissionId.fromFilename(basename) == null) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var mission = plot_missions.parsePlotMission(allocator, file_data) catch |err| {
+            std.debug.print("Failed to parse {s}: {}\n", .{ basename, err });
+            return err;
+        };
+        defer mission.deinit();
+
+        const vr = plot_series.validateMission(&mission);
+        if (!vr.isValid()) {
+            std.debug.print("Validation failed for {s}: {d} errors\n", .{ basename, vr.error_count });
+            for (vr.errors[0..vr.error_count]) |err| {
+                if (err) |e| {
+                    std.debug.print("  - {s}\n", .{@tagName(e)});
+                }
+            }
+            return error.ValidationFailed;
+        }
+
+        validated_count += 1;
+    }
+
+    // All known plot missions should validate
+    try std.testing.expect(validated_count >= plot_series.TOTAL_EXPECTED_MISSIONS);
+}
+
+test "integration: every plot mission has PLAYER as first cast member" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var checked: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        const is_mission = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 8 and std.ascii.eqlIgnoreCase(remaining[0..8], "MISSIONS")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_mission) continue;
+        if (plot_series.MissionId.fromFilename(basename) == null) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var mission = try plot_missions.parsePlotMission(allocator, file_data);
+        defer mission.deinit();
+
+        // Every plot mission must have PLAYER as the first cast member
+        try std.testing.expect(mission.castCount() >= 1);
+        try std.testing.expectEqualStrings("PLAYER", mission.castName(0).?);
+
+        checked += 1;
+    }
+
+    try std.testing.expect(checked >= plot_series.TOTAL_EXPECTED_MISSIONS);
+}
+
+test "integration: plot missions are ordered by series in TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var prev_series: ?u8 = null;
+    var mission_count: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        const is_mission = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 8 and std.ascii.eqlIgnoreCase(remaining[0..8], "MISSIONS")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_mission) continue;
+
+        if (plot_series.MissionId.fromFilename(basename)) |id| {
+            // Missions should appear in non-decreasing series order in TRE
+            if (prev_series) |ps| {
+                try std.testing.expect(id.series >= ps);
+            }
+            prev_series = id.series;
+            mission_count += 1;
+        }
+    }
+
+    try std.testing.expect(mission_count >= plot_series.TOTAL_EXPECTED_MISSIONS);
+}

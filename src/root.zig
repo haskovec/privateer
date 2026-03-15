@@ -44,6 +44,7 @@ pub const missions = @import("missions/missions.zig");
 pub const mission_computer = @import("missions/mission_computer.zig");
 pub const mission_tracker = @import("missions/mission_tracker.zig");
 pub const plot_missions = @import("missions/plot_missions.zig");
+pub const plot_series = @import("missions/plot_series.zig");
 
 // Economy & Trading
 pub const commodities = @import("economy/commodities.zig");
