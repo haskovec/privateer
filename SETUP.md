@@ -22,7 +22,13 @@ The directory must contain `GAME.DAT` directly (not inside a subdirectory).
 ## 2. Configuration
 
 The engine uses a single config file `privateer.json` in the working directory.
-Create it with your game data path:
+Copy the example and edit it with your game data path:
+
+```bash
+cp privateer.json.example privateer.json
+```
+
+The full set of options:
 
 ```json
 {

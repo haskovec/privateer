@@ -29,6 +29,7 @@ See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progr
 privateer/
 ├── build.zig                      # Zig build configuration (exe, engine module, test suites)
 ├── build.zig.zon                  # Zig package dependencies (SDL3)
+├── privateer.json.example         # Example config file (copy to privateer.json and edit)
 ├── src/
 │   ├── main.zig                   # Game executable entry point
 │   ├── root.zig                   # Engine library root (exports all submodules)
