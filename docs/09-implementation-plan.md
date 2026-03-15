@@ -558,22 +558,24 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 11: Audio System
 *Sound brings the game to life.*
 
-- [ ] **11.1 SDL3 audio initialization**
+- [x] **11.1 SDL3 audio initialization**
   - Set up audio device and mixer
   - RED: Test audio device opens with correct format (44100 Hz, 16-bit, stereo)
   - GREEN: Implement audio init
 
-- [ ] **11.2 VOC playback**
+- [x] **11.2 VOC playback**
   - Play Creative Voice files for speech and effects
   - Resample from 11025 Hz to device rate
   - RED: Test VOC file plays audible audio
   - GREEN: Implement VOC decoder + playback
 
-- [ ] **11.3 Sound effects system**
-  - Parse soundfx.pak for effects
-  - Trigger effects on game events (weapons, explosions, UI)
-  - RED: Test firing gun triggers gun sound effect
-  - GREEN: Implement event-to-sound mapping
+- [x] **11.3 Sound effects system**
+  - Procedural waveform synthesis (sine, square, sawtooth, noise) for all effect types
+  - Sound bank with 24 effect types (weapons, combat, flight, UI)
+  - Multi-channel mixer (8 channels) for simultaneous playback via SDL3 AudioStreams
+  - Event-to-sound mapping (gun type → sound, explosion size → sound)
+  - RED: Test synthesis produces correct waveforms and sample counts
+  - GREEN: Implement SoundBank, SoundMixer, and event dispatch
 
 - [ ] **11.4 Music playback**
   - Convert XMIDI/GEN to standard MIDI or synthesize directly

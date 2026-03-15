@@ -84,6 +84,7 @@ pub const rumors = @import("conversations/rumors.zig");
 
 // Audio
 pub const audio = @import("audio/audio.zig");
+pub const sound_effects = @import("audio/sound_effects.zig");
 
 // CLI tools
 pub const extract = @import("cli/extract.zig");
