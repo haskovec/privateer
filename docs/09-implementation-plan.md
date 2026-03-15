@@ -589,7 +589,7 @@ No phase should start until its dependencies are complete and tested green.
 
 ## Phase 12: Save/Load & Persistence
 
-- [ ] **12.1 Save game format**
+- [x] **12.1 Save game format**
   - Design save format (JSON or binary with versioning)
   - Capture: player ship, location, credits, cargo, equipment, reputation,
     mission state, plot flags, kill stats

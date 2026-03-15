@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 11 complete. See the
+Phase 0 through Phase 11 complete. Phase 12.1 (save game format) complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -66,6 +66,7 @@ privateer/
 │   │   ├── nav_map.zig          # Nav map display (sector map renderer, hit-testing, autopilot selection)
 │   │   ├── scene.zig            # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   │   ├── game_state.zig       # Game state machine (state transitions, action handling, scene tracking)
+│   │   ├── save_game.zig       # Save game serialization (binary format, round-trip encode/decode)
 │   │   ├── click_region.zig     # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   └── midgame.zig          # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
