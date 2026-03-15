@@ -529,7 +529,7 @@ No phase should start until its dependencies are complete and tested green.
   - GREEN: Implement all conversation parsers
   - Integration test: Parse all 19 CONV IFF files and PFC scripts without errors
 
-- [ ] **10.2 Conversation UI**
+- [x] **10.2 Conversation UI**
   - Display NPC portraits, dialogue text, player response choices
   - RED: Test conversation displays correct NPC text
   - GREEN: Implement conversation renderer

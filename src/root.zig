@@ -77,6 +77,7 @@ pub const messages = @import("cockpit/messages.zig");
 
 // Conversation system
 pub const conversations = @import("conversations/conversations.zig");
+pub const conversation_ui = @import("conversations/conversation_ui.zig");
 
 // CLI tools
 pub const extract = @import("cli/extract.zig");

@@ -77,7 +77,8 @@ privateer/
 │   │   └── plot_series.zig      # Plot mission series catalog & validation (series S0-S7 grouping, structural verification)
 │   │
 │   ├── conversations/           # Conversation & dialogue system
-│   │   └── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
+│   │   ├── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
+│   │   └── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
 │   │
 │   ├── economy/                 # Economy & trading systems
 │   │   ├── commodities.zig      # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
