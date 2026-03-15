@@ -547,7 +547,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test fixer appears at correct base when plot conditions are met
   - GREEN: Implement fixer spawn logic
 
-- [ ] **10.5 Rumors system**
+- [x] **10.5 Rumors system**
   - Parse RUMR forms from conversation data
   - Display context-appropriate rumors at bars
   - RED: Test rumor selection matches current game state

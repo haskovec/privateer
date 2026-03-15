@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 9 complete, Phase 10 in progress. See the
+Phase 0 through Phase 10 complete, Phase 11 next. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -80,7 +80,8 @@ privateer/
 │   │   ├── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
 │   │   ├── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
 │   │   ├── conversation_audio.zig # Conversation audio (VPK→VOC→PCM pipeline, voice clip playback per dialogue line)
-│   │   └── bar_encounters.zig   # Bar/fixer encounter system (plot state tracking, fixer spawn logic, mission progression)
+│   │   ├── bar_encounters.zig   # Bar/fixer encounter system (plot state tracking, fixer spawn logic, mission progression)
+│   │   └── rumors.zig          # Rumors system (weighted category selection, base-type rumor tables, random conversation picker)
 │   │
 │   ├── economy/                 # Economy & trading systems
 │   │   ├── commodities.zig      # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)

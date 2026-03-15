@@ -80,6 +80,7 @@ pub const conversations = @import("conversations/conversations.zig");
 pub const conversation_ui = @import("conversations/conversation_ui.zig");
 pub const conversation_audio = @import("conversations/conversation_audio.zig");
 pub const bar_encounters = @import("conversations/bar_encounters.zig");
+pub const rumors = @import("conversations/rumors.zig");
 
 // Audio
 pub const audio = @import("audio/audio.zig");
