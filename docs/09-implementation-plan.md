@@ -610,7 +610,7 @@ No phase should start until its dependencies are complete and tested green.
 
 ## Phase 13: Modding Support
 
-- [ ] **13.1 Mod directory loading**
+- [x] **13.1 Mod directory loading**
   - Check `mods/<modname>/` before loading from TRE
   - RED: Test loose file in mod dir overrides TRE file
   - GREEN: Implement mod file priority system
