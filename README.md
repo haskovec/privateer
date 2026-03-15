@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 11 complete. Phase 12.1-12.2 (save game format, save/load UI) complete. See the
+Phase 0 through Phase 12 complete. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -68,6 +68,7 @@ privateer/
 │   │   ├── game_state.zig       # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── save_game.zig       # Save game serialization (binary format, round-trip encode/decode)
 │   │   ├── save_slots.zig     # Save slot manager (10 slots, file I/O, metadata extraction, slot listing)
+│   │   ├── auto_save.zig      # Auto-save system (landing hook, dedicated autosave.sav file, load/delete)
 │   │   ├── click_region.zig     # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   └── midgame.zig          # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │

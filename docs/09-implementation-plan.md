@@ -601,7 +601,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test save menu shows available slots
   - GREEN: Implement save/load menu
 
-- [ ] **12.3 Auto-save**
+- [x] **12.3 Auto-save**
   - Auto-save on landing at a base
   - RED: Test landing triggers auto-save
   - GREEN: Implement auto-save hook
