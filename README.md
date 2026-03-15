@@ -27,117 +27,117 @@ Phase 0 through Phase 12 complete. Phase 13 (Modding Support) in progress. See t
 
 ```
 privateer/
-├── build.zig                    # Zig build configuration (exe, engine module, test suites)
-├── build.zig.zon                # Zig package dependencies (SDL3)
+├── build.zig                      # Zig build configuration (exe, engine module, test suites)
+├── build.zig.zon                  # Zig package dependencies (SDL3)
 ├── src/
-│   ├── main.zig                 # Game executable entry point
-│   ├── root.zig                 # Engine library root (exports all submodules)
-│   ├── config.zig               # JSON configuration system (data paths, settings)
-│   ├── sdl.zig                  # SDL3 initialization wrapper
-│   ├── testing.zig              # Test helpers (fixture loader, binary assertions, BE readers)
-│   ├── integration_tests.zig    # Integration tests against real game data
+│   ├── main.zig                   # Game executable entry point
+│   ├── root.zig                   # Engine library root (exports all submodules)
+│   ├── config.zig                 # JSON configuration system (data paths, settings)
+│   ├── sdl.zig                    # SDL3 initialization wrapper
+│   ├── testing.zig                # Test helpers (fixture loader, binary assertions, BE readers)
+│   ├── integration_tests.zig      # Integration tests against real game data
 │   │
-│   ├── formats/                 # Binary file format parsers (read original game data)
-│   │   ├── iso9660.zig          # ISO 9660 CD image parser (reads GAME.DAT)
-│   │   ├── tre.zig              # TRE archive reader (832-entry PRIV.TRE)
-│   │   ├── iff.zig              # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
-│   │   ├── sprite.zig           # RLE sprite decoder (Origin's proprietary run-length encoding)
-│   │   ├── shp.zig              # SHP shape/font file parser (offset table + RLE sprites)
-│   │   ├── pak.zig              # PAK resource unpacker (two-level offset tables + resources)
-│   │   ├── pal.zig              # PAL palette file parser (256-color VGA palettes)
-│   │   ├── voc.zig              # VOC audio loader (Creative Voice File, 8-bit PCM)
-│   │   ├── vpk.zig              # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
-│   │   └── music.zig            # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
+│   ├── formats/                   # Binary file format parsers (read original game data)
+│   │   ├── iso9660.zig            # ISO 9660 CD image parser (reads GAME.DAT)
+│   │   ├── tre.zig                # TRE archive reader (832-entry PRIV.TRE)
+│   │   ├── iff.zig                # IFF chunk parser (FORM/CAT/LIST containers, leaf chunks)
+│   │   ├── sprite.zig             # RLE sprite decoder (Origin's proprietary run-length encoding)
+│   │   ├── shp.zig                # SHP shape/font file parser (offset table + RLE sprites)
+│   │   ├── pak.zig                # PAK resource unpacker (two-level offset tables + resources)
+│   │   ├── pal.zig                # PAL palette file parser (256-color VGA palettes)
+│   │   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
+│   │   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
+│   │   └── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
 │   │
-│   ├── render/                  # Rendering pipeline & display
-│   │   ├── framebuffer.zig      # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
-│   │   ├── window.zig           # Window creation, game loop, fullscreen toggle (SDL3)
-│   │   ├── upscale.zig          # Edge-aware pixel art upscaler (Scale2x/3x, 2x/3x/4x factors)
-│   │   ├── viewport.zig         # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
-│   │   ├── text.zig             # Text rendering engine (SHP font loading, string rendering)
-│   │   ├── render.zig           # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
-│   │   ├── scene_renderer.zig   # Scene renderer (PAK sprite backgrounds, compositing pipeline)
-│   │   └── png.zig              # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
+│   ├── render/                    # Rendering pipeline & display
+│   │   ├── framebuffer.zig        # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
+│   │   ├── window.zig             # Window creation, game loop, fullscreen toggle (SDL3)
+│   │   ├── upscale.zig            # Edge-aware pixel art upscaler (Scale2x/3x, 2x/3x/4x factors)
+│   │   ├── viewport.zig           # Widescreen viewport (4:3 fit with pillarbox/letterbox, fill mode)
+│   │   ├── text.zig               # Text rendering engine (SHP font loading, string rendering)
+│   │   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
+│   │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
+│   │   └── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
 │   │
-│   ├── game/                    # World data & game flow
-│   │   ├── universe.zig         # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
-│   │   ├── bases.zig            # Base registry loader (BASES.IFF: base names, types, indices)
-│   │   ├── nav_graph.zig        # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
-│   │   ├── nav_map.zig          # Nav map display (sector map renderer, hit-testing, autopilot selection)
-│   │   ├── scene.zig            # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
-│   │   ├── game_state.zig       # Game state machine (state transitions, action handling, scene tracking)
-│   │   ├── click_region.zig     # Click region system (EFCT action parser, hit-testing, scene transitions)
-│   │   └── midgame.zig          # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   ├── game/                      # World data & game flow
+│   │   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
+│   │   ├── bases.zig              # Base registry loader (BASES.IFF: base names, types, indices)
+│   │   ├── nav_graph.zig          # Navigation graph (TABLE.DAT: 69x69 system distance matrix)
+│   │   ├── nav_map.zig            # Nav map display (sector map renderer, hit-testing, autopilot selection)
+│   │   ├── scene.zig              # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
+│   │   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
+│   │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
+│   │   └── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
-│   ├── persistence/             # Save/load & serialization
-│   │   ├── save_game.zig        # Save game serialization (binary format, round-trip encode/decode)
-│   │   ├── save_slots.zig       # Save slot manager (10 slots, file I/O, metadata extraction, slot listing)
-│   │   └── auto_save.zig        # Auto-save system (landing hook, dedicated autosave.sav file, load/delete)
+│   ├── persistence/               # Save/load & serialization
+│   │   ├── save_game.zig          # Save game serialization (binary format, round-trip encode/decode)
+│   │   ├── save_slots.zig         # Save slot manager (10 slots, file I/O, metadata extraction, slot listing)
+│   │   └── auto_save.zig          # Auto-save system (landing hook, dedicated autosave.sav file, load/delete)
 │   │
-│   ├── modding/                 # Mod support & hot-reload
-│   │   ├── mod_loader.zig       # Mod file loader (priority override: mod dir files take precedence over TRE archive)
-│   │   ├── config_overrides.zig # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
-│   │   └── asset_watcher.zig    # Asset hot-reloading (polls mod dir for file changes, dev mode)
+│   ├── modding/                   # Mod support & hot-reload
+│   │   ├── mod_loader.zig         # Mod file loader (priority override: mod dir files take precedence over TRE archive)
+│   │   ├── config_overrides.zig   # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
+│   │   └── asset_watcher.zig      # Asset hot-reloading (polls mod dir for file changes, dev mode)
 │   │
-│   ├── missions/                # Mission system
-│   │   ├── missions.zig         # Random mission generator (RNDM templates, base-type filtering, reward generation)
-│   │   ├── mission_computer.zig # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
-│   │   ├── mission_tracker.zig  # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
-│   │   ├── plot_missions.zig    # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
-│   │   └── plot_series.zig      # Plot mission series catalog & validation (series S0-S7 grouping, structural verification)
+│   ├── missions/                  # Mission system
+│   │   ├── missions.zig           # Random mission generator (RNDM templates, base-type filtering, reward generation)
+│   │   ├── mission_computer.zig   # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
+│   │   ├── mission_tracker.zig    # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
+│   │   ├── plot_missions.zig      # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
+│   │   └── plot_series.zig        # Plot mission series catalog & validation (series S0-S7 grouping, structural verification)
 │   │
-│   ├── conversations/           # Conversation & dialogue system
-│   │   ├── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
-│   │   ├── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
+│   ├── conversations/             # Conversation & dialogue system
+│   │   ├── conversations.zig      # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
+│   │   ├── conversation_ui.zig    # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
 │   │   ├── conversation_audio.zig # Conversation audio (VPK→VOC→PCM pipeline, voice clip playback per dialogue line)
-│   │   ├── bar_encounters.zig   # Bar/fixer encounter system (plot state tracking, fixer spawn logic, mission progression)
-│   │   └── rumors.zig          # Rumors system (weighted category selection, base-type rumor tables, random conversation picker)
+│   │   ├── bar_encounters.zig     # Bar/fixer encounter system (plot state tracking, fixer spawn logic, mission progression)
+│   │   └── rumors.zig             # Rumors system (weighted category selection, base-type rumor tables, random conversation picker)
 │   │
-│   ├── economy/                 # Economy & trading systems
-│   │   ├── commodities.zig      # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
-│   │   ├── exchange.zig         # Commodity exchange (buy/sell transactions, credit validation, cargo space checks)
-│   │   ├── ship_dealer.zig      # Ship dealer (SHIPSTUF.IFF: ship/equipment catalog, purchase/sell, hardpoint compatibility)
-│   │   ├── landing_fees.zig     # Landing fees (LANDFEE.IFF: fee deduction on base landing)
-│   │   └── reputation.zig       # Faction reputation (ATTITUDE.IFF: kill matrix, hostility thresholds, player standings)
+│   ├── economy/                   # Economy & trading systems
+│   │   ├── commodities.zig        # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
+│   │   ├── exchange.zig           # Commodity exchange (buy/sell transactions, credit validation, cargo space checks)
+│   │   ├── ship_dealer.zig        # Ship dealer (SHIPSTUF.IFF: ship/equipment catalog, purchase/sell, hardpoint compatibility)
+│   │   ├── landing_fees.zig       # Landing fees (LANDFEE.IFF: fee deduction on base landing)
+│   │   └── reputation.zig         # Faction reputation (ATTITUDE.IFF: kill matrix, hostility thresholds, player standings)
 │   │
-│   ├── flight/                  # Real-time flight systems
-│   │   ├── flight_physics.zig   # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
-│   │   ├── autopilot.zig        # Autopilot system (nav point steering, arrival detection, hostile interruption)
-│   │   └── jump_drive.zig       # Jump drive system (inter-system travel, adjacency validation, cooldown)
+│   ├── flight/                    # Real-time flight systems
+│   │   ├── flight_physics.zig     # Space flight physics (thrust, rotation, velocity, speed capping, afterburner)
+│   │   ├── autopilot.zig          # Autopilot system (nav point steering, arrival detection, hostile interruption)
+│   │   └── jump_drive.zig         # Jump drive system (inter-system travel, adjacency validation, cooldown)
 │   │
-│   ├── cockpit/                 # Cockpit & HUD displays
-│   │   ├── cockpit.zig          # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
-│   │   ├── mfd.zig              # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
-│   │   ├── radar.zig            # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
-│   │   ├── damage_display.zig   # Damage display (shield/armor status per facing, color-coded diagram renderer)
-│   │   ├── targeting.zig        # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
-│   │   └── messages.zig         # In-flight message system (categorized message queue, timed expiration, HUD renderer)
+│   ├── cockpit/                   # Cockpit & HUD displays
+│   │   ├── cockpit.zig            # Cockpit renderer (IFF/PAK loader, ship-specific cockpit frames, overlay)
+│   │   ├── mfd.zig                # MFD system (CMFD/CHUD/DIAL parsers, gauge rendering, display mode cycling)
+│   │   ├── radar.zig              # Radar display (top-down contact rendering, IFF faction coloring, yaw rotation)
+│   │   ├── damage_display.zig     # Damage display (shield/armor status per facing, color-coded diagram renderer)
+│   │   ├── targeting.zig          # Targeting system (nearest hostile selection, target cycling, ITTS lead indicator)
+│   │   └── messages.zig           # In-flight message system (categorized message queue, timed expiration, HUD renderer)
 │   │
-│   ├── combat/                  # Combat systems
-│   │   ├── weapons.zig          # Weapon system (gun/missile/torpedo data parsers, projectile creation & physics)
-│   │   ├── projectiles.zig      # Projectile physics (pool management, movement, bounding-sphere collision detection)
-│   │   ├── damage.zig           # Damage model (shield absorption, armor penetration, hit facing, ship destruction)
-│   │   ├── ai.zig               # AI flight behavior (state machine: patrol/attack/flee/escort, pursuit steering, engagement logic)
-│   │   ├── spawning.zig         # NPC spawning system (faction-weighted spawn rules, ship pool, sector-based encounters)
-│   │   ├── explosions.zig       # Explosion & debris system (EXPLTYPE/TRSHTYPE parsers, pool management, animated effects, destruction spawning)
-│   │   └── tractor_cargo.zig    # Tractor beam & cargo system (floating cargo pools, tractor beam pull physics, cargo hold management)
+│   ├── combat/                    # Combat systems
+│   │   ├── weapons.zig            # Weapon system (gun/missile/torpedo data parsers, projectile creation & physics)
+│   │   ├── projectiles.zig        # Projectile physics (pool management, movement, bounding-sphere collision detection)
+│   │   ├── damage.zig             # Damage model (shield absorption, armor penetration, hit facing, ship destruction)
+│   │   ├── ai.zig                 # AI flight behavior (state machine: patrol/attack/flee/escort, pursuit steering, engagement logic)
+│   │   ├── spawning.zig           # NPC spawning system (faction-weighted spawn rules, ship pool, sector-based encounters)
+│   │   ├── explosions.zig         # Explosion & debris system (EXPLTYPE/TRSHTYPE parsers, pool management, animated effects, destruction spawning)
+│   │   └── tractor_cargo.zig      # Tractor beam & cargo system (floating cargo pools, tractor beam pull physics, cargo hold management)
 │   │
-│   ├── audio/                   # Audio playback system
-│   │   ├── audio.zig            # SDL3 audio engine (device management, PCM stream playback, U8→S16 conversion)
-│   │   ├── sound_effects.zig    # Sound effects system (waveform synthesis, sound bank, multi-channel mixer, event dispatch)
-│   │   └── music_player.zig     # Music playback system (XMIDI decoder, PCM synthesis, looping player, game-state music machine)
+│   ├── audio/                     # Audio playback system
+│   │   ├── audio.zig              # SDL3 audio engine (device management, PCM stream playback, U8→S16 conversion)
+│   │   ├── sound_effects.zig      # Sound effects system (waveform synthesis, sound bank, multi-channel mixer, event dispatch)
+│   │   └── music_player.zig       # Music playback system (XMIDI decoder, PCM synthesis, looping player, game-state music machine)
 │   │
-│   └── cli/                     # Offline tools & asset pipelines
-│       ├── extract.zig          # Asset extraction pipeline (GAME.DAT → directory tree)
-│       ├── extract_cli.zig      # Asset extraction CLI entry point (privateer-extract)
-│       ├── validate.zig         # Data validation pipeline (all parsers → error report)
-│       └── palette_viewer.zig   # Palette viewer (256-color grid → PNG swatch images)
+│   └── cli/                       # Offline tools & asset pipelines
+│       ├── extract.zig            # Asset extraction pipeline (GAME.DAT → directory tree)
+│       ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
+│       ├── validate.zig           # Data validation pipeline (all parsers → error report)
+│       └── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
 │
 ├── tests/
-│   ├── gen_fixtures.py          # Python script to generate binary test fixtures
-│   └── fixtures/                # Binary test data (ISO, TRE, IFF samples)
-├── tools/                       # Python reverse-engineering scripts (analysis only)
-└── docs/                        # Design documents and specs (see below)
+│   ├── gen_fixtures.py            # Python script to generate binary test fixtures
+│   └── fixtures/                  # Binary test data (ISO, TRE, IFF samples)
+├── tools/                         # Python reverse-engineering scripts (analysis only)
+└── docs/                          # Design documents and specs (see below)
 ```
 
 ### Build Commands
