@@ -177,6 +177,10 @@ This project requires a copy of the original Wing Commander: Privateer game file
 (specifically the `GAME.DAT` ISO image containing `PRIV.TRE`). The game engine we
 are building is original work; the game data is not included in this repository.
 
+Set the `PRIVATEER_DATA` environment variable to the directory containing `GAME.DAT`
+to enable integration tests and run the game. See [SETUP.md](SETUP.md) for full
+setup instructions.
+
 ## Tools
 
 The `tools/` directory contains Python scripts used during the reverse engineering phase:

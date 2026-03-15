@@ -29,13 +29,27 @@ const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
 
-/// Path to the original game data directory.
-const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
-const GAME_DAT_PATH = GAME_DATA_DIR ++ "\\GAME.DAT";
+/// Resolve the game data directory from the PRIVATEER_DATA environment variable.
+/// Returns null if the variable is not set.
+fn getGameDataDir() ?[]const u8 {
+    return std.process.getEnvVarOwned(std.heap.page_allocator, "PRIVATEER_DATA") catch null;
+}
+
+/// Build the path to GAME.DAT from the data directory.
+fn getGameDatPath(allocator: std.mem.Allocator, data_dir: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "{s}" ++ std.fs.path.sep_str ++ "GAME.DAT", .{data_dir});
+}
 
 /// Load the entire GAME.DAT file into memory, or return null if not found.
+/// Reads the game data directory from the PRIVATEER_DATA environment variable.
 fn loadGameDat(allocator: std.mem.Allocator) !?[]const u8 {
-    const file = std.fs.openFileAbsolute(GAME_DAT_PATH, .{}) catch |err| {
+    const data_dir = getGameDataDir() orelse return null;
+    defer std.heap.page_allocator.free(data_dir);
+
+    const dat_path = try getGameDatPath(allocator, data_dir);
+    defer allocator.free(dat_path);
+
+    const file = std.fs.cwd().openFile(dat_path, .{}) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
