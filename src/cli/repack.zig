@@ -344,7 +344,7 @@ test "buildTre produces valid TRE with correct header" {
     // Verify entry
     var entry = try tre.readEntry(allocator, tre_data, 0);
     defer entry.deinit();
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\TEST.IFF", entry.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/TEST.IFF", entry.path);
     try std.testing.expectEqual(@as(u32, 16), entry.size);
 
     // Verify file data

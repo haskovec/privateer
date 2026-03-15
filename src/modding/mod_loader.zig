@@ -72,8 +72,13 @@ pub const ModLoader = struct {
             } else |_| {}
         }
 
-        // Fall back to TRE by extracting the basename
-        const basename = tre.dosBasename(normalized);
+        // Fall back to TRE by extracting the basename.
+        // Convert to forward slashes first since normalized may contain backslashes
+        // from the original DOS-style path, and std.fs.path.basename only recognizes
+        // the platform-native separator.
+        const fwd_normalized = try extract.toForwardSlashes(self.allocator, normalized);
+        defer self.allocator.free(fwd_normalized);
+        const basename = std.fs.path.basename(fwd_normalized);
         const data = try self.loadFromTre(basename);
         return .{ .data = data, .source = .tre };
     }
@@ -86,7 +91,7 @@ pub const ModLoader = struct {
             var entry = try tre.readEntry(self.allocator, self.tre_data, @intCast(i));
             defer entry.deinit();
 
-            const basename = tre.dosBasename(entry.path);
+            const basename = std.fs.path.basename(entry.path);
             if (std.ascii.eqlIgnoreCase(basename, filename)) {
                 const normalized = extract.normalizeTrePath(entry.path) orelse continue;
                 const fwd = try extract.toForwardSlashes(self.allocator, normalized);

@@ -59,9 +59,15 @@ pub fn readEntry(allocator: std.mem.Allocator, data: []const u8, index: u32) !Tr
     const path_bytes = entry[1..66];
     const path_len = std.mem.indexOfScalar(u8, path_bytes, 0) orelse 65;
 
+    // Normalize DOS backslash separators to forward slashes for cross-platform compatibility
+    const path = try allocator.dupe(u8, path_bytes[0..path_len]);
+    for (path) |*c| {
+        if (c.* == '\\') c.* = '/';
+    }
+
     return .{
         .flag = entry[0],
-        .path = try allocator.dupe(u8, path_bytes[0..path_len]),
+        .path = path,
         .offset = std.mem.readInt(u32, entry[66..70], .little),
         .size = std.mem.readInt(u32, entry[70..74], .little),
         .allocator = allocator,
@@ -95,26 +101,12 @@ pub fn extractFileData(data: []const u8, entry_offset: u32, entry_size: u32) Tre
     return data[file_start..file_end];
 }
 
-/// Extract the filename portion from a DOS-style path (handles both / and \ separators).
-pub fn dosBasename(path: []const u8) []const u8 {
-    var last_sep: usize = 0;
-    var found = false;
-    for (path, 0..) |c, i| {
-        if (c == '\\' or c == '/') {
-            last_sep = i;
-            found = true;
-        }
-    }
-    return if (found) path[last_sep + 1 ..] else path;
-}
-
 /// Find a TRE entry by path suffix (case-insensitive match on the filename portion).
 pub fn findEntry(allocator: std.mem.Allocator, data: []const u8, filename: []const u8) !TreEntry {
     const header = try readHeader(data);
     for (0..header.entry_count) |i| {
         var entry = try readEntry(allocator, data, @intCast(i));
-        // Check if the path ends with the requested filename
-        const basename = dosBasename(entry.path);
+        const basename = std.fs.path.basename(entry.path);
         if (std.ascii.eqlIgnoreCase(basename, filename)) {
             return entry;
         }
@@ -181,7 +173,7 @@ pub const TreIndex = struct {
         }
 
         for (entries, 0..) |entry, i| {
-            const basename = dosBasename(entry.path);
+            const basename = std.fs.path.basename(entry.path);
             const lower = try allocator.alloc(u8, basename.len);
             for (basename, 0..) |c, j| {
                 lower[j] = std.ascii.toLower(c);
@@ -251,7 +243,7 @@ test "readEntry parses first entry path and metadata" {
     defer entry.deinit();
 
     try std.testing.expectEqual(@as(u8, 0x01), entry.flag);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entry.path);
     try std.testing.expectEqual(@as(u32, 230), entry.offset); // toc_size = 230, file data starts there
     try std.testing.expectEqual(@as(u32, 16), entry.size);
 }
@@ -264,7 +256,7 @@ test "readEntry parses second entry" {
     var entry = try readEntry(allocator, data, 1);
     defer entry.deinit();
 
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\BEHAVIOR.IFF", entry.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/BEHAVIOR.IFF", entry.path);
     try std.testing.expectEqual(@as(u32, 246), entry.offset); // 230 + 16 = 246
     try std.testing.expectEqual(@as(u32, 12), entry.size);
 }
@@ -284,9 +276,9 @@ test "readAllEntries returns all 3 entries" {
     }
 
     try std.testing.expectEqual(@as(usize, 3), entries.len);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entries[0].path);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\BEHAVIOR.IFF", entries[1].path);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\APPEARNC\\GALAXY.PAK", entries[2].path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entries[0].path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/BEHAVIOR.IFF", entries[1].path);
+    try std.testing.expectEqualStrings("../../DATA/APPEARNC/GALAXY.PAK", entries[2].path);
 }
 
 test "extractFileData reads FORM header from first entry" {
@@ -324,7 +316,7 @@ test "findEntry locates file by name" {
     var entry = try findEntry(allocator, data, "ATTITUDE.IFF");
     defer entry.deinit();
 
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entry.path);
 }
 
 test "readHeader rejects too-small data" {
@@ -344,7 +336,7 @@ test "TreIndex: build from entries and lookup by filename" {
 
     const entry = index.findEntry("ATTITUDE.IFF");
     try std.testing.expect(entry != null);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.?.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entry.?.path);
 }
 
 test "TreIndex: case-insensitive lookup" {
@@ -357,7 +349,7 @@ test "TreIndex: case-insensitive lookup" {
 
     const entry = index.findEntry("attitude.iff");
     try std.testing.expect(entry != null);
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.?.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entry.?.path);
 }
 
 test "TreIndex: lookup nonexistent file returns null" {
