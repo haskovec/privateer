@@ -69,7 +69,8 @@ privateer/
 │   │   ├── click_region.zig   # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   ├── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │   ├── missions.zig      # Random mission generator (RNDM templates, base-type filtering, reward generation)
-│   │   └── mission_computer.zig # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
+│   │   ├── mission_computer.zig # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
+│   │   └── mission_tracker.zig # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
 │   │
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)

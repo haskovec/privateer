@@ -41,6 +41,7 @@ pub const nav_graph = @import("game/nav_graph.zig");
 pub const nav_map = @import("game/nav_map.zig");
 pub const missions = @import("game/missions.zig");
 pub const mission_computer = @import("game/mission_computer.zig");
+pub const mission_tracker = @import("game/mission_tracker.zig");
 
 // Economy & Trading
 pub const commodities = @import("economy/commodities.zig");

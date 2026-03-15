@@ -493,7 +493,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test accepting mission adds it to active missions
   - GREEN: Implement mission acceptance
 
-- [ ] **9.3 Mission tracking & completion**
+- [x] **9.3 Mission tracking & completion**
   - Track mission objectives (deliver cargo, kill target, patrol nav points)
   - RED: Test completing patrol mission at all nav points triggers success
   - GREEN: Implement objective tracking
