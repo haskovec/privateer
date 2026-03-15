@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.3 done).
+Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -142,8 +142,12 @@ privateer/
 │       ├── repack.zig             # Asset repacking pipeline (directory tree → GAME.DAT)
 │       ├── repack_cli.zig         # Asset repacking CLI entry point (privateer-repack)
 │       ├── validate.zig           # Data validation pipeline (all parsers → error report)
-│       └── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
+│       ├── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
+│       └── macos_bundle.zig       # macOS .app bundle validator (structure checks, Info.plist validation)
 │
+├── macos/                            # macOS .app bundle support
+│   ├── Info.plist                    # Application metadata (CFBundle keys, version, icon)
+│   └── bundle.sh                     # Bundle creation script (native or universal binary)
 ├── tests/
 │   ├── gen_fixtures.py            # Python script to generate binary test fixtures
 │   └── fixtures/                  # Binary test data (ISO, TRE, IFF samples)
@@ -158,6 +162,8 @@ privateer/
 - `zig build run` -- build and run the game
 - `zig build extract -- --data-dir <path> --output <dir>` -- extract all game assets from GAME.DAT
 - `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
+- `./macos/bundle.sh` -- create a macOS .app bundle (native architecture)
+- `./macos/bundle.sh --universal` -- create a universal (x86_64 + aarch64) macOS .app bundle
 
 ## Documentation
 

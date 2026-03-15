@@ -652,7 +652,7 @@ No phase should start until its dependencies are complete and tested green.
   - Optimize IFF loading (memory-map TRE file)
   - Target: 60fps at 4K resolution
 
-- [ ] **14.4 macOS build**
+- [x] **14.4 macOS build**
   - Cross-compile Zig to macOS (aarch64-macos + x86_64-macos)
   - Test SDL3 on macOS
   - Create .app bundle

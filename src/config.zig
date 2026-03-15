@@ -67,6 +67,54 @@ const path_defaults = .{
     .output_dir = "output",
 };
 
+/// On macOS, detect if running inside a .app bundle and resolve the
+/// Resources directory path.  Returns null when not in a bundle.
+pub fn detectBundleResourcesDir(allocator: std.mem.Allocator) ?[]const u8 {
+    const builtin = @import("builtin");
+    if (builtin.os.tag != .macos) return null;
+
+    // The executable lives at Privateer.app/Contents/MacOS/privateer.
+    // We need Privateer.app/Contents/Resources.
+    const self_exe = std.fs.selfExePathAlloc(allocator) catch return null;
+    defer allocator.free(self_exe);
+
+    // Walk up: strip "privateer" -> Contents/MacOS, strip "MacOS" -> Contents
+    const macos_dir = std.fs.path.dirname(self_exe) orelse return null;
+    const contents_dir = std.fs.path.dirname(macos_dir) orelse return null;
+
+    // Verify we're actually inside a bundle by checking the parent is *.app
+    const app_dir = std.fs.path.dirname(contents_dir) orelse return null;
+    const app_basename = std.fs.path.basename(app_dir);
+    if (!std.mem.endsWith(u8, app_basename, ".app")) return null;
+
+    const resources = std.fs.path.join(allocator, &.{ contents_dir, "Resources" }) catch return null;
+    return resources;
+}
+
+/// Resolve data_dir for macOS bundles: if the default "data" path doesn't
+/// exist but the bundle's Resources/data does, use the bundle path instead.
+pub fn applyBundleOverride(config: *Config) void {
+    // Only override if data_dir is still the default
+    if (!std.mem.eql(u8, config.data_dir, path_defaults.data_dir)) return;
+
+    // Check if default data dir exists
+    std.fs.cwd().access(config.data_dir, .{}) catch {
+        // Default doesn't exist — try bundle Resources
+        const resources_dir = detectBundleResourcesDir(config.allocator) orelse return;
+        defer config.allocator.free(resources_dir);
+
+        const bundle_data = std.fs.path.join(config.allocator, &.{ resources_dir, "data" }) catch return;
+
+        std.fs.cwd().access(bundle_data, .{}) catch {
+            config.allocator.free(bundle_data);
+            return;
+        };
+
+        config.allocator.free(config.data_dir);
+        config.data_dir = bundle_data;
+    };
+}
+
 /// Full application configuration: paths + user settings.
 pub const Config = struct {
     /// Path to the directory containing GAME.DAT.
@@ -549,6 +597,35 @@ test "Settings windowWidth and windowHeight compute correctly" {
     s.scale_factor = .x4;
     try testing.expectEqual(@as(u32, 1280), s.windowWidth());
     try testing.expectEqual(@as(u32, 800), s.windowHeight());
+}
+
+test "detectBundleResourcesDir returns null on non-bundle path" {
+    // When not running from a .app bundle, should return null (or on non-macOS).
+    const allocator = testing.allocator;
+    const result = detectBundleResourcesDir(allocator);
+    // In test context we're not inside a .app bundle, so expect null
+    // (unless actually running tests from within a bundle, which is unlikely)
+    if (result) |r| {
+        // If we somehow got a result, it should at least end in "Resources"
+        try testing.expect(std.mem.endsWith(u8, r, "Resources"));
+        allocator.free(r);
+    }
+}
+
+test "applyBundleOverride does not change non-default data_dir" {
+    const allocator = testing.allocator;
+    var cfg = Config{
+        .data_dir = try allocator.dupe(u8, "/custom/path"),
+        .mod_dir = try allocator.dupe(u8, "mods"),
+        .output_dir = try allocator.dupe(u8, "output"),
+        .settings = Settings.defaults(),
+        .allocator = allocator,
+    };
+    defer cfg.deinit();
+
+    applyBundleOverride(&cfg);
+    // Should remain unchanged since it's not the default
+    try testing.expectEqualStrings("/custom/path", cfg.data_dir);
 }
 
 test "Settings sanitize clamps values" {

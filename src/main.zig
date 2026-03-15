@@ -21,6 +21,9 @@ pub fn main() !void {
     var cfg = try privateer.config.load(allocator, privateer.config.CONFIG_FILE);
     defer cfg.deinit();
 
+    // Apply macOS bundle override (Resources/data inside .app)
+    privateer.config.applyBundleOverride(&cfg);
+
     // Apply PRIVATEER_DATA env var override for data_dir
     privateer.config.applyEnvOverride(&cfg) catch {};
 

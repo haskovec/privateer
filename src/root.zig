@@ -109,6 +109,7 @@ pub const extract = @import("cli/extract.zig");
 pub const repack = @import("cli/repack.zig");
 pub const validate = @import("cli/validate.zig");
 pub const palette_viewer = @import("cli/palette_viewer.zig");
+pub const macos_bundle = @import("cli/macos_bundle.zig");
 
 // Tests
 pub const integration_tests = @import("integration_tests.zig");
