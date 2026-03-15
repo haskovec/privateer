@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 8 complete, Phase 9 in progress. See the
+Phase 0 through Phase 9 complete, Phase 10 in progress. See the
 [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -75,6 +75,9 @@ privateer/
 │   │   ├── mission_tracker.zig # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
 │   │   ├── plot_missions.zig  # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
 │   │   └── plot_series.zig   # Plot mission series catalog & validation (series S0-S7 grouping, structural verification)
+│   │
+│   ├── conversations/          # Conversation & dialogue system
+│   │   └── conversations.zig  # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
 │   │
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
@@ -172,3 +175,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_weapons.py` | Deep analysis of weapon data files (GUNS.IFF, WEAPONS.IFF, BEAMTYPE.IFF, TORPTYPE.IFF) |
 | `analyze_commodities.py` | Deep analysis of commodity data files (COMODTYP.IFF, LANDFEE.IFF, LIMITS.IFF) |
 | `analyze_missions.py` | Deep analysis of plot mission IFF files (SCRP/PROG/FLAG/CAST/PART/SCEN chunks) |
+| `analyze_conversations.py` | Deep analysis of conversation IFF files (RUMR/INFO tables, PFC scripts, COMPTEXT) |

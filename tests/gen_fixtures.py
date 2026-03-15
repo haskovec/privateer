@@ -2060,6 +2060,134 @@ def gen_plot_mission_list_file():
     write("test_plot_mission_list.bin", root)
 
 
+def gen_rumor_table_file():
+    """Generate test rumor table fixture (FORM:RUMR with TABL).
+
+    Rumor tables in CONV/*.IFF map indices to conversation file references.
+    Each TABL entry is a u32 LE offset within the file pointing to a 20-byte record:
+        u32 LE   data_size    (16 for standard records, 0 for null/empty)
+        [4]u8    category     ("CONV" or "BASE")
+        u32 LE   name_length  (always 8)
+        [8]u8    name         (null-padded conversation filename)
+
+    Fixture: test_rumor_table.bin - 3 conversation references
+    """
+    # Build 3 records
+    rec0 = struct.pack('<I', 16) + b"CONV" + struct.pack('<I', 8) + b"agrrum1\x00"
+    rec1 = struct.pack('<I', 16) + b"CONV" + struct.pack('<I', 8) + b"agrrum2\x00"
+    rec2 = struct.pack('<I', 16) + b"CONV" + struct.pack('<I', 8) + b"agrrum3\x00"
+
+    # TABL contains u32 LE offsets to each record within the file
+    # File layout: FORM header (8) + form_type (4) + TABL header (8) + TABL data (12) = 32
+    # Records start at offset 32
+    tabl_data = struct.pack('<III', 32, 52, 72)
+    tabl = make_iff_chunk(b"TABL", tabl_data)
+
+    # Build FORM:RUMR - TABL chunk followed by raw record data
+    body = b"RUMR" + tabl + rec0 + rec1 + rec2
+    root = b"FORM" + struct.pack('>I', len(body)) + body
+    write("test_rumor_table.bin", root)
+
+
+def gen_rumor_chances_file():
+    """Generate test rumor chances fixture (FORM:RUMR with CHNC).
+
+    RUMORS.IFF uses a CHNC chunk instead of TABL, containing u16 LE
+    chance weights for rumor category selection.
+
+    Fixture: test_rumor_chances.bin - 4 chance weights
+    """
+    chnc_data = struct.pack('<HHHH', 20, 40, 40, 40)
+    chnc = make_iff_chunk(b"CHNC", chnc_data)
+    root = make_iff_form(b"RUMR", chnc)
+    write("test_rumor_chances.bin", root)
+
+
+def gen_base_rumor_table_file():
+    """Generate test base-type rumor table fixture (FORM:RUMR with BASE refs).
+
+    BASERUMR.IFF maps base type indices to other RUMR IFF files.
+    First entry can be null (data_size=0).
+
+    Fixture: test_base_rumor_table.bin - 1 null + 2 BASE references
+    """
+    rec0 = struct.pack('<I', 0)  # null entry (4 bytes)
+    rec1 = struct.pack('<I', 16) + b"BASE" + struct.pack('<I', 8) + b"agrirumr"
+    rec2 = struct.pack('<I', 16) + b"BASE" + struct.pack('<I', 8) + b"minerumr"
+
+    # Offsets within file: FORM(8) + RUMR(4) + TABL header(8) + TABL data(12) = 32
+    tabl_data = struct.pack('<III', 32, 36, 56)
+    tabl = make_iff_chunk(b"TABL", tabl_data)
+
+    body = b"RUMR" + tabl + rec0 + rec1 + rec2
+    root = b"FORM" + struct.pack('>I', len(body)) + body
+    write("test_base_rumor_table.bin", root)
+
+
+def gen_pfc_file():
+    """Generate test PFC (conversation script) fixture.
+
+    PFC files contain null-separated strings in groups of 7:
+        [0] speaker type (e.g., "rand_npc")
+        [1] mood/animation (e.g., "normal")
+        [2] costume reference (e.g., "randcu_3")
+        [3] unknown ("?")
+        [4] unknown ("?")
+        [5] dialogue text
+        [6] unknown ("?")
+
+    Fixture: test_conv.pfc - 2 dialogue lines
+    """
+    strings = [
+        # Line 0
+        b"rand_npc", b"normal", b"randcu_3", b"?", b"?",
+        b"I just heard that the fleet was lost around Midgard...",
+        b"?",
+        # Line 1
+        b"rand_npc", b"normal", b"randcu_3", b"?", b"?",
+        b"Gone! The Kilrathi must've destroyed them!",
+        b"?",
+    ]
+    data = b"\x00".join(strings) + b"\x00"
+    write("test_conv.pfc", data)
+
+
+def gen_comptext_file():
+    """Generate test computer text fixture (FORM:COMP - COMPTEXT.IFF).
+
+    Contains guild-specific text for the mission computer UI.
+    Each guild is a FORM with text chunks named by message type.
+
+    Fixture: test_comptext.bin - Merchant guild with key text chunks
+    """
+    join = make_iff_chunk(b"JOIN", b"You must first join\nthe Merchants' Guild.\x00")
+    welc = make_iff_chunk(b"WELC", b"Welcome to the\nMerchants' Guild.\x00")
+    unav = make_iff_chunk(b"UNAV", b"Mission not available.\x00")
+    scan = make_iff_chunk(b"SCAN", b"Scanning for missions.\x00")
+    nrom = make_iff_chunk(b"NROM", b"Schedule full.\x00")
+    boun = make_iff_chunk(b"BOUN", b"BOUNTY MISSION (%d of %d)\x00")
+    crgo = make_iff_chunk(b"CRGO", b"CARGO MISSION (%d of %d)\x00")
+    acpt = make_iff_chunk(b"ACPT", b"Mission accepted.\x00")
+
+    mrch = make_iff_form(b"MRCH", join + welc + unav + scan + nrom + boun + crgo + acpt)
+    root = make_iff_form(b"COMP", mrch)
+    write("test_comptext.bin", root)
+
+
+def gen_commtxt_file():
+    """Generate test communication text fixture (FORM:STRG - COMMTXT.IFF).
+
+    String table with SNUM (count) and DATA (null-separated strings).
+
+    Fixture: test_commtxt.bin - 3 exchange text strings
+    """
+    snum = make_iff_chunk(b"SNUM", struct.pack('<H', 3))
+    data_strings = b"Price: \x00Quantity: \x00Cost: \x00"
+    data = make_iff_chunk(b"DATA", data_strings)
+    root = make_iff_form(b"STRG", snum + data)
+    write("test_commtxt.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -2094,4 +2222,10 @@ if __name__ == "__main__":
     gen_mission_templates_file()
     gen_plot_mission_file()
     gen_plot_mission_list_file()
+    gen_rumor_table_file()
+    gen_rumor_chances_file()
+    gen_base_rumor_table_file()
+    gen_pfc_file()
+    gen_comptext_file()
+    gen_commtxt_file()
     print("Done.")

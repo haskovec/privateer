@@ -26,6 +26,7 @@ const mfd = @import("cockpit/mfd.zig");
 const damage_display = @import("cockpit/damage_display.zig");
 const weapons = @import("combat/weapons.zig");
 const commodities = @import("economy/commodities.zig");
+const conversations = @import("conversations/conversations.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -2416,4 +2417,210 @@ test "integration: plot missions are ordered by series in TRE" {
     }
 
     try std.testing.expect(mission_count >= plot_series.TOTAL_EXPECTED_MISSIONS);
+}
+
+// --- Conversation system integration tests ---
+
+test "integration: AGRIRUMR.IFF parses as rumor table" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "CONV", "AGRIRUMR.IFF") orelse return;
+    var table = try conversations.parseRumorTable(allocator, file_data);
+    defer table.deinit();
+
+    // AGRIRUMR has 5 rumor references
+    try std.testing.expectEqual(@as(usize, 5), table.count());
+
+    // All entries should be CONV references
+    for (0..table.count()) |i| {
+        const ref = table.get(i) orelse {
+            try std.testing.expect(false); // should not be null
+            continue;
+        };
+        try std.testing.expect(ref.isConv());
+        try std.testing.expect(ref.nameStr().len > 0);
+    }
+}
+
+test "integration: BASERUMR.IFF parses with null and BASE references" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "CONV", "BASERUMR.IFF") orelse return;
+    var table = try conversations.parseRumorTable(allocator, file_data);
+    defer table.deinit();
+
+    // BASERUMR has 6 entries (first is null, rest are BASE references)
+    try std.testing.expectEqual(@as(usize, 6), table.count());
+
+    // First entry is null
+    try std.testing.expect(table.get(0) == null);
+
+    // Remaining entries should be BASE references
+    for (1..table.count()) |i| {
+        const ref = table.get(i) orelse {
+            try std.testing.expect(false);
+            continue;
+        };
+        try std.testing.expect(ref.isBase());
+    }
+}
+
+test "integration: RUMORS.IFF parses chance weights" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "CONV", "RUMORS.IFF") orelse return;
+    var chances = try conversations.parseRumorChances(allocator, file_data);
+    defer chances.deinit();
+
+    // RUMORS.IFF has 4 chance weights: [20, 40, 40, 40]
+    try std.testing.expectEqual(@as(usize, 4), chances.count());
+    try std.testing.expectEqual(@as(u16, 20), chances.weights[0]);
+}
+
+test "integration: all CONV IFF files parse without errors" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var conv_count: usize = 0;
+    var rumr_count: usize = 0;
+    var info_count: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        // Check if in CONV directory
+        const is_conv = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 4 and std.ascii.eqlIgnoreCase(remaining[0..4], "CONV")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_conv) continue;
+        if (!std.mem.endsWith(u8, basename, ".IFF")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        if (file_data.len < 12) continue; // too small for FORM header
+
+        // Determine form type
+        const form_type = file_data[8..12];
+
+        if (std.mem.eql(u8, form_type, "RUMR")) {
+            // Try to parse as rumor table or chances
+            if (iff.parseFile(allocator, file_data)) |*root_chunk| {
+                var root = root_chunk.*;
+                defer root.deinit();
+
+                if (root.findChild("CHNC".*) != null) {
+                    var chances = try conversations.parseRumorChances(allocator, file_data);
+                    defer chances.deinit();
+                    try std.testing.expect(chances.count() > 0);
+                } else if (root.findChild("TABL".*) != null) {
+                    var table = try conversations.parseRumorTable(allocator, file_data);
+                    defer table.deinit();
+                    try std.testing.expect(table.count() > 0);
+                    rumr_count += 1;
+                }
+            } else |_| {}
+        } else if (std.mem.eql(u8, form_type, "INFO")) {
+            var table = try conversations.parseRumorTable(allocator, file_data);
+            defer table.deinit();
+            try std.testing.expect(table.count() > 0);
+            info_count += 1;
+        }
+
+        conv_count += 1;
+    }
+
+    // Expect at least 17 RUMR files and 2 INFO files
+    try std.testing.expect(conv_count >= 19);
+    try std.testing.expect(rumr_count >= 15);
+    try std.testing.expect(info_count >= 2);
+}
+
+test "integration: COMPTEXT.IFF parses mission computer text" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "OPTIONS", "COMPTEXT.IFF") orelse return;
+    var ct = try conversations.parseComputerText(allocator, file_data);
+    defer ct.deinit();
+
+    // Merchant guild should have welcome text
+    try std.testing.expect(ct.merchant.welcome != null);
+    try std.testing.expect(ct.merchant.join != null);
+    try std.testing.expect(ct.merchant.scan != null);
+
+    // Mercenary guild should also have text
+    try std.testing.expect(ct.mercenary.welcome != null);
+    try std.testing.expect(ct.mercenary.join != null);
+
+    // Automated mission machine should have text
+    try std.testing.expect(ct.automated.welcome != null);
+}
+
+test "integration: COMMTXT.IFF parses exchange strings" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "OPTIONS", "COMMTXT.IFF") orelse return;
+    var st = try conversations.parseStringTable(allocator, file_data);
+    defer st.deinit();
+
+    // Should have at least 9 strings (SNUM value from analysis)
+    try std.testing.expect(st.count() >= 9);
+
+    // First string should be "Price: "
+    try std.testing.expectEqualStrings("Price: ", st.get(0).?);
+}
+
+test "integration: PFC conversation scripts parse" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var pfc_count: usize = 0;
+    var total_lines: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const basename = std.fs.path.basename(entry.path);
+        if (!std.mem.endsWith(u8, basename, ".PFC")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        if (file_data.len == 0) continue;
+
+        var script = conversations.parseConversationScript(allocator, file_data) catch continue;
+        defer script.deinit();
+
+        if (script.lineCount() > 0) {
+            pfc_count += 1;
+            total_lines += script.lineCount();
+
+            // Verify first line has non-empty text
+            try std.testing.expect(script.lines[0].text.len > 0);
+            try std.testing.expect(script.lines[0].speaker.len > 0);
+        }
+    }
+
+    // Should have many PFC files with dialogue
+    try std.testing.expect(pfc_count > 10);
+    try std.testing.expect(total_lines > 50);
 }

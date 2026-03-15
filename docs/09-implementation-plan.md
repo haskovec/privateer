@@ -519,10 +519,15 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 10: Conversation System
 *NPCs, bar scenes, plot advancement through dialogue.*
 
-- [ ] **10.1 Conversation data loader**
-  - Parse CONV/*.IFF for dialogue trees (RECV/SEND/COMM forms)
-  - RED: Test loading conversation produces valid dialogue nodes
-  - GREEN: Implement conversation parser
+- [x] **10.1 Conversation data loader**
+  - Parse CONV/*.IFF rumor/info tables (FORM:RUMR TABL records, FORM:INFO)
+  - Parse CONV/*.PFC dialogue scripts (null-separated 7-string groups)
+  - Parse OPTIONS/COMPTEXT.IFF (FORM:COMP guild text: MRCH/MERC/AUTO)
+  - Parse OPTIONS/COMMTXT.IFF (FORM:STRG exchange string table)
+  - Parse RUMORS.IFF CHNC chance weights
+  - RED: Test loading produces valid tables, scripts, and text
+  - GREEN: Implement all conversation parsers
+  - Integration test: Parse all 19 CONV IFF files and PFC scripts without errors
 
 - [ ] **10.2 Conversation UI**
   - Display NPC portraits, dialogue text, player response choices

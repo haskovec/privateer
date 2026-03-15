@@ -75,6 +75,9 @@ pub const damage_display = @import("cockpit/damage_display.zig");
 pub const targeting = @import("cockpit/targeting.zig");
 pub const messages = @import("cockpit/messages.zig");
 
+// Conversation system
+pub const conversations = @import("conversations/conversations.zig");
+
 // CLI tools
 pub const extract = @import("cli/extract.zig");
 pub const validate = @import("cli/validate.zig");
