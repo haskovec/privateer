@@ -487,7 +487,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test mission types match available types for base type
   - GREEN: Implement type filtering
 
-- [ ] **9.2 Mission computer UI**
+- [x] **9.2 Mission computer UI**
   - Display available missions with briefing, destination, reward
   - Accept/decline missions
   - RED: Test accepting mission adds it to active missions

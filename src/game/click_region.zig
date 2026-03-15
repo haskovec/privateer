@@ -45,6 +45,8 @@ pub const Action = union(enum) {
     commodity_exchange,
     /// Open equipment/upgrade dealer (0x1E, param = sub-type).
     equipment_dealer: u8,
+    /// Open mission computer (0x1D).
+    mission_computer,
     /// Complex scripted sequence (raw EFCT data > 2 bytes).
     scripted: []const u8,
 };
@@ -68,6 +70,7 @@ pub fn parseAction(efct: []const u8) Action {
         0x1A => .{ .bartender_conversation = param },
         0x1B => .ship_dealer,
         0x1C => .commodity_exchange,
+        0x1D => .mission_computer,
         0x1E => .{ .equipment_dealer = param },
         else => .none,
     };
@@ -166,6 +169,11 @@ test "parseAction returns ship_dealer for action type 0x1B" {
 test "parseAction returns commodity_exchange for action type 0x1C" {
     const action = parseAction(&.{ 0x1C, 0x00 });
     try std.testing.expect(action == .commodity_exchange);
+}
+
+test "parseAction returns mission_computer for action type 0x1D" {
+    const action = parseAction(&.{ 0x1D, 0x00 });
+    try std.testing.expect(action == .mission_computer);
 }
 
 test "parseAction returns equipment_dealer for action type 0x1E" {

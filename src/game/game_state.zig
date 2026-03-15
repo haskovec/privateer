@@ -104,7 +104,7 @@ pub const GameStateMachine = struct {
             .bar_conversation, .bartender_conversation => {
                 try self.transition(.conversation);
             },
-            .ship_dealer, .commodity_exchange, .equipment_dealer, .scripted => {
+            .ship_dealer, .commodity_exchange, .equipment_dealer, .mission_computer, .scripted => {
                 // UI-specific actions passed through for the caller
             },
         }
@@ -434,6 +434,14 @@ test "handleAction commodity_exchange does not change state" {
     try sm.transition(.loading);
     try sm.transition(.landed);
     _ = try sm.handleAction(.commodity_exchange);
+    try std.testing.expectEqual(State.landed, sm.state);
+}
+
+test "handleAction mission_computer does not change state" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    _ = try sm.handleAction(.mission_computer);
     try std.testing.expectEqual(State.landed, sm.state);
 }
 
