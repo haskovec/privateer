@@ -40,6 +40,7 @@ pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");
 pub const nav_map = @import("game/nav_map.zig");
 pub const save_game = @import("game/save_game.zig");
+pub const save_slots = @import("game/save_slots.zig");
 // Mission system
 pub const missions = @import("missions/missions.zig");
 pub const mission_computer = @import("missions/mission_computer.zig");
