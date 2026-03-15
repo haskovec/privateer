@@ -27,6 +27,7 @@ const damage_display = @import("cockpit/damage_display.zig");
 const weapons = @import("combat/weapons.zig");
 const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
+const conversation_audio = @import("conversations/conversation_audio.zig");
 
 /// Path to the original game data directory.
 const GAME_DATA_DIR = "C:\\Program Files\\EA Games\\Wing Commander Privateer\\DATA";
@@ -2623,4 +2624,127 @@ test "integration: PFC conversation scripts parse" {
     // Should have many PFC files with dialogue
     try std.testing.expect(pfc_count > 10);
     try std.testing.expect(total_lines > 50);
+}
+
+// --- Conversation audio integration tests (Phase 10.3) ---
+
+test "integration: VPK decompression produces playable audio" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*e| {
+            var entry = e.*;
+            entry.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var vpk_tested: usize = 0;
+    var total_clips: usize = 0;
+
+    for (entries) |e| {
+        if (!std.mem.endsWith(u8, e.path, ".VPK")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, e.offset, e.size);
+        if (file_data.len < vpk.MIN_FILE_SIZE) continue;
+
+        var vpk_file = vpk.parse(allocator, file_data) catch continue;
+        defer vpk_file.deinit();
+
+        // Use ConversationVoice to decompress clips (no player needed for data test)
+        const cv = conversation_audio.ConversationVoice.init(allocator, vpk_file, null);
+
+        // Test first clip from each VPK
+        if (cv.clipCount() > 0) {
+            var clip = cv.getClip(0) catch continue;
+            defer clip.deinit();
+
+            // Playable audio must have: non-zero samples, valid sample rate, 8-bit PCM
+            try std.testing.expect(clip.samples.len > 0);
+            try std.testing.expect(clip.sample_rate >= 10000);
+            try std.testing.expect(clip.sample_rate <= 12000);
+
+            // Audio should not be all silence (not all 128)
+            var has_non_silence = false;
+            for (clip.samples) |s| {
+                if (s != 128) {
+                    has_non_silence = true;
+                    break;
+                }
+            }
+            try std.testing.expect(has_non_silence);
+
+            total_clips += 1;
+        }
+
+        vpk_tested += 1;
+        if (vpk_tested >= 10) break; // Test 10 VPK files for speed
+    }
+
+    try std.testing.expect(vpk_tested >= 5);
+    try std.testing.expect(total_clips >= 5);
+}
+
+test "integration: VPK clip count matches PFC line count for conversation files" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var matched: usize = 0;
+
+    // For each PFC file, check if a corresponding VPK exists with matching entry count
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        const basename = std.fs.path.basename(entry.path);
+        if (!std.mem.endsWith(u8, basename, ".PFC")) continue;
+
+        const pfc_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        if (pfc_data.len == 0) continue;
+
+        var script = conversations.parseConversationScript(allocator, pfc_data) catch continue;
+        defer script.deinit();
+        if (script.lineCount() == 0) continue;
+
+        // Try to find the corresponding VPK (same name, different extension)
+        const stem_end = std.mem.lastIndexOf(u8, basename, ".") orelse continue;
+        const stem = basename[0..stem_end];
+
+        for (0..header.entry_count) |j| {
+            var vpk_entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(j));
+            defer vpk_entry.deinit();
+
+            const vpk_basename = std.fs.path.basename(vpk_entry.path);
+            if (!std.mem.endsWith(u8, vpk_basename, ".VPK")) continue;
+
+            const vpk_stem_end = std.mem.lastIndexOf(u8, vpk_basename, ".") orelse continue;
+            const vpk_stem = vpk_basename[0..vpk_stem_end];
+
+            if (!std.ascii.eqlIgnoreCase(stem, vpk_stem)) continue;
+
+            // Found matching VPK
+            const vpk_data = try tre.extractFileData(loaded.tre_data, vpk_entry.offset, vpk_entry.size);
+            if (vpk_data.len < vpk.MIN_FILE_SIZE) break;
+
+            var vpk_file = vpk.parse(allocator, vpk_data) catch break;
+            defer vpk_file.deinit();
+
+            // VPK entry count should match PFC line count
+            // (each dialogue line has a voice clip)
+            if (vpk_file.entryCount() == script.lineCount()) {
+                matched += 1;
+            }
+            break;
+        }
+
+        if (matched >= 5) break; // Enough to validate the pattern
+    }
+
+    // At least some PFC/VPK pairs should have matching counts
+    try std.testing.expect(matched > 0);
 }

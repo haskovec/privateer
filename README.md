@@ -78,7 +78,8 @@ privateer/
 │   │
 │   ├── conversations/           # Conversation & dialogue system
 │   │   ├── conversations.zig    # Conversation data loader (RUMR/INFO tables, PFC scripts, COMPTEXT, COMMTXT)
-│   │   └── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
+│   │   ├── conversation_ui.zig  # Conversation UI (dialogue state machine, text rendering, word wrapping, click-to-advance)
+│   │   └── conversation_audio.zig # Conversation audio (VPK→VOC→PCM pipeline, voice clip playback per dialogue line)
 │   │
 │   ├── economy/                 # Economy & trading systems
 │   │   ├── commodities.zig      # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
@@ -108,6 +109,9 @@ privateer/
 │   │   ├── spawning.zig         # NPC spawning system (faction-weighted spawn rules, ship pool, sector-based encounters)
 │   │   ├── explosions.zig       # Explosion & debris system (EXPLTYPE/TRSHTYPE parsers, pool management, animated effects, destruction spawning)
 │   │   └── tractor_cargo.zig    # Tractor beam & cargo system (floating cargo pools, tractor beam pull physics, cargo hold management)
+│   │
+│   ├── audio/                   # Audio playback system
+│   │   └── audio.zig            # SDL3 audio engine (device management, PCM stream playback, U8→S16 conversion)
 │   │
 │   └── cli/                     # Offline tools & asset pipelines
 │       ├── extract.zig          # Asset extraction pipeline (GAME.DAT → directory tree)

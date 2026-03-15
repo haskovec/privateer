@@ -536,7 +536,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test selecting a response advances to correct next node
   - GREEN: Implement dialogue tree navigation
 
-- [ ] **10.3 Conversation audio**
+- [x] **10.3 Conversation audio**
   - Decompress VPK/VPF voice packs
   - Play speech during conversations
   - RED: Test VPK decompression produces playable audio
