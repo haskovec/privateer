@@ -87,6 +87,29 @@ pub fn build(b: *std.Build) void {
         repack_cmd.addArgs(args);
     }
 
+    // Sprite viewer CLI tool
+    const sprite_exe = b.addExecutable(.{
+        .name = "privateer-sprite",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cli/sprite_cli.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "privateer", .module = engine_mod },
+            },
+        }),
+    });
+    b.installArtifact(sprite_exe);
+
+    // Sprite step
+    const sprite_step = b.step("sprite", "Run the sprite viewer tool");
+    const sprite_cmd = b.addRunArtifact(sprite_exe);
+    sprite_step.dependOn(&sprite_cmd.step);
+    sprite_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        sprite_cmd.addArgs(args);
+    }
+
     // Engine module tests
     const mod_tests = b.addTest(.{
         .root_module = engine_mod,
@@ -111,10 +134,17 @@ pub fn build(b: *std.Build) void {
     });
     const run_repack_tests = b.addRunArtifact(repack_tests);
 
+    // Sprite CLI tests
+    const sprite_tests = b.addTest(.{
+        .root_module = sprite_exe.root_module,
+    });
+    const run_sprite_tests = b.addRunArtifact(sprite_tests);
+
     // Test step runs all test suites
     const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
     test_step.dependOn(&run_extract_tests.step);
     test_step.dependOn(&run_repack_tests.step);
+    test_step.dependOn(&run_sprite_tests.step);
 }

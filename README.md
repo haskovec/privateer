@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6 done).
+Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -58,7 +58,8 @@ privateer/
 │   │   ├── text.zig               # Text rendering engine (SHP font loading, string rendering)
 │   │   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
 │   │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
-│   │   └── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
+│   │   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
+│   │   └── kitty_graphics.zig    # Kitty graphics protocol encoder (inline terminal image display)
 │   │
 │   ├── game/                      # World data & game flow
 │   │   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
@@ -141,6 +142,8 @@ privateer/
 │       ├── extract_cli.zig        # Asset extraction CLI entry point (privateer-extract)
 │       ├── repack.zig             # Asset repacking pipeline (directory tree → GAME.DAT)
 │       ├── repack_cli.zig         # Asset repacking CLI entry point (privateer-repack)
+│       ├── sprite_viewer.zig      # Sprite viewer core (list, decode, format detection, palette resolution)
+│       ├── sprite_cli.zig         # Sprite viewer CLI entry point (privateer-sprite)
 │       ├── validate.zig           # Data validation pipeline (all parsers → error report)
 │       ├── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
 │       └── macos_bundle.zig       # macOS .app bundle validator (structure checks, Info.plist validation)
@@ -162,6 +165,8 @@ privateer/
 - `zig build run` -- build and run the game
 - `zig build extract -- --data-dir <path> --output <dir>` -- extract all game assets from GAME.DAT
 - `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
+- `zig build sprite -- list --data-dir <path>` -- list all sprite-containing files in GAME.DAT
+- `zig build sprite -- view --data-dir <path> --file <tre-path>` -- view sprites inline (Kitty protocol) or save as PNG
 - `./macos/bundle.sh` -- create a macOS .app bundle (native architecture)
 - `./macos/bundle.sh --universal` -- create a universal (x86_64 + aarch64) macOS .app bundle
 

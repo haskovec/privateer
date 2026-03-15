@@ -29,6 +29,7 @@ pub const upscale = @import("render/upscale.zig");
 pub const viewport = @import("render/viewport.zig");
 pub const text = @import("render/text.zig");
 pub const scene_renderer = @import("render/scene_renderer.zig");
+pub const kitty_graphics = @import("render/kitty_graphics.zig");
 
 // Game systems
 pub const scene = @import("game/scene.zig");
@@ -111,6 +112,7 @@ pub const repack = @import("cli/repack.zig");
 pub const validate = @import("cli/validate.zig");
 pub const palette_viewer = @import("cli/palette_viewer.zig");
 pub const macos_bundle = @import("cli/macos_bundle.zig");
+pub const sprite_viewer = @import("cli/sprite_viewer.zig");
 
 // Tests
 pub const integration_tests = @import("integration_tests.zig");

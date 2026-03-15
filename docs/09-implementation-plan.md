@@ -672,6 +672,16 @@ No phase should start until its dependencies are complete and tested green.
   - Build instructions for contributors
   - License considerations (engine is ours, data is EA's)
 
+- [x] **14.7 Sprite viewer CLI tool**
+  - `privateer-sprite list` to scan GAME.DAT and list all sprite-containing files (SHP/IFF/PAK)
+  - `privateer-sprite view` to decode and display sprites inline via Kitty graphics protocol
+  - Format detection by extension with magic-byte sniffing fallback
+  - Palette auto-detection (embedded PAK palette, same-directory PAL, default PCMAIN.PAL)
+  - Recursive PAK→IFF→SHAP sprite extraction
+  - Scale2x/3x/4x upscaling with side-by-side comparison mode
+  - PNG export (`--save`)
+  - Kitty graphics protocol encoder (`src/render/kitty_graphics.zig`)
+
 ---
 
 ## Future Considerations (Not in Current Scope)
