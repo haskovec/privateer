@@ -466,7 +466,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test landing at agricultural base deducts correct fee
   - GREEN: Implement landing fee
 
-- [ ] **8.5 Faction reputation system**
+- [x] **8.5 Faction reputation system**
   - Parse ATTITUDE.IFF for faction relationships
   - Track player standing with each faction
   - RED: Test killing pirate improves Confed reputation

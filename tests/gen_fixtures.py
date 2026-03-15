@@ -1814,6 +1814,68 @@ def gen_landfee_file():
     write("test_landfee.bin", root)
 
 
+def gen_attitude_file():
+    """Generate test ATTITUDE.IFF fixture (FORM:ATTD).
+
+    Faction reputation system data with initial dispositions, kill effects,
+    and hostility threshold.
+
+    Factions (indexed 0-5):
+      0 = Confed, 1 = Militia, 2 = Merchants, 3 = Pirates, 4 = Kilrathi, 5 = Retro
+
+    Structure:
+      FORM:ATTD
+        DISP (12 bytes: initial disposition per faction, 6 x i16 LE)
+        KMAT (36 bytes: kill matrix, 6x6 i8 values)
+              kmat[killed_faction][affected_faction] = reputation change
+        THRS (2 bytes: hostility threshold, i16 LE)
+
+    Fixture: test_attitude.bin
+        Initial dispositions: Confed=25, Militia=25, Merchants=0, Pirates=-50, Kilrathi=-75, Retro=-50
+        Kill matrix (when you kill row faction, column faction rep changes):
+          Kill Pirate:   Confed+5, Militia+3, Merchant+2, Pirate-10, Kilrathi 0, Retro 0
+          Kill Kilrathi: Confed+5, Militia+5, Merchant+3, Pirate 0, Kilrathi-10, Retro 0
+          Kill Confed:   Confed-10, Militia-5, Merchant-3, Pirate+3, Kilrathi+2, Retro+2
+          Kill Militia:  Confed-5, Militia-10, Merchant-2, Pirate+2, Kilrathi 0, Retro+1
+          Kill Merchant: Confed-3, Militia-2, Merchant-10, Pirate+1, Kilrathi 0, Retro+1
+          Kill Retro:    Confed+3, Militia+3, Merchant+2, Pirate 0, Kilrathi 0, Retro-10
+        Hostility threshold: -30 (below this, faction is hostile to player)
+    """
+    # Initial dispositions: Confed, Militia, Merchants, Pirates, Kilrathi, Retro
+    disp_data = b''
+    for val in [25, 25, 0, -50, -75, -50]:
+        disp_data += struct.pack('<h', val)
+    disp = make_iff_chunk(b"DISP", disp_data)
+
+    # Kill matrix: 6 rows (killed faction) x 6 columns (affected faction), i8 each
+    kmat_rows = [
+        # When you kill: Confed  Militia  Merchant  Pirate  Kilrathi  Retro
+        # Kill Confed:
+        [-10, -5, -3, 3, 2, 2],
+        # Kill Militia:
+        [-5, -10, -2, 2, 0, 1],
+        # Kill Merchant:
+        [-3, -2, -10, 1, 0, 1],
+        # Kill Pirate:
+        [5, 3, 2, -10, 0, 0],
+        # Kill Kilrathi:
+        [5, 5, 3, 0, -10, 0],
+        # Kill Retro:
+        [3, 3, 2, 0, 0, -10],
+    ]
+    kmat_data = b''
+    for row in kmat_rows:
+        for val in row:
+            kmat_data += struct.pack('b', val)
+    kmat = make_iff_chunk(b"KMAT", kmat_data)
+
+    # Hostility threshold
+    thrs = make_iff_chunk(b"THRS", struct.pack('<h', -30))
+
+    root = make_iff_form(b"ATTD", disp + kmat + thrs)
+    write("test_attitude.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1844,4 +1906,5 @@ if __name__ == "__main__":
     gen_commodities_file()
     gen_shipstuf_file()
     gen_landfee_file()
+    gen_attitude_file()
     print("Done.")
