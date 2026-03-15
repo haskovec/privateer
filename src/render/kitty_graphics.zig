@@ -18,6 +18,51 @@ pub const KittyError = error{
     OutOfMemory,
 };
 
+/// Detect whether the current terminal supports the Kitty graphics protocol
+/// by checking environment variables. Uses the same approach as chafa:
+/// fast env-var matching against known terminals, no escape sequence probing.
+///
+/// Known supported terminals: Kitty, Ghostty, WezTerm, Konsole.
+pub fn isKittySupported() bool {
+    return isKittySupportedFromEnv(
+        getenv("KITTY_PID"),
+        getenv("TERM"),
+        getenv("TERM_PROGRAM"),
+    );
+}
+
+/// Testable core: takes env var values directly.
+pub fn isKittySupportedFromEnv(
+    kitty_pid: ?[]const u8,
+    term: ?[]const u8,
+    term_program: ?[]const u8,
+) bool {
+    // KITTY_PID is set by the Kitty terminal
+    if (kitty_pid != null) return true;
+
+    // Check TERM value
+    if (term) |t| {
+        if (std.mem.eql(u8, t, "xterm-kitty")) return true;
+        if (std.mem.eql(u8, t, "xterm-ghostty")) return true;
+    }
+
+    // Check TERM_PROGRAM value
+    if (term_program) |tp| {
+        if (std.ascii.eqlIgnoreCase(tp, "ghostty")) return true;
+        if (std.ascii.eqlIgnoreCase(tp, "wezterm")) return true;
+        if (std.ascii.eqlIgnoreCase(tp, "konsole")) return true;
+    }
+
+    return false;
+}
+
+/// Read an environment variable, returning a Zig slice or null.
+fn getenv(name: [*:0]const u8) ?[]const u8 {
+    const c = std.c;
+    const ptr = c.getenv(name) orelse return null;
+    return std.mem.sliceTo(ptr, 0);
+}
+
 /// Display an RGBA image inline in the terminal using the Kitty graphics protocol.
 /// The image is encoded as PNG and transmitted in chunked base64.
 ///
@@ -231,6 +276,38 @@ test "compositeSideBySide produces correct dimensions" {
     try std.testing.expectEqual(@as(u32, 9), result.width); // 2 + 4 + 3
     try std.testing.expectEqual(@as(u32, 2), result.height); // max(2, 1)
     try std.testing.expectEqual(@as(usize, 9 * 2 * 4), result.pixels.len);
+}
+
+test "isKittySupportedFromEnv detects Kitty by KITTY_PID" {
+    try std.testing.expect(isKittySupportedFromEnv("12345", null, null));
+}
+
+test "isKittySupportedFromEnv detects Kitty by TERM" {
+    try std.testing.expect(isKittySupportedFromEnv(null, "xterm-kitty", null));
+}
+
+test "isKittySupportedFromEnv detects Ghostty by TERM" {
+    try std.testing.expect(isKittySupportedFromEnv(null, "xterm-ghostty", null));
+}
+
+test "isKittySupportedFromEnv detects Ghostty by TERM_PROGRAM" {
+    try std.testing.expect(isKittySupportedFromEnv(null, null, "ghostty"));
+}
+
+test "isKittySupportedFromEnv detects WezTerm" {
+    try std.testing.expect(isKittySupportedFromEnv(null, null, "WezTerm"));
+}
+
+test "isKittySupportedFromEnv detects Konsole" {
+    try std.testing.expect(isKittySupportedFromEnv(null, null, "konsole"));
+}
+
+test "isKittySupportedFromEnv returns false for unsupported terminal" {
+    try std.testing.expect(!isKittySupportedFromEnv(null, "xterm-256color", "Apple_Terminal"));
+}
+
+test "isKittySupportedFromEnv returns false for no env vars" {
+    try std.testing.expect(!isKittySupportedFromEnv(null, null, null));
 }
 
 test "compositeSideBySide preserves left image pixels" {

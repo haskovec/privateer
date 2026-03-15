@@ -305,6 +305,19 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 
     std.debug.print("Found {} sprite(s) in {s}\n\n", .{ sprites.len, filename });
 
+    // Detect terminal capabilities for inline display
+    const kitty_supported = kitty.isKittySupported();
+    const can_inline = !view_args.no_inline and kitty_supported;
+
+    // If no Kitty support and no --save path, auto-save to PNG files
+    const auto_save = !kitty_supported and !view_args.no_inline and view_args.save_path == null;
+    if (auto_save) {
+        std.debug.print("Terminal does not support Kitty graphics protocol.\n", .{});
+        std.debug.print("Saving sprites as PNG files instead.\n\n", .{});
+    } else if (!kitty_supported and !view_args.no_inline and view_args.save_path != null) {
+        std.debug.print("Terminal does not support Kitty graphics protocol; using --save output only.\n\n", .{});
+    }
+
     // Determine which sprites to show
     const start_idx: usize = if (view_args.index) |idx| @min(idx, sprites.len - 1) else 0;
     const end_idx: usize = if (view_args.index) |idx| @min(idx + 1, sprites.len) else sprites.len;
@@ -318,6 +331,14 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         // Convert to RGBA
         var rgba_image = try render_mod.spriteToRgba(allocator, spr, palette);
         defer rgba_image.deinit();
+
+        // Determine the effective save path: explicit --save, or auto-generated
+        const effective_save = if (view_args.save_path) |p|
+            p
+        else if (auto_save)
+            "sprite.png"
+        else
+            @as(?[]const u8, null);
 
         if (view_args.scale > 1 and view_args.side_by_side) {
             // Side-by-side: original + upscaled
@@ -343,7 +364,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
             );
             defer composite.deinit();
 
-            if (!view_args.no_inline) {
+            if (can_inline) {
                 std.debug.print("  [1x: {}x{}]  |  [{}x: {}x{}]\n", .{
                     rgba_image.width, rgba_image.height,
                     view_args.scale,   upscaled.width,  upscaled.height,
@@ -351,7 +372,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
                 try kitty.displayImage(stdout_writer, allocator, composite.pixels, composite.width, composite.height);
             }
 
-            if (view_args.save_path) |base_path| {
+            if (effective_save) |base_path| {
                 try savePng(allocator, base_path, idx, sprites.len, composite.pixels, composite.width, composite.height);
             }
         } else if (view_args.scale > 1) {
@@ -366,20 +387,20 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
             );
             defer upscaled.deinit();
 
-            if (!view_args.no_inline) {
+            if (can_inline) {
                 try kitty.displayImage(stdout_writer, allocator, upscaled.pixels, upscaled.width, upscaled.height);
             }
 
-            if (view_args.save_path) |base_path| {
+            if (effective_save) |base_path| {
                 try savePng(allocator, base_path, idx, sprites.len, upscaled.pixels, upscaled.width, upscaled.height);
             }
         } else {
             // Original size
-            if (!view_args.no_inline) {
+            if (can_inline) {
                 try kitty.displayImage(stdout_writer, allocator, rgba_image.pixels, rgba_image.width, rgba_image.height);
             }
 
-            if (view_args.save_path) |base_path| {
+            if (effective_save) |base_path| {
                 try savePng(allocator, base_path, idx, sprites.len, rgba_image.pixels, rgba_image.width, rgba_image.height);
             }
         }
