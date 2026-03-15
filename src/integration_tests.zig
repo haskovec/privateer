@@ -29,10 +29,27 @@ const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
 
-/// Resolve the game data directory from the PRIVATEER_DATA environment variable.
-/// Returns null if the variable is not set.
+const app_config = @import("config.zig");
+
+/// Resolve the game data directory.
+/// Precedence: PRIVATEER_DATA env var → privateer.json data_dir → null.
 fn getGameDataDir() ?[]const u8 {
-    return std.process.getEnvVarOwned(std.heap.page_allocator, "PRIVATEER_DATA") catch null;
+    // Try env var first
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "PRIVATEER_DATA") catch null) |dir| {
+        return dir;
+    }
+    // Fall back to privateer.json
+    var cfg = app_config.load(std.heap.page_allocator, app_config.CONFIG_FILE) catch return null;
+    // Check if data_dir is the default "data" (meaning no config file was found or no real path set)
+    if (std.mem.eql(u8, cfg.data_dir, "data")) {
+        cfg.deinit();
+        return null;
+    }
+    // Transfer ownership of data_dir, free the rest
+    const dir = cfg.data_dir;
+    std.heap.page_allocator.free(cfg.mod_dir);
+    std.heap.page_allocator.free(cfg.output_dir);
+    return dir;
 }
 
 /// Build the path to GAME.DAT from the data directory.
