@@ -666,8 +666,8 @@ No phase should start until its dependencies are complete and tested green.
   - Verify random mission generation
   - Compare game behavior against original (running in DOSBox alongside)
 
-- [ ] **14.6 README & distribution**
-  - User-facing README with install instructions
+- [x] **14.6 README & distribution**
+  - User-facing GETTING_STARTED.md with install instructions and controls reference
   - How to point at your game data directory
   - Build instructions for contributors
   - License considerations (engine is ours, data is EA's)

@@ -20,7 +20,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Project Status
 
-Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4 done).
+Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
