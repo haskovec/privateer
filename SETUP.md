@@ -19,12 +19,54 @@ You need the directory that contains `GAME.DAT`. Common locations:
 
 The directory must contain `GAME.DAT` directly (not inside a subdirectory).
 
-## 2. Set the PRIVATEER_DATA Environment Variable
+## 2. Configuration
 
-All integration tests and the game runtime use the `PRIVATEER_DATA` environment
-variable to find the game data.
+The engine uses a single config file `privateer.json` in the working directory.
+Create it with your game data path:
 
-### Temporary (current shell session)
+```json
+{
+  "data_dir": "/path/to/directory/containing/GAME.DAT",
+  "mod_dir": "mods",
+  "output_dir": "output",
+  "graphics": {
+    "scale_factor": 4,
+    "fullscreen": false,
+    "viewport_mode": "fit_4_3"
+  },
+  "audio": {
+    "sfx_volume": 1.0,
+    "music_volume": 0.7
+  },
+  "input": {
+    "joystick_deadzone": 0.15
+  }
+}
+```
+
+Only `data_dir` is required — all other fields have sensible defaults and can
+be omitted. A minimal config is just:
+
+```json
+{
+  "data_dir": "/path/to/directory/containing/GAME.DAT"
+}
+```
+
+### Configuration precedence
+
+Settings are resolved in this order (highest priority first):
+
+1. **CLI arguments**: `--data-dir`, `--mod-dir`, `--output-dir`
+2. **PRIVATEER_DATA environment variable**: overrides `data_dir` only
+3. **`privateer.json`** config file
+4. **Built-in defaults**
+
+### PRIVATEER_DATA environment variable
+
+As an alternative to (or override for) `privateer.json`, you can set the
+`PRIVATEER_DATA` environment variable. This is especially useful for integration
+tests and CI where you don't want a config file checked in.
 
 **bash / zsh (macOS, Linux, Git Bash on Windows):**
 ```bash
@@ -36,17 +78,8 @@ export PRIVATEER_DATA="/path/to/directory/containing/GAME.DAT"
 $env:PRIVATEER_DATA = "C:\Program Files\EA Games\Wing Commander Privateer\DATA"
 ```
 
-### Persistent
-
-**macOS / Linux** -- add to your `~/.bashrc`, `~/.zshrc`, or `~/.profile`:
-```bash
-export PRIVATEER_DATA="$HOME/Games/privateer"
-```
-
-**Windows** -- set via System Properties > Environment Variables, or:
-```powershell
-[Environment]::SetEnvironmentVariable("PRIVATEER_DATA", "C:\Program Files\EA Games\Wing Commander Privateer\DATA", "User")
-```
+To persist across sessions, add the export to `~/.bashrc` / `~/.zshrc` or set
+it via System Properties > Environment Variables on Windows.
 
 ## 3. Build and Test
 
@@ -57,12 +90,12 @@ zig build
 # Run unit tests only (no game data needed)
 zig build test
 
-# Run all tests including integration tests (requires PRIVATEER_DATA)
+# Run all tests including integration tests (requires PRIVATEER_DATA or privateer.json)
 PRIVATEER_DATA=/path/to/data zig build test
 ```
 
-If `PRIVATEER_DATA` is not set, integration tests are skipped automatically.
-Unit tests always run regardless.
+If neither `PRIVATEER_DATA` nor a valid `privateer.json` `data_dir` is set,
+integration tests are skipped automatically. Unit tests always run regardless.
 
 ## 4. Extract Game Assets (Optional)
 
@@ -93,5 +126,6 @@ extracted/
 zig build run
 ```
 
-The game reads `PRIVATEER_DATA` (or `config.json` in the working directory) to
-locate `GAME.DAT` at startup.
+The game loads configuration from `privateer.json`, with `PRIVATEER_DATA` env var
+and CLI arguments as overrides. The options menu (in-game) modifies settings and
+saves them back to `privateer.json`.

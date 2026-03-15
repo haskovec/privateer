@@ -32,7 +32,7 @@ privateer/
 ├── src/
 │   ├── main.zig                   # Game executable entry point
 │   ├── root.zig                   # Engine library root (exports all submodules)
-│   ├── config.zig                 # JSON configuration system (data paths, settings)
+│   ├── config.zig                 # Unified config system (paths + settings from privateer.json, env var, CLI args)
 │   ├── sdl.zig                    # SDL3 initialization wrapper
 │   ├── testing.zig                # Test helpers (fixture loader, binary assertions, BE readers)
 │   ├── integration_tests.zig      # Integration tests against real game data
@@ -79,7 +79,7 @@ privateer/
 │   │   ├── config_overrides.zig   # Config override system (JSON balance tweaks: ship stats, trade-in, missile lifetime)
 │   │   └── asset_watcher.zig      # Asset hot-reloading (polls mod dir for file changes, dev mode)
 │   │
-│   ├── settings.zig               # Persistent game settings (graphics, audio, input; JSON serialization)
+│   ├── settings.zig               # Settings re-export shim (delegates to config.zig)
 │   │
 │   ├── input/                     # Input handling
 │   │   └── joystick.zig           # Joystick/gamepad support (SDL3 gamepad API, deadzone, axis mapping, button edge detection)
