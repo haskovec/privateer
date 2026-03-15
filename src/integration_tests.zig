@@ -2138,3 +2138,88 @@ test "integration: COMODTYP.IFF parses all commodities" {
     const artifact = registry.findByName("Alien Artifact");
     try std.testing.expect(artifact != null);
 }
+
+// --- Plot mission integration tests (Phase 9.4) ---
+
+const plot_missions = @import("missions/plot_missions.zig");
+
+test "integration: PLOTMSNS.IFF parses mission list with 24 entries" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MISSIONS", "PLOTMSNS.IFF") orelse return;
+    var list = try plot_missions.parsePlotMissionList(allocator, file_data);
+    defer list.deinit();
+
+    // PLOTMSNS.IFF TABL has 96 bytes = 24 entries
+    try std.testing.expectEqual(@as(usize, 24), list.count());
+}
+
+test "integration: S0MA.IFF parses as valid plot mission" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MISSIONS", "S0MA.IFF") orelse return;
+    var mission = try plot_missions.parsePlotMission(allocator, file_data);
+    defer mission.deinit();
+
+    // S0MA has 1 cast member (PLAYER), 2 flags, cargo (Iron = commodity 22)
+    try std.testing.expectEqualStrings("PLAYER", mission.castName(0).?);
+    try std.testing.expectEqual(@as(usize, 2), mission.flags.len);
+    try std.testing.expect(mission.cargo != null);
+    try std.testing.expectEqual(@as(u8, 22), mission.cargo.?.commodity_id);
+    try std.testing.expectEqual(@as(usize, 2), mission.objectiveCount());
+    try std.testing.expectEqual(@as(usize, 12), mission.program.len);
+}
+
+test "integration: all plot mission files parse without errors" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const header = try tre.readHeader(loaded.tre_data);
+    var parsed_count: usize = 0;
+
+    for (0..header.entry_count) |i| {
+        var entry = try tre.readEntry(allocator, loaded.tre_data, @intCast(i));
+        defer entry.deinit();
+
+        // Check if this is a plot mission file (MISSIONS/S*.IFF)
+        const path = entry.path;
+        const basename = std.fs.path.basename(path);
+
+        const is_mission = for (0..path.len) |j| {
+            const remaining = path[j..];
+            if (remaining.len >= 8 and std.ascii.eqlIgnoreCase(remaining[0..8], "MISSIONS")) {
+                break true;
+            }
+        } else false;
+
+        if (!is_mission) continue;
+        if (basename.len < 5) continue;
+        if (basename[0] != 'S' and basename[0] != 's') continue;
+        if (!std.ascii.endsWithIgnoreCase(basename, ".IFF")) continue;
+        // Skip non-plot files
+        if (std.ascii.eqlIgnoreCase(basename, "SKELETON.IFF")) continue;
+
+        const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+        var mission = plot_missions.parsePlotMission(allocator, file_data) catch |err| {
+            std.debug.print("Failed to parse plot mission {s}: {}\n", .{ basename, err });
+            return err;
+        };
+        defer mission.deinit();
+
+        // Every mission should have at least 1 cast member and 1 objective
+        try std.testing.expect(mission.castCount() >= 1);
+        try std.testing.expect(mission.objectiveCount() >= 1);
+        try std.testing.expect(mission.briefing.len > 0);
+        try std.testing.expect(mission.program.len > 0);
+
+        parsed_count += 1;
+    }
+
+    // We should have parsed at least 23 plot mission files
+    try std.testing.expect(parsed_count >= 23);
+}

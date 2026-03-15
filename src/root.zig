@@ -39,9 +39,11 @@ pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");
 pub const nav_map = @import("game/nav_map.zig");
-pub const missions = @import("game/missions.zig");
-pub const mission_computer = @import("game/mission_computer.zig");
-pub const mission_tracker = @import("game/mission_tracker.zig");
+// Mission system
+pub const missions = @import("missions/missions.zig");
+pub const mission_computer = @import("missions/mission_computer.zig");
+pub const mission_tracker = @import("missions/mission_tracker.zig");
+pub const plot_missions = @import("missions/plot_missions.zig");
 
 // Economy & Trading
 pub const commodities = @import("economy/commodities.zig");

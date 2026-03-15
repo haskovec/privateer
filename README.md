@@ -67,10 +67,13 @@ privateer/
 │   │   ├── scene.zig          # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   │   ├── game_state.zig     # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── click_region.zig   # Click region system (EFCT action parser, hit-testing, scene transitions)
-│   │   ├── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
-│   │   ├── missions.zig      # Random mission generator (RNDM templates, base-type filtering, reward generation)
+│   │   └── midgame.zig        # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │
+│   ├── missions/              # Mission system
+│   │   ├── missions.zig       # Random mission generator (RNDM templates, base-type filtering, reward generation)
 │   │   ├── mission_computer.zig # Mission computer UI (browse/accept missions, active mission tracking, completion/abandonment)
-│   │   └── mission_tracker.zig # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
+│   │   ├── mission_tracker.zig # Mission objective tracker (patrol/cargo/bounty/attack/defend/scout objectives, completion & failure detection)
+│   │   └── plot_missions.zig  # Plot mission scripting engine (FORM:MSSN parser: CAST/FLAG/PROG/PART/SCEN chunks, mission list)
 │   │
 │   ├── economy/               # Economy & trading systems
 │   │   ├── commodities.zig    # Commodity system (COMODTYP.IFF: commodity types, base prices, price/availability modifiers)
@@ -167,3 +170,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_mfd.py` | Deep analysis of MFD chunks (CMFD, CHUD, DIAL) from cockpit IFF files |
 | `analyze_weapons.py` | Deep analysis of weapon data files (GUNS.IFF, WEAPONS.IFF, BEAMTYPE.IFF, TORPTYPE.IFF) |
 | `analyze_commodities.py` | Deep analysis of commodity data files (COMODTYP.IFF, LANDFEE.IFF, LIMITS.IFF) |
+| `analyze_missions.py` | Deep analysis of plot mission IFF files (SCRP/PROG/FLAG/CAST/PART/SCEN chunks) |

@@ -500,7 +500,7 @@ No phase should start until its dependencies are complete and tested green.
   - RED: Test failing mission (cargo destroyed) triggers failure
   - GREEN: Implement failure conditions
 
-- [ ] **9.4 Plot mission scripting engine**
+- [x] **9.4 Plot mission scripting engine**
   - Parse SCRP/PROG/FLAG/CAST chunks from mission IFF files
   - Execute scripted sequences for plot missions
   - RED: Test loading S0MA.IFF parses all script commands

@@ -1945,6 +1945,121 @@ def gen_mission_templates_file():
     write("test_mission_templates.bin", root)
 
 
+def gen_plot_mission_file():
+    """Generate test plot mission fixture (FORM:MSSN).
+
+    Plot mission structure (from analysis of real S0MA.IFF etc.):
+        FORM:MSSN
+          [CARG] (3 bytes: commodity_id(u8), byte1(u8), byte2(u8)) - optional
+          TEXT   (null-terminated briefing string)
+          PAYS   (4 bytes: reward(i32 LE))
+          [JUMP] (2 bytes: system_id(u8), nav_point(u8)) - optional
+          FORM:SCRP (script container)
+            CAST (N*8 bytes: array of 8-byte null-padded NPC names)
+            FLAG (N bytes: boolean flag array, initially all zero)
+            PROG (variable: script bytecode)
+            PART (N*45 bytes: array of 45-byte participant records)
+            FORM:PLAY (objectives)
+              SCEN (variable: 9-byte header + u16 LE participant indices)
+
+    Fixture: test_plot_mission.bin - One plot mission with cargo delivery
+        - Cargo: commodity 22 (Iron)
+        - Briefing: deliver cargo
+        - Reward: 15000 credits
+        - 2 cast members: PLAYER, PIR_AA
+        - 2 flags (both zero)
+        - 12 bytes PROG (minimal bytecode)
+        - 2 PART records (PLAYER + 1 NPC)
+        - 2 SCEN objectives (start scene + encounter)
+    """
+    # CARG: commodity_id=22 (Iron), 0x31, 0x0A (matches real data pattern)
+    carg = make_iff_chunk(b"CARG", bytes([22, 0x31, 0x0A]))
+
+    # TEXT: briefing
+    briefing = b"\nDeliver cargo of Iron to the refinery.\n\nPays 15000 credits.\x00"
+    text = make_iff_chunk(b"TEXT", briefing)
+
+    # PAYS: 4 bytes, reward as i32 LE
+    pays = make_iff_chunk(b"PAYS", struct.pack('<i', 15000))
+
+    # CAST: 2 entries of 8-byte null-padded names
+    cast_data = b"PLAYER\x00\x00" + b"PIR_AA\x00\x00"
+    cast = make_iff_chunk(b"CAST", cast_data)
+
+    # FLAG: 2 bytes, both zero
+    flag = make_iff_chunk(b"FLAG", bytes([0, 0]))
+
+    # PROG: 12 bytes minimal bytecode (matches S0MA pattern)
+    prog_data = bytes([
+        0x47, 0x01, 0x00, 0x00,  # header word
+        0xe0, 0x20, 0x09, 0x03,  # destination system/nav/base
+        0xd1, 0x16, 0x00, 0x00,  # cargo delivery (commodity 0x16=22)
+    ])
+    prog = make_iff_chunk(b"PROG", prog_data)
+
+    # PART: 2 records of 45 bytes each
+    # Record 0: PLAYER (mostly zeros and 0xff as in real data)
+    player_part = bytearray(45)
+    for i in range(20, 32):
+        player_part[i] = 0xFF
+    player_part[32:37] = bytes([0xFF, 0xFF, 0xFF, 0xFF, 0x01])
+    player_part[37:44] = bytes([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01])
+    player_part[44] = 0x00
+
+    # Record 1: NPC (pirate) - simplified from real data
+    npc_part = bytearray(45)
+    struct.pack_into('<H', npc_part, 0, 1)  # index = 1
+    npc_part[2:16] = b"talntypetalpi\x00"  # talent strings (14 bytes)
+    struct.pack_into('<H', npc_part, 16, 0)  # flags
+    npc_part[18] = 0x01  # nav_point
+    npc_part[19] = 0x29  # system_id = 41
+    npc_part[20] = 0x00
+    struct.pack_into('<i', npc_part, 21, 500)  # x coordinate
+    struct.pack_into('<i', npc_part, 25, -5500)  # y coordinate
+    struct.pack_into('<i', npc_part, 29, -650)  # z coordinate
+    npc_part[33] = 0x2D  # faction
+    npc_part[34:37] = bytes([0x00, 0x01, 0x05])
+    npc_part[37:39] = bytes([0x00, 0x02])
+    npc_part[39:45] = bytes([0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+
+    part = make_iff_chunk(b"PART", bytes(player_part) + bytes(npc_part))
+
+    # SCEN objectives inside FORM:PLAY
+    # SCEN 0: starting scene (11 bytes: type=1, nav=ff, sys=ff, 00 00, ff ff ff ff, participant 0)
+    scen0 = make_iff_chunk(b"SCEN", bytes([
+        0x01, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x00,  # participant index 0 (PLAYER)
+    ]))
+    # SCEN 1: encounter (15 bytes: type=1, nav=0, sys=0x29, ff ff, ff ff ff ff, participants 1,0,0)
+    scen1 = make_iff_chunk(b"SCEN", bytes([
+        0x01, 0x00, 0x29, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x01, 0x00,  # participant index 1 (PIR_AA)
+        0x00, 0x00,  # participant index 0 (filler)
+        0x00, 0x00,  # participant index 0 (filler)
+    ]))
+
+    play_form = make_iff_form(b"PLAY", scen0 + scen1)
+    scrp_form = make_iff_form(b"SCRP", cast + flag + prog + part + play_form)
+    root = make_iff_form(b"MSSN", carg + text + pays + scrp_form)
+    write("test_plot_mission.bin", root)
+
+
+def gen_plot_mission_list_file():
+    """Generate test plot mission list fixture (FORM:MSNS with TABL chunk).
+
+    PLOTMSNS.IFF structure:
+        FORM:MSNS
+          TABL (N*4 bytes: array of u32 LE offsets into TRE for each mission)
+
+    Fixture: test_plot_mission_list.bin - List with 3 mission offsets
+    """
+    # TABL: 3 mission file offsets (u32 LE)
+    tabl_data = struct.pack('<III', 0x74, 0x8A, 0xA0)
+    tabl = make_iff_chunk(b"TABL", tabl_data)
+    root = make_iff_form(b"MSNS", tabl)
+    write("test_plot_mission_list.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -1977,4 +2092,6 @@ if __name__ == "__main__":
     gen_landfee_file()
     gen_attitude_file()
     gen_mission_templates_file()
+    gen_plot_mission_file()
+    gen_plot_mission_list_file()
     print("Done.")
