@@ -8,7 +8,7 @@
 const std = @import("std");
 const save_game = @import("save_game.zig");
 const save_slots = @import("save_slots.zig");
-const game_state = @import("game_state.zig");
+const game_state = @import("../game/game_state.zig");
 
 /// Auto-save file name on disk.
 pub const AUTOSAVE_FILENAME = "autosave.sav";

@@ -39,12 +39,6 @@ pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");
 pub const nav_map = @import("game/nav_map.zig");
-pub const save_game = @import("game/save_game.zig");
-pub const save_slots = @import("game/save_slots.zig");
-pub const auto_save = @import("game/auto_save.zig");
-pub const mod_loader = @import("game/mod_loader.zig");
-pub const config_overrides = @import("game/config_overrides.zig");
-pub const asset_watcher = @import("game/asset_watcher.zig");
 // Mission system
 pub const missions = @import("missions/missions.zig");
 pub const mission_computer = @import("missions/mission_computer.zig");
@@ -92,6 +86,16 @@ pub const rumors = @import("conversations/rumors.zig");
 pub const audio = @import("audio/audio.zig");
 pub const sound_effects = @import("audio/sound_effects.zig");
 pub const music_player = @import("audio/music_player.zig");
+
+// Persistence (save/load)
+pub const save_game = @import("persistence/save_game.zig");
+pub const save_slots = @import("persistence/save_slots.zig");
+pub const auto_save = @import("persistence/auto_save.zig");
+
+// Modding support
+pub const mod_loader = @import("modding/mod_loader.zig");
+pub const config_overrides = @import("modding/config_overrides.zig");
+pub const asset_watcher = @import("modding/asset_watcher.zig");
 
 // CLI tools
 pub const extract = @import("cli/extract.zig");

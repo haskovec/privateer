@@ -18,7 +18,7 @@
 //!   Kills:      per_faction(6×u32)
 
 const std = @import("std");
-const game_state = @import("game_state.zig");
+const game_state = @import("../game/game_state.zig");
 const flight_physics = @import("../flight/flight_physics.zig");
 const reputation_mod = @import("../economy/reputation.zig");
 
