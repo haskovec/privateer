@@ -31,6 +31,11 @@ pub const Window = struct {
     quit_requested: bool,
     joystick: joystick_mod.Joystick,
     keyboard: keyboard_mod.Keyboard,
+    /// Mouse state updated each frame by pollEvents.
+    mouse_x: f32 = 0,
+    mouse_y: f32 = 0,
+    mouse_clicked: bool = false,
+    key_pressed: u32 = 0,
 
     pub const CreateError = error{
         WindowCreateFailed,
@@ -90,6 +95,8 @@ pub const Window = struct {
     pub fn pollEvents(self: *Window) bool {
         self.joystick.beginFrame();
         self.keyboard.beginFrame();
+        self.mouse_clicked = false;
+        self.key_pressed = 0;
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -105,8 +112,23 @@ pub const Window = struct {
                     {
                         self.toggleFullscreen();
                     }
+                    // Track key press for game state
+                    if (event.type == c.SDL_EVENT_KEY_DOWN and !key.repeat) {
+                        self.key_pressed = key.key;
+                    }
                     // Route all key events to keyboard handler
                     self.keyboard.handleEvent(&event);
+                },
+                c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
+                    if (event.button.button == c.SDL_BUTTON_LEFT) {
+                        self.mouse_clicked = true;
+                        self.mouse_x = event.button.x;
+                        self.mouse_y = event.button.y;
+                    }
+                },
+                c.SDL_EVENT_MOUSE_MOTION => {
+                    self.mouse_x = event.motion.x;
+                    self.mouse_y = event.motion.y;
                 },
                 c.SDL_EVENT_WINDOW_RESIZED => {
                     self.width = event.window.data1;
