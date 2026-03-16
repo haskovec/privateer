@@ -130,7 +130,7 @@ test "integration: PRIV.TRE entry 0 is ATTITUDE.IFF" {
     var entry = try tre.readEntry(allocator, tre_data, 0);
     defer entry.deinit();
 
-    try std.testing.expectEqualStrings("..\\..\\DATA\\AIDS\\ATTITUDE.IFF", entry.path);
+    try std.testing.expectEqualStrings("../../DATA/AIDS/ATTITUDE.IFF", entry.path);
     try std.testing.expectEqual(@as(u32, 256), entry.size);
 }
 
