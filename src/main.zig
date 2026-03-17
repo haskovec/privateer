@@ -12,6 +12,7 @@ const viewport_mod = privateer.viewport;
 const game_state_mod = privateer.game_state;
 const click_region = privateer.click_region;
 const sprite_mod = privateer.sprite;
+const room_assets = privateer.room_assets;
 
 /// Holds all live game data and rendering state for the main loop.
 const GameState = struct {
@@ -99,7 +100,9 @@ fn loadSceneBackground(allocator: std.mem.Allocator, tre_data: []const u8, index
 }
 
 /// Build click regions from a scene's sprite EFCT data.
-fn buildClickRegions(allocator: std.mem.Allocator, scene: scene_mod.Scene) ![]click_region.ClickRegion {
+/// Each GAMEFLOW sprite INFO byte is a global OPTSHPS.PAK resource index pointing
+/// to that hotspot's own scene pack. Sprite 0's header gives the click region bounds.
+fn buildClickRegions(allocator: std.mem.Allocator, scene: scene_mod.Scene, optshps_pak: *const pak.PakFile) ![]click_region.ClickRegion {
     var regions: std.ArrayListUnmanaged(click_region.ClickRegion) = .empty;
     defer regions.deinit(allocator);
 
@@ -107,14 +110,40 @@ fn buildClickRegions(allocator: std.mem.Allocator, scene: scene_mod.Scene) ![]cl
         if (spr.effect.len > 0) {
             const action = click_region.parseAction(spr.effect);
             if (action != .none) {
-                // Create a click region from the sprite info byte
-                // The info byte encodes a rough screen position/area
-                // For now, create reasonable clickable areas based on sprite index
+                var x: i16 = 0;
+                var y: i16 = 0;
+                var w: u16 = 320;
+                var h: u16 = 200;
+
+                // Sprite INFO byte = global OPTSHPS.PAK resource index
+                // Each hotspot has its own scene pack; sprite 0's header gives bounds
+                const resource = optshps_pak.getResource(spr.info) catch null;
+                if (resource) |res| {
+                    var spr_pack = scene_renderer.parseScenePack(allocator, res) catch null;
+                    if (spr_pack) |*sp| {
+                        defer sp.deinit();
+                        if (sp.getSpriteHeader(0)) |header| {
+                            const sw = header.width() catch 0;
+                            const sh = header.height() catch 0;
+                            if (sw > 0 and sh > 0) {
+                                // Sprite screen position when rendered at center (0,0):
+                                // top-left = (-x1, -y1)
+                                const left: i32 = -@as(i32, header.x1);
+                                const top: i32 = -@as(i32, header.y1);
+                                x = @intCast(@max(@as(i32, 0), left));
+                                y = @intCast(@max(@as(i32, 0), top));
+                                w = sw;
+                                h = sh;
+                            }
+                        } else |_| {}
+                    }
+                }
+
                 try regions.append(allocator, .{
-                    .x = 0,
-                    .y = 0,
-                    .width = 320,
-                    .height = 200,
+                    .x = x,
+                    .y = y,
+                    .width = w,
+                    .height = h,
                     .sprite_id = spr.info,
                     .action = action,
                 });
@@ -125,24 +154,98 @@ fn buildClickRegions(allocator: std.mem.Allocator, scene: scene_mod.Scene) ![]cl
     return regions.toOwnedSlice(allocator);
 }
 
-/// Try to load a landing scene for the given room/scene from GAMEFLOW.
+/// Find which room contains a given scene ID, preferring the current room.
+fn findRoomForScene(gameflow: *const scene_mod.GameFlow, scene_id: u8, preferred_room: ?u8) ?u8 {
+    // Check preferred room first
+    if (preferred_room) |pref| {
+        if (gameflow.findRoom(pref)) |room| {
+            for (room.scenes) |s| {
+                if (s.info == scene_id) return pref;
+            }
+        }
+    }
+    // Search all rooms
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |s| {
+            if (s.info == scene_id) return room.info;
+        }
+    }
+    return null;
+}
+
+/// Load a scene palette from OPTPALS.PAK based on scene ID.
+fn loadScenePalette(state: *GameState, scene_id: u8) void {
+    // Determine which palette to use
+    const room_first_scene: ?u8 = if (state.state_machine.current_room) |rid| blk: {
+        const room = state.gameflow.findRoom(rid) orelse break :blk null;
+        if (room.scenes.len > 0) break :blk room.scenes[0].info;
+        break :blk null;
+    } else null;
+
+    const pal_idx = room_assets.paletteIndex(scene_id, room_first_scene) orelse return;
+
+    const optpals_entry = state.tre_index.findEntry(room_assets.OPTPALS_PAK) orelse return;
+    const optpals_data = tre.extractFileData(state.tre_data, optpals_entry.offset, optpals_entry.size) catch return;
+    var optpals_pak = pak.parse(state.allocator, optpals_data) catch return;
+    defer optpals_pak.deinit();
+
+    const pal_resource = optpals_pak.getResource(pal_idx) catch return;
+    if (pal_resource.len == pal.PAL_FILE_SIZE) {
+        state.palette = pal.parse(pal_resource) catch return;
+    }
+}
+
+/// Load a landing scene: background from OPTSHPS.PAK, click regions from sprite headers,
+/// and palette from OPTPALS.PAK. Scene ID is used directly as the OPTSHPS.PAK resource index.
 fn loadLandingScene(state: *GameState, room_id: u8, scene_id: u8) void {
     // Find the room in gameflow
     const room = state.gameflow.findRoom(room_id) orelse return;
 
     // Find the scene within the room
+    var target_scene: ?scene_mod.Scene = null;
     for (room.scenes) |scn| {
         if (scn.info == scene_id) {
-            // Update state machine
-            state.state_machine.setScene(room_id, scene_id);
-
-            // Build click regions from this scene's sprites
-            state.allocator.free(state.click_regions);
-            state.click_regions = buildClickRegions(state.allocator, scn) catch &.{};
-
+            target_scene = scn;
             break;
         }
     }
+    const scn = target_scene orelse return;
+
+    // Update state machine
+    state.state_machine.setScene(room_id, scene_id);
+
+    // Free previous background
+    if (state.current_bg) |*bg| {
+        var s = bg.*;
+        s.deinit();
+        state.current_bg = null;
+    }
+
+    // Free previous click regions
+    state.allocator.free(state.click_regions);
+    state.click_regions = &.{};
+
+    // Load scene pack from OPTSHPS.PAK (scene_id = resource index)
+    const optshps_entry = state.tre_index.findEntry(room_assets.OPTSHPS_PAK) orelse return;
+    const optshps_data = tre.extractFileData(state.tre_data, optshps_entry.offset, optshps_entry.size) catch return;
+    var optshps_pak = pak.parse(state.allocator, optshps_data) catch return;
+    defer optshps_pak.deinit();
+
+    // Load background from scene pack (scene_id = PAK resource index for background)
+    const bg_resource = optshps_pak.getResource(scene_id) catch return;
+    var bg_pack = scene_renderer.parseScenePack(state.allocator, bg_resource) catch return;
+    defer bg_pack.deinit();
+
+    // Decode background sprite (index 0 in the scene pack)
+    state.current_bg = bg_pack.decodeSprite(state.allocator, 0) catch null;
+
+    // Build click regions (each sprite INFO = separate OPTSHPS.PAK resource)
+    state.click_regions = buildClickRegions(state.allocator, scn, &optshps_pak) catch &.{};
+
+    // Load the appropriate palette from OPTPALS.PAK
+    loadScenePalette(state, scene_id);
+
+    std.debug.print("Scene loaded: room={d} scene={d} regions={d}\n", .{ room_id, scene_id, state.click_regions.len });
 }
 
 /// Main per-frame update callback.
@@ -193,42 +296,6 @@ fn updateTitle(state: *GameState) void {
                 loadLandingScene(state, room.info, room.scenes[0].info);
             }
         }
-
-        // Try to load a landing scene background
-        loadLandedBackground(state);
-    }
-}
-
-/// Try to load a background for the current landed scene.
-fn loadLandedBackground(state: *GameState) void {
-    // Free previous background
-    if (state.current_bg) |*bg| {
-        var s = bg.*;
-        s.deinit();
-        state.current_bg = null;
-    }
-
-    // Try several known PAK files that contain base/landing scenes
-    const pak_names = [_][]const u8{
-        "LTOBASES.PAK",
-        "CU.PAK",
-        "OPTSHPS.PAK",
-    };
-
-    for (pak_names) |pak_name| {
-        const result = loadSceneBackground(
-            state.allocator,
-            state.tre_data,
-            &state.tre_index,
-            pak_name,
-            1,
-        ) catch continue;
-
-        state.current_bg = result.sprite;
-        if (result.palette) |p| {
-            state.palette = p;
-        }
-        return;
     }
 }
 
@@ -257,10 +324,10 @@ fn updateLanded(state: *GameState) void {
             const action = state.state_machine.handleAction(result.region.action) catch return;
             switch (action) {
                 .scene_transition => |target| {
-                    // Scene changed — reload background
-                    if (state.state_machine.current_room) |room_id| {
-                        loadLandingScene(state, room_id, target);
-                        loadLandedBackground(state);
+                    // Find the room containing the target scene (prefer current room)
+                    const room_id = findRoomForScene(&state.gameflow, target, state.state_machine.current_room);
+                    if (room_id) |rid| {
+                        loadLandingScene(state, rid, target);
                     }
                 },
                 .launch, .takeoff => {

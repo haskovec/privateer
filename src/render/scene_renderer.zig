@@ -52,6 +52,15 @@ pub const ScenePack = struct {
         if (offset + sprite_mod.HEADER_SIZE > self.data.len) return Error.OffsetOutOfBounds;
         return sprite_mod.decode(allocator, self.data[offset..]);
     }
+
+    /// Read the sprite header at the given index without decoding pixel data.
+    /// Useful for getting sprite bounds for click regions.
+    pub fn getSpriteHeader(self: ScenePack, index: usize) !sprite_mod.SpriteHeader {
+        if (index >= self.sprite_offsets.len) return Error.IndexOutOfBounds;
+        const offset: usize = self.sprite_offsets[index];
+        if (offset + sprite_mod.HEADER_SIZE > self.data.len) return Error.OffsetOutOfBounds;
+        return sprite_mod.parseHeader(self.data[offset..]);
+    }
 };
 
 /// Parse a PAK resource as a scene pack.

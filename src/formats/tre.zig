@@ -3,6 +3,7 @@
 //! and extracts embedded file data.
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const HEADER_SIZE: u32 = 8;
 pub const ENTRY_SIZE: u32 = 74;
@@ -118,12 +119,32 @@ pub fn findEntry(allocator: std.mem.Allocator, data: []const u8, filename: []con
 /// Memory-mapped TRE archive handle.
 /// Uses mmap for zero-copy access to the archive data, avoiding
 /// a full allocation + copy of the ~90 MB file.
-pub const MappedTre = struct {
+pub const MappedTre = if (builtin.os.tag == .windows) struct {
+    data: []u8,
+    allocator: std.mem.Allocator,
+
+    pub fn open(allocator: std.mem.Allocator, path: []const u8) !MappedTre {
+        const file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+        const stat = try file.stat();
+        const data = try allocator.alloc(u8, stat.size);
+        const bytes_read = try file.readAll(data);
+        if (bytes_read != stat.size) {
+            allocator.free(data);
+            return error.IncompleteRead;
+        }
+        return .{ .data = data, .allocator = allocator };
+    }
+
+    pub fn deinit(self: *MappedTre) void {
+        self.allocator.free(self.data);
+    }
+} else struct {
     data: []align(std.heap.page_size_min) u8,
 
     /// Memory-map a TRE file from disk. The returned data slice is valid until
     /// `deinit()` is called. No allocator is needed for the mapping itself.
-    pub fn open(path: []const u8) !MappedTre {
+    pub fn open(_: std.mem.Allocator, path: []const u8) !MappedTre {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
         const stat = try file.stat();
@@ -411,7 +432,7 @@ test "MappedTre: memory-map fixture file and parse header" {
     const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
     defer allocator.free(tmp_path);
 
-    var mapped = try MappedTre.open(tmp_path);
+    var mapped = try MappedTre.open(allocator, tmp_path);
     defer mapped.deinit();
 
     // Should be able to parse the header from mapped data
@@ -436,7 +457,7 @@ test "MappedTre: build TreIndex from mapped data" {
     const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
     defer allocator.free(tmp_path);
 
-    var mapped = try MappedTre.open(tmp_path);
+    var mapped = try MappedTre.open(allocator, tmp_path);
     defer mapped.deinit();
 
     var index = try TreIndex.build(allocator, mapped.data);

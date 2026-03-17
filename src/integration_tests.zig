@@ -2779,3 +2779,170 @@ test "integration: VPK clip count matches PFC line count for conversation files"
     // At least some PFC/VPK pairs should have matching counts
     try std.testing.expect(matched > 0);
 }
+
+// --- Scene transition integration tests ---
+
+const scene_mod = @import("game/scene.zig");
+const room_assets = @import("game/room_assets.zig");
+
+test "integration: OPTSHPS.PAK loads and contains scene backgrounds" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    const entry = tre_index.findEntry(room_assets.OPTSHPS_PAK) orelse
+        return error.FileNotFound;
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var pak_file = try pak.parse(allocator, file_data);
+    defer pak_file.deinit();
+
+    // OPTSHPS.PAK should have many resources (226 L1 entries)
+    try std.testing.expect(pak_file.resourceCount() > 60);
+
+    // Scene 0 should be a valid scene pack with a decodable background sprite
+    const resource = try pak_file.getResource(0);
+    var pack = try scene_renderer.parseScenePack(allocator, resource);
+    defer pack.deinit();
+
+    try std.testing.expect(pack.spriteCount() > 0);
+    var spr = try pack.decodeSprite(allocator, 0);
+    defer spr.deinit();
+    // Background should be roughly 320x200
+    try std.testing.expect(spr.width >= 200);
+    try std.testing.expect(spr.height >= 100);
+}
+
+test "integration: OPTPALS.PAK loads and contains valid palettes" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    const entry = tre_index.findEntry(room_assets.OPTPALS_PAK) orelse
+        return error.FileNotFound;
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+    var pak_file = try pak.parse(allocator, file_data);
+    defer pak_file.deinit();
+
+    // Should have at least 42 palette entries
+    try std.testing.expect(pak_file.resourceCount() >= room_assets.PALETTE_COUNT);
+
+    // Each palette resource should be 772 bytes (PAL_FILE_SIZE)
+    const pal_data = try pak_file.getResource(0);
+    try std.testing.expectEqual(@as(usize, pal.PAL_FILE_SIZE), pal_data.len);
+
+    // Should parse as a valid palette
+    const palette = try pal.parse(pal_data);
+    var has_non_black = false;
+    for (palette.colors[1..]) |c| {
+        if (c.r > 0 or c.g > 0 or c.b > 0) {
+            has_non_black = true;
+            break;
+        }
+    }
+    try std.testing.expect(has_non_black);
+}
+
+test "integration: GAMEFLOW scenes map to valid OPTSHPS.PAK resources" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    // Load GAMEFLOW.IFF
+    const gf_entry = tre_index.findEntry("GAMEFLOW.IFF") orelse
+        return error.FileNotFound;
+    const gf_data = try tre.extractFileData(loaded.tre_data, gf_entry.offset, gf_entry.size);
+    var gameflow = try scene_mod.parseGameFlow(allocator, gf_data);
+    defer gameflow.deinit();
+
+    // Load OPTSHPS.PAK
+    const optshps_entry = tre_index.findEntry(room_assets.OPTSHPS_PAK) orelse
+        return error.FileNotFound;
+    const optshps_data = try tre.extractFileData(loaded.tre_data, optshps_entry.offset, optshps_entry.size);
+    var optshps_pak = try pak.parse(allocator, optshps_data);
+    defer optshps_pak.deinit();
+
+    // Every scene ID in GAMEFLOW should correspond to a valid OPTSHPS.PAK resource
+    var scenes_checked: usize = 0;
+    for (gameflow.rooms) |room| {
+        for (room.scenes) |scn| {
+            const resource = optshps_pak.getResource(scn.info) catch continue;
+            var pack = scene_renderer.parseScenePack(allocator, resource) catch continue;
+            defer pack.deinit();
+
+            // Should have at least a background sprite
+            try std.testing.expect(pack.spriteCount() > 0);
+
+            // Sprite headers should be readable for click region bounds
+            for (scn.sprites) |spr| {
+                if (spr.info < pack.spriteCount()) {
+                    _ = pack.getSpriteHeader(spr.info) catch {};
+                }
+            }
+            scenes_checked += 1;
+        }
+    }
+    // Should have checked a significant number of scenes
+    try std.testing.expect(scenes_checked > 50);
+}
+
+test "integration: scene click regions have proper bounds from sprite headers" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    // Load GAMEFLOW.IFF
+    const gf_entry = tre_index.findEntry("GAMEFLOW.IFF") orelse
+        return error.FileNotFound;
+    const gf_data = try tre.extractFileData(loaded.tre_data, gf_entry.offset, gf_entry.size);
+    var gameflow = try scene_mod.parseGameFlow(allocator, gf_data);
+    defer gameflow.deinit();
+
+    // Load OPTSHPS.PAK
+    const optshps_entry = tre_index.findEntry(room_assets.OPTSHPS_PAK) orelse
+        return error.FileNotFound;
+    const optshps_data = try tre.extractFileData(loaded.tre_data, optshps_entry.offset, optshps_entry.size);
+    var optshps_pak = try pak.parse(allocator, optshps_data);
+    defer optshps_pak.deinit();
+
+    // Check the first room's first scene for proper click region bounds
+    // Each GAMEFLOW sprite INFO byte is a global OPTSHPS.PAK resource index
+    // (not an index within the per-scene pack)
+    if (gameflow.rooms.len == 0) return;
+    const room = gameflow.rooms[0];
+    if (room.scenes.len == 0) return;
+    const scn = room.scenes[0];
+
+    var has_sized_region = false;
+    for (scn.sprites) |spr| {
+        if (spr.effect.len > 0) {
+            const action = click_region.parseAction(spr.effect);
+            if (action != .none) {
+                // Sprite INFO = global PAK resource index for that hotspot
+                const resource = optshps_pak.getResource(spr.info) catch continue;
+                var spr_pack = scene_renderer.parseScenePack(allocator, resource) catch continue;
+                defer spr_pack.deinit();
+                if (spr_pack.getSpriteHeader(0)) |header| {
+                    const w = header.width() catch continue;
+                    const h = header.height() catch continue;
+                    // Hotspot sprites should be smaller than fullscreen
+                    if (w < 320 or h < 200) {
+                        has_sized_region = true;
+                    }
+                } else |_| {}
+            }
+        }
+    }
+    try std.testing.expect(has_sized_region);
+}
