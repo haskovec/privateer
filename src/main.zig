@@ -13,6 +13,7 @@ const game_state_mod = privateer.game_state;
 const click_region = privateer.click_region;
 const sprite_mod = privateer.sprite;
 const room_assets = privateer.room_assets;
+const text_mod = privateer.text;
 
 /// Holds all live game data and rendering state for the main loop.
 const GameState = struct {
@@ -38,12 +39,15 @@ const GameState = struct {
 
     // Currently decoded background sprite (owned pixels)
     current_bg: ?sprite_mod.Sprite,
+    // Overlay sprites for interactive hotspots (owned pixels)
+    current_overlays: []scene_renderer.PositionedSprite,
     // Click regions for the current scene
     click_regions: []click_region.ClickRegion,
 
     // Title screen state
     title_bg: ?sprite_mod.Sprite,
     title_palette: ?pal.Palette,
+    title_font: ?text_mod.Font,
 
     frame_count: u64,
 
@@ -56,6 +60,10 @@ const GameState = struct {
             var s = bg.*;
             s.deinit();
         }
+        if (self.title_font) |*f| {
+            f.deinit();
+        }
+        freeOverlays(self.allocator, self.current_overlays);
         self.allocator.free(self.click_regions);
         self.gameflow.deinit();
         self.tre_index.deinit();
@@ -173,6 +181,43 @@ fn findRoomForScene(gameflow: *const scene_mod.GameFlow, scene_id: u8, preferred
     return null;
 }
 
+/// Free overlay sprite pixel data and the overlay array itself.
+fn freeOverlays(allocator: std.mem.Allocator, overlays: []scene_renderer.PositionedSprite) void {
+    for (overlays) |*overlay| {
+        var spr = overlay.sprite;
+        spr.deinit();
+    }
+    allocator.free(overlays);
+}
+
+/// Load overlay sprites for a scene's interactive hotspots from OPTSHPS.PAK.
+/// Each GAMEFLOW sprite INFO byte is a global OPTSHPS.PAK resource index.
+/// Sprite 0 of each hotspot's scene pack provides the visual overlay.
+fn loadOverlaySprites(allocator: std.mem.Allocator, scene: scene_mod.Scene, optshps_pak: *const pak.PakFile) []scene_renderer.PositionedSprite {
+    var overlays: std.ArrayListUnmanaged(scene_renderer.PositionedSprite) = .empty;
+
+    for (scene.sprites) |spr| {
+        const resource = optshps_pak.getResource(spr.info) catch continue;
+        var spr_pack = scene_renderer.parseScenePack(allocator, resource) catch continue;
+        defer spr_pack.deinit();
+
+        // Decode sprite 0 (the visual overlay)
+        var decoded = spr_pack.decodeSprite(allocator, 0) catch continue;
+
+        // Overlay sprites are rendered at center (0,0); the header encodes screen position
+        overlays.append(allocator, .{
+            .sprite = decoded,
+            .x = 0,
+            .y = 0,
+        }) catch {
+            decoded.deinit();
+            continue;
+        };
+    }
+
+    return overlays.toOwnedSlice(allocator) catch &.{};
+}
+
 /// Load a scene palette from OPTPALS.PAK based on scene ID.
 fn loadScenePalette(state: *GameState, scene_id: u8) void {
     // Determine which palette to use
@@ -221,6 +266,10 @@ fn loadLandingScene(state: *GameState, room_id: u8, scene_id: u8) void {
         state.current_bg = null;
     }
 
+    // Free previous overlays
+    freeOverlays(state.allocator, state.current_overlays);
+    state.current_overlays = &.{};
+
     // Free previous click regions
     state.allocator.free(state.click_regions);
     state.click_regions = &.{};
@@ -242,10 +291,13 @@ fn loadLandingScene(state: *GameState, room_id: u8, scene_id: u8) void {
     // Build click regions (each sprite INFO = separate OPTSHPS.PAK resource)
     state.click_regions = buildClickRegions(state.allocator, scn, &optshps_pak) catch &.{};
 
+    // Load overlay sprites for interactive hotspots
+    state.current_overlays = loadOverlaySprites(state.allocator, scn, &optshps_pak);
+
     // Load the appropriate palette from OPTPALS.PAK
     loadScenePalette(state, scene_id);
 
-    std.debug.print("Scene loaded: room={d} scene={d} regions={d}\n", .{ room_id, scene_id, state.click_regions.len });
+    std.debug.print("Scene loaded: room={d} scene={d} regions={d} overlays={d}\n", .{ room_id, scene_id, state.click_regions.len, state.current_overlays.len });
 }
 
 /// Main per-frame update callback.
@@ -256,6 +308,7 @@ fn update(state_ptr: *anyopaque) void {
     switch (state.state_machine.state) {
         .title => updateTitle(state),
         .landed => updateLanded(state),
+        .conversation => updateConversation(state),
         else => updateDefault(state),
     }
 }
@@ -265,6 +318,22 @@ fn updateTitle(state: *GameState) void {
     if (state.title_bg) |bg| {
         const view = scene_renderer.SceneView{ .background = bg };
         scene_renderer.renderScene(&state.fb, view);
+
+        // Render title menu text over the background
+        if (state.title_font) |font| {
+            const menu_items = [_][]const u8{
+                "Play Privateer",
+                "Load a Saved Game",
+            };
+            const center_x: u16 = framebuffer_mod.WIDTH / 2;
+            var y: u16 = 140;
+            for (menu_items) |item| {
+                const text_w = font.measureText(item);
+                const x = center_x -| (text_w / 2);
+                _ = font.drawTextColored(&state.fb, x, y, item, 15);
+                y += font.line_height + 4;
+            }
+        }
 
         if (state.title_palette) |tp| {
             state.fb.applyPalette(&tp);
@@ -300,9 +369,12 @@ fn updateTitle(state: *GameState) void {
 }
 
 fn updateLanded(state: *GameState) void {
-    // Render current scene
+    // Render current scene with overlay sprites
     if (state.current_bg) |bg| {
-        const view = scene_renderer.SceneView{ .background = bg };
+        const view = scene_renderer.SceneView{
+            .background = bg,
+            .sprites = state.current_overlays,
+        };
         scene_renderer.renderScene(&state.fb, view);
     } else {
         state.fb.clear(0);
@@ -347,6 +419,40 @@ fn updateLanded(state: *GameState) void {
             var s = bg.*;
             s.deinit();
             state.current_bg = null;
+        }
+        freeOverlays(state.allocator, state.current_overlays);
+        state.current_overlays = &.{};
+    }
+}
+
+fn updateConversation(state: *GameState) void {
+    // Render the current scene as background during conversation
+    if (state.current_bg) |bg| {
+        const view = scene_renderer.SceneView{
+            .background = bg,
+            .sprites = state.current_overlays,
+        };
+        scene_renderer.renderScene(&state.fb, view);
+    } else {
+        state.fb.clear(0);
+    }
+
+    state.fb.applyPalette(&state.palette);
+    state.fb.presentWithMode(
+        state.renderer,
+        @intCast(state.window.width),
+        @intCast(state.window.height),
+        state.viewport_mode,
+    );
+
+    // Click or key press returns to the landed state
+    if (state.window.mouse_clicked or state.window.key_pressed != 0) {
+        state.state_machine.transition(.landed) catch return;
+        // Reload the scene (room/scene preserved by state machine)
+        if (state.state_machine.current_room) |room_id| {
+            if (state.state_machine.current_scene) |scene_id| {
+                loadLandingScene(state, room_id, scene_id);
+            }
         }
     }
 }
@@ -439,6 +545,21 @@ fn initGameState(
         std.debug.print("Warning: Could not load title screen\n", .{});
     }
 
+    // Try to load DEMOFONT.SHP for title screen text
+    var title_font: ?text_mod.Font = null;
+    if (tre_index.findEntry("DEMOFONT.SHP")) |font_entry| {
+        const font_data = tre.extractFileData(tre_data, font_entry.offset, font_entry.size) catch null;
+        if (font_data) |fd| {
+            title_font = text_mod.Font.load(allocator, fd, 0) catch null;
+            if (title_font != null) {
+                std.debug.print("DEMOFONT.SHP loaded ({d} glyphs)\n", .{title_font.?.glyphCount()});
+            }
+        }
+    }
+    if (title_font == null) {
+        std.debug.print("Warning: Could not load DEMOFONT.SHP\n", .{});
+    }
+
     // Allocate GameState on the heap (too large for stack)
     const state = try allocator.create(GameState);
     state.* = .{
@@ -454,9 +575,11 @@ fn initGameState(
         .gameflow = gameflow,
         .state_machine = game_state_mod.GameStateMachine.init(),
         .current_bg = null,
+        .current_overlays = &.{},
         .click_regions = &.{},
         .title_bg = title_bg,
         .title_palette = title_palette,
+        .title_font = title_font,
         .frame_count = 0,
     };
 

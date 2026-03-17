@@ -96,6 +96,17 @@ pub fn parseScenePack(allocator: std.mem.Allocator, data: []const u8) Error!Scen
     };
 }
 
+/// Compute the screen position for an overlay sprite rendered at center (0, 0).
+/// The sprite header defines center-relative extents; this converts to top-left
+/// pixel coordinates suitable for blitSprite(). Used for hotspot overlays whose
+/// header encodes their screen placement.
+pub fn spriteScreenPosition(header: sprite_mod.SpriteHeader) struct { x: i32, y: i32 } {
+    return .{
+        .x = @max(0, -@as(i32, header.x1)),
+        .y = @max(0, -@as(i32, header.y1)),
+    };
+}
+
 /// A sprite positioned at a specific screen location.
 pub const PositionedSprite = struct {
     sprite: sprite_mod.Sprite,
@@ -338,4 +349,26 @@ test "renderScene renders overlay sprites on top of background" {
     // Overlay transparent pixels preserve background
     try std.testing.expectEqual(@as(u8, 30), fb.getPixel(4, 4));
     try std.testing.expectEqual(@as(u8, 30), fb.getPixel(5, 5));
+}
+
+test "spriteScreenPosition returns top-left from header with positive x1 y1" {
+    // Positive x1/y1 means sprite center is offset into the image,
+    // so top-left is at negative coords → clamps to 0
+    const pos = spriteScreenPosition(.{ .x2 = 100, .x1 = 50, .y1 = 30, .y2 = 70 });
+    try std.testing.expectEqual(@as(i32, 0), pos.x);
+    try std.testing.expectEqual(@as(i32, 0), pos.y);
+}
+
+test "spriteScreenPosition with negative x1 y1 gives positive screen position" {
+    // Hotspot sprites store negative x1/y1 to encode screen offset
+    // x1=-100, y1=-80 means top-left at (100, 80)
+    const pos = spriteScreenPosition(.{ .x2 = 50, .x1 = -100, .y1 = -80, .y2 = 50 });
+    try std.testing.expectEqual(@as(i32, 100), pos.x);
+    try std.testing.expectEqual(@as(i32, 80), pos.y);
+}
+
+test "spriteScreenPosition with zero header returns origin" {
+    const pos = spriteScreenPosition(.{ .x2 = 0, .x1 = 0, .y1 = 0, .y2 = 0 });
+    try std.testing.expectEqual(@as(i32, 0), pos.x);
+    try std.testing.expectEqual(@as(i32, 0), pos.y);
 }

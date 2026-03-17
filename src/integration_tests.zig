@@ -28,6 +28,7 @@ const weapons = @import("combat/weapons.zig");
 const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
+const text = @import("render/text.zig");
 
 const app_config = @import("config.zig");
 
@@ -606,6 +607,90 @@ test "integration: load all SHP files" {
     try std.testing.expect(shp_count > 0);
     // At least some should have decodable sprites
     try std.testing.expect(decoded_sprites > 0);
+}
+
+test "integration: DEMOFONT.SHP loads as a Font for title screen text" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var entry = try tre.findEntry(allocator, loaded.tre_data, "DEMOFONT.SHP");
+    defer entry.deinit();
+
+    const file_data = try tre.extractFileData(loaded.tre_data, entry.offset, entry.size);
+
+    // Parse as SHP first to check glyph count
+    var shape_file = try shp.parse(allocator, file_data);
+    defer shape_file.deinit();
+
+    const glyph_count = shape_file.spriteCount();
+    try std.testing.expect(glyph_count > 10);
+
+    // Try loading as Font with various first_char values
+    // Privateer fonts may start at space (32) or other values
+    const first_chars = [_]u8{ 0, 32, 33 };
+    var loaded_font = false;
+    for (first_chars) |first_char| {
+        var font = text.Font.load(allocator, file_data, first_char) catch continue;
+        defer font.deinit();
+
+        if (font.line_height > 0 and font.glyphCount() > 0) {
+            loaded_font = true;
+            // Verify at least some glyphs decoded successfully
+            var valid_count: usize = 0;
+            for (font.glyphs) |g| {
+                if (g != null) valid_count += 1;
+            }
+            try std.testing.expect(valid_count > 5);
+            break;
+        }
+    }
+    try std.testing.expect(loaded_font);
+}
+
+test "integration: OPTSHPS.PAK overlay sprites decode for scene hotspots" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Load OPTSHPS.PAK
+    var optshps_entry = try tre.findEntry(allocator, loaded.tre_data, "OPTSHPS.PAK");
+    defer optshps_entry.deinit();
+    const optshps_data = try tre.extractFileData(loaded.tre_data, optshps_entry.offset, optshps_entry.size);
+    var optshps_pak = try pak.parse(allocator, optshps_data);
+    defer optshps_pak.deinit();
+
+    // Load GAMEFLOW.IFF to get sprite INFO bytes
+    var gf_entry = try tre.findEntry(allocator, loaded.tre_data, "GAMEFLOW.IFF");
+    defer gf_entry.deinit();
+    const gf_data = try tre.extractFileData(loaded.tre_data, gf_entry.offset, gf_entry.size);
+    var gameflow = try scene_mod.parseGameFlow(allocator, gf_data);
+    defer gameflow.deinit();
+
+    // Try loading overlay sprites from the first room's first scene
+    var decoded_count: usize = 0;
+    if (gameflow.rooms.len > 0) {
+        const room = gameflow.rooms[0];
+        if (room.scenes.len > 0) {
+            const scn = room.scenes[0];
+            for (scn.sprites) |spr_info| {
+                const resource = optshps_pak.getResource(spr_info.info) catch continue;
+                var spr_pack = scene_renderer.parseScenePack(allocator, resource) catch continue;
+                defer spr_pack.deinit();
+
+                if (spr_pack.spriteCount() > 0) {
+                    var decoded = spr_pack.decodeSprite(allocator, 0) catch continue;
+                    defer decoded.deinit();
+                    if (decoded.width > 0 and decoded.height > 0) {
+                        decoded_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Should have decoded at least some overlay sprites
+    try std.testing.expect(decoded_count > 0);
 }
 
 // --- PAK resource unpacker integration tests ---

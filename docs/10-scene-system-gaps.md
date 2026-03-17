@@ -5,23 +5,7 @@ how GAMEFLOW.IFF scenes map to visual resources in OPTSHPS.PAK and OPTPALS.PAK.
 
 ## Remaining Issues
 
-### 1. Title Screen Has No Text
-
-`src/main.zig:updateTitle()` renders the OPTSHPS.PAK background sprite but never
-renders any text. The text rendering system (`src/render/text.zig`) exists and works,
-but is not called from the title screen. The original game displayed menu options
-and/or instructions over this background using DEMOFONT.SHP.
-
-### 2. Overlay Sprites Not Rendered
-
-Scene hotspot sprites (doors, characters, terminals) are not rendered on top of the
-background. Only the background sprite (scene pack sprite 0) is drawn. The click
-regions are correct (using hotspot sprite headers for bounds), but the hotspots are
-invisible -- the player must click blindly on the correct screen areas.
-
-Each GAMEFLOW sprite INFO byte points to a separate OPTSHPS.PAK resource containing
-the hotspot's scene pack. Sprite 0 of that pack should be rendered at its header-
-defined position on top of the background.
+None -- all scene system features are implemented.
 
 ## Reverse Engineering Results (PRCD.EXE Analysis)
 
@@ -113,15 +97,19 @@ to TRE file paths. Key entries:
 5. **Room assets module** -- `src/game/room_assets.zig` provides the scene-to-resource
    mapping API, palette index logic, and scene type classification.
 
-### Remaining
+### Recently Completed
 
-1. **Title screen text** -- DEMOFONT.SHP text overlay not yet rendered on the title screen.
+6. **Title screen text** -- DEMOFONT.SHP loaded in `initGameState()` and rendered as
+   menu text in `updateTitle()` using the text rendering system.
 
-2. **Overlay sprite rendering** -- Hotspot sprites from OPTSHPS.PAK[sprite_info] should
-   be rendered on top of the background so the player can see interactive elements.
+7. **Overlay sprite rendering** -- `loadOverlaySprites()` decodes hotspot sprites from
+   each GAMEFLOW sprite INFO byte (OPTSHPS.PAK resource index) and passes them as
+   `PositionedSprite` overlays to `SceneView` in `updateLanded()`. Sprites are rendered
+   at center (0,0), with the header encoding screen position.
 
-3. **Conversation return** -- No handler to return from conversation state back to landed
-   state (currently shows black screen when entering a conversation).
+8. **Conversation return** -- `updateConversation()` renders the current scene and
+   transitions back to landed state on click/key press. Room/scene are preserved
+   across the conversation round-trip by the state machine.
 
 ## Files Involved
 

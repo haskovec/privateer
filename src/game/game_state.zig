@@ -536,6 +536,42 @@ test "completeAnimation from non-animation state returns error" {
     try std.testing.expectError(error.InvalidTransition, sm.completeAnimation(.space_flight));
 }
 
+// Conversation return
+
+test "conversation return via transition preserves scene for reload" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    sm.setScene(5, 17);
+
+    // Enter conversation via bar action
+    _ = try sm.handleAction(.{ .bar_conversation = 1 });
+    try std.testing.expectEqual(State.conversation, sm.state);
+    try std.testing.expectEqual(@as(u8, 5), sm.current_room.?);
+    try std.testing.expectEqual(@as(u8, 17), sm.current_scene.?);
+
+    // Return to landed — room/scene preserved for scene reload
+    try sm.transition(.landed);
+    try std.testing.expectEqual(State.landed, sm.state);
+    try std.testing.expectEqual(@as(u8, 5), sm.current_room.?);
+    try std.testing.expectEqual(@as(u8, 17), sm.current_scene.?);
+}
+
+test "bartender conversation return preserves scene" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.loading);
+    try sm.transition(.landed);
+    sm.setScene(2, 59);
+
+    _ = try sm.handleAction(.{ .bartender_conversation = 0 });
+    try std.testing.expectEqual(State.conversation, sm.state);
+
+    try sm.transition(.landed);
+    try std.testing.expectEqual(State.landed, sm.state);
+    try std.testing.expectEqual(@as(u8, 2), sm.current_room.?);
+    try std.testing.expectEqual(@as(u8, 59), sm.current_scene.?);
+}
+
 // Options state
 
 test "transition from title to options succeeds" {
