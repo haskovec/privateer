@@ -69,6 +69,7 @@ privateer/
 │   │   ├── scene.zig              # Scene data loader (GAMEFLOW.IFF room/scene navigation graph)
 │   │   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
+│   │   ├── room_assets.zig        # Room asset mapping (scene ID → OPTSHPS.PAK index, palette selection from OPTPALS.PAK)
 │   │   └── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
 │   ├── persistence/               # Save/load & serialization
@@ -185,6 +186,7 @@ All project documentation lives in the `docs/` directory:
 | [Recommendations](docs/07-recommendations.md) | Language/framework evaluation and the rationale for choosing Zig + SDL3 |
 | [Design Decisions](docs/08-design-decisions.md) | Locked-in decisions: 4x upscaling, original audio, widescreen, moddability, single-player, Righteous Fire deferred |
 | [Implementation Plan](docs/09-implementation-plan.md) | 14-phase plan with checkboxes for progress tracking, ordered by priority, using red/green TDD methodology throughout |
+| [Scene System Analysis](docs/10-scene-system-gaps.md) | PRCD.EXE reverse engineering results: scene ID → OPTSHPS.PAK mapping, sprite INFO → global PAK index for click regions, palette inheritance |
 
 ## Original Game Data
 

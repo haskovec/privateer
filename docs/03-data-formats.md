@@ -138,9 +138,31 @@ Offset  Size  Description
 ### Files Using PAK Format (32 files, 23.2 MB total)
 - `COCKPITS/*.PAK` - Cockpit overlay graphics
 - `MIDGAMES/*.PAK` - Cutscene/landing screen graphics
-- `OPTIONS/*.PAK` - UI graphics
+- `OPTIONS/*.PAK` - UI graphics (OPTSHPS.PAK, OPTPALS.PAK, CU.PAK)
 - `APPEARNC/STARS.PAK` - Star field data
 - Speech and sound packs
+
+### Scene Pack Sub-Format (OPTSHPS.PAK Resources)
+
+Each L1 resource within OPTSHPS.PAK is a "scene pack" -- a self-contained bundle of
+RLE sprites with its own internal offset table:
+
+```
+Offset  Size  Description
+0x0000  4     Declared total size (LE uint32)
+0x0004  var   Sprite offset table (LE uint32 entries, relative to start of resource)
+[offsets] var  Sprite data (8-byte RLE header + pixel data at each offset)
+```
+
+The first offset in the table points to the first sprite. Number of sprites =
+(first_offset - 4) / 4.
+
+**Key mapping**: GAMEFLOW.IFF scene ID = OPTSHPS.PAK L1 resource index for the
+background. GAMEFLOW sprite INFO bytes = global OPTSHPS.PAK L1 resource indices
+for interactive hotspot sprites (typically in the 62-225 range).
+
+Palettes are in OPTPALS.PAK (42 entries, 772 bytes each). Scene IDs 0-41 map
+directly; scenes 42+ inherit from the room's first scene.
 
 ---
 

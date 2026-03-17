@@ -1,9 +1,9 @@
-# Scene System Gaps Analysis
+# Scene System Analysis
 
-Current state: the game launches, shows a title screen background from OPTSHPS.PAK,
-but has no text overlay and cannot properly transition into gameplay scenes.
+Documents the scene/room system architecture reverse-engineered from PRCD.EXE, covering
+how GAMEFLOW.IFF scenes map to visual resources in OPTSHPS.PAK and OPTPALS.PAK.
 
-## Issues
+## Remaining Issues
 
 ### 1. Title Screen Has No Text
 
@@ -12,57 +12,16 @@ renders any text. The text rendering system (`src/render/text.zig`) exists and w
 but is not called from the title screen. The original game displayed menu options
 and/or instructions over this background using DEMOFONT.SHP.
 
-### 2. Landed Scene Shows "Blob of Color"
+### 2. Overlay Sprites Not Rendered
 
-`src/main.zig:loadLandedBackground()` has hardcoded PAK file names:
+Scene hotspot sprites (doors, characters, terminals) are not rendered on top of the
+background. Only the background sprite (scene pack sprite 0) is drawn. The click
+regions are correct (using hotspot sprite headers for bounds), but the hotspots are
+invisible -- the player must click blindly on the correct screen areas.
 
-```zig
-const pak_names = [_][]const u8{
-    "LTOBASES.PAK",
-    "CU.PAK",
-    "OPTSHPS.PAK",
-};
-```
-
-It always tries resource index 1 from whichever PAK succeeds first. LTOBASES.PAK
-resource 1 is likely a small transition frame (not a full scene background), producing
-a small sprite in the upper-left corner with the rest of the screen black.
-
-The function completely ignores the GAMEFLOW room/scene data when choosing what to load.
-
-### 3. Click Regions Are All Fullscreen
-
-`src/main.zig:buildClickRegions()` creates every click region as (0, 0, 320, 200):
-
-```zig
-try regions.append(allocator, .{
-    .x = 0,
-    .y = 0,
-    .width = 320,
-    .height = 200,
-    .sprite_id = spr.info,
-    .action = action,
-});
-```
-
-Sprite position data from PAK headers (x1, y1, x2, y2) is never used. Every click
-hits every region, and the last region in the list always wins.
-
-### 4. No Room Type ID to PAK File Mapping
-
-This is the core missing piece. GAMEFLOW.IFF defines 60 rooms (FORM:MISS) each with
-an INFO byte (room type ID), scenes, and interactive sprites with EFCT action data.
-But the visual backgrounds for each room type live in separate PAK files, and the
-code has no mapping from room type ID to PAK file name.
-
-The original game had this mapping hardcoded in PRCD.EXE. We need to reverse-engineer
-it from the executable.
-
-### 5. Scene Transitions Reload the Same Broken Background
-
-Even when a valid scene transition fires via click regions, `loadLandedBackground()`
-always loads the same hardcoded PAK. The room/scene IDs tracked by the state machine
-are never used to select which PAK file or resource index to load.
+Each GAMEFLOW sprite INFO byte points to a separate OPTSHPS.PAK resource containing
+the hotspot's scene pack. Sprite 0 of that pack should be rendered at its header-
+defined position on top of the background.
 
 ## Reverse Engineering Results (PRCD.EXE Analysis)
 
@@ -110,12 +69,20 @@ and character creation, NOT for scene backgrounds. Referenced in the EXE as `cu`
 `..\..\DATA\MIDGAMES\LTOBASES.PAK` contains 10 L1 entries with small sprites (82x66
 to 140x80). These are landing-to-base transition animation frames, NOT scene backgrounds.
 
-### Click Region Bounds
+### Click Region Bounds (Sprite INFO = Global PAK Resource Index)
 
-Sprite bounding boxes come from the PAK sprite headers within each scene pack. Each
-sprite in a scene pack has its own header with center-relative extents (x2, x1, y1, y2).
-The sprite INFO bytes in GAMEFLOW's FORM:SPRT data correspond to sprite indices within
-the scene pack. The click region for sprite N uses the bounds of scene_pack.sprite[N].
+Each GAMEFLOW sprite INFO byte is a **global OPTSHPS.PAK resource index**, NOT a per-
+scene pack sprite index. Each interactive hotspot has its own separate scene pack in
+OPTSHPS.PAK (typically at indices 62-225). Sprite 0 within that pack provides both the
+visual image and the click region bounds via its 8-byte RLE header (x2, x1, y1, y2).
+
+For example, scene 0x0D (room concourse) has these GAMEFLOW sprites:
+- INFO 0xCE (206) -> PAK[206]: 6-sprite pack, first sprite 47x109 (door hotspot)
+- INFO 0xC8 (200) -> PAK[200]: 1 sprite 61x34 (takeoff button)
+- INFO 0xCB (203) -> PAK[203]: 3-sprite pack, first sprite 143x96 (concourse area)
+
+Click regions are computed from sprite 0's header: screen position = (-x1, -y1),
+dimensions = (x1+x2, y1+y2). This is implemented in `src/main.zig:buildClickRegions()`.
 
 ### FILES.IFF Registry
 
@@ -125,39 +92,47 @@ to TRE file paths. Key entries:
 - `MISCSHPS` -> `..\..\data\options\optshps.pak`
 - `PALTOPTS` -> `..\..\data\options\optpals.pak`
 
-## What Needs To Be Done
+## Implementation Status
 
-### Implementation Fixes Needed
+### Completed
 
-1. **Fix `loadLandedBackground()`** to load from OPTSHPS.PAK using the current scene ID
-   as the L1 resource index. The function should:
-   - Get the current scene ID from the state machine
-   - Parse OPTSHPS.PAK to get the L1 entry at index `scene_id`
-   - Parse that resource as a scene pack
-   - Decode sprite 0 as the background
+1. **Scene backgrounds from OPTSHPS.PAK** -- `loadLandingScene()` uses the scene ID
+   directly as the OPTSHPS.PAK resource index. Background is sprite 0 of the scene pack.
+   (Replaced the old hardcoded `loadLandedBackground()` that tried LTOBASES.PAK/CU.PAK.)
 
-2. **Load palette from OPTPALS.PAK** using scene ID (for scenes 0-41) or the room's
-   first scene ID (for scenes 42+, 59, 61). Apply the palette before rendering.
+2. **Palette loading from OPTPALS.PAK** -- `loadScenePalette()` uses the scene ID for
+   scenes 0-41, or the room's first scene ID for scenes 42+/59/61.
 
-3. **Fix `buildClickRegions()`** to use sprite bounds from the scene pack. The sprite
-   INFO byte in GAMEFLOW corresponds to a sprite index within the OPTSHPS scene pack.
-   Read the sprite header's (x2, x1, y1, y2) to compute the click region bounds.
+3. **Click regions with proper bounds** -- `buildClickRegions()` uses each GAMEFLOW
+   sprite INFO byte as a global OPTSHPS.PAK resource index, reads sprite 0's header
+   from that hotspot's scene pack to get screen position and dimensions.
 
-4. **Add title screen text** using DEMOFONT.SHP and the text renderer, matching the
-   original game's title screen layout.
+4. **Scene transitions** -- Click actions reload background, palette, and click regions
+   for the target scene. `findRoomForScene()` handles cross-room transitions.
 
-5. **Add proper scene navigation** so that click region actions correctly reload the
-   scene background from OPTSHPS.PAK with the new scene ID as the resource index.
+5. **Room assets module** -- `src/game/room_assets.zig` provides the scene-to-resource
+   mapping API, palette index logic, and scene type classification.
+
+### Remaining
+
+1. **Title screen text** -- DEMOFONT.SHP text overlay not yet rendered on the title screen.
+
+2. **Overlay sprite rendering** -- Hotspot sprites from OPTSHPS.PAK[sprite_info] should
+   be rendered on top of the background so the player can see interactive elements.
+
+3. **Conversation return** -- No handler to return from conversation state back to landed
+   state (currently shows black screen when entering a conversation).
 
 ## Files Involved
 
 | File | Role |
 |------|------|
-| `src/main.zig` | Main game loop, scene loading, title screen |
+| `src/main.zig` | Main game loop, scene loading, transitions, title screen |
+| `src/game/room_assets.zig` | Scene-to-resource mapping API, palette index logic |
 | `src/game/scene.zig` | GAMEFLOW.IFF parser (rooms, scenes, sprites) |
 | `src/game/game_state.zig` | State machine (title/loading/landed transitions) |
 | `src/game/click_region.zig` | EFCT action parser, hit-testing |
-| `src/render/scene_renderer.zig` | PAK sprite compositing |
+| `src/render/scene_renderer.zig` | PAK sprite compositing, getSpriteHeader() |
 | `src/render/text.zig` | Text rendering (exists but unused in main loop) |
 | `src/game/midgame.zig` | Midgame animation PAK loader (reference for PAK handling) |
 
