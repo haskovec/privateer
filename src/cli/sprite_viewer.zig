@@ -373,13 +373,29 @@ pub fn loadTreFromGameDat(allocator: std.mem.Allocator, game_dat: []const u8) ![
     return error.FileNotFound;
 }
 
-/// Load a palette: from the given path (TRE or filesystem), or auto-detect.
+/// Palette used for cockpit and space flight sprites.
+pub const SPACE_PALETTE_PATH = "PALETTE/SPACE.PAL";
+
+/// Load a palette: from the given path (TRE or filesystem), or auto-detect
+/// based on the source filename context.
 pub fn loadPalette(
     allocator: std.mem.Allocator,
     palette_override: ?[]const u8,
     tre_data: ?[]const u8,
     file_data: []const u8,
     format: FileFormat,
+) !pal_mod.Palette {
+    return loadPaletteForFile(allocator, palette_override, tre_data, file_data, format, null);
+}
+
+/// Load a palette with filename context for smarter auto-detection.
+pub fn loadPaletteForFile(
+    allocator: std.mem.Allocator,
+    palette_override: ?[]const u8,
+    tre_data: ?[]const u8,
+    file_data: []const u8,
+    format: FileFormat,
+    filename: ?[]const u8,
 ) !pal_mod.Palette {
     // Priority 1: explicit palette override
     if (palette_override) |pal_path| {
@@ -400,8 +416,19 @@ pub fn loadPalette(
         if (findEmbeddedPalette(allocator, file_data)) |pal| return pal;
     }
 
-    // Priority 3: default palette from TRE
+    // Priority 3: context-based palette from TRE (cockpits use SPACE.PAL)
     if (tre_data) |td| {
+        if (filename) |name| {
+            const context_pal = inferPalettePath(name);
+            if (!std.mem.eql(u8, context_pal, DEFAULT_PALETTE_PATH)) {
+                if (loadFileFromTre(allocator, td, context_pal)) |pal_data| {
+                    defer allocator.free(pal_data);
+                    return pal_mod.parse(pal_data);
+                } else |_| {}
+            }
+        }
+
+        // Priority 4: default palette from TRE
         const pal_data = loadFileFromTre(allocator, td, DEFAULT_PALETTE_PATH) catch
             return SpriteViewerError.PaletteNotFound;
         defer allocator.free(pal_data);
@@ -409,6 +436,30 @@ pub fn loadPalette(
     }
 
     return SpriteViewerError.PaletteNotFound;
+}
+
+/// Infer the best palette for a file based on its TRE path.
+fn inferPalettePath(filename: []const u8) []const u8 {
+    // Cockpit files use the space flight palette
+    if (containsIgnoreCase(filename, "COCKPIT") or containsIgnoreCase(filename, "CK.IFF") or
+        containsIgnoreCase(filename, "CK.PAK"))
+    {
+        return SPACE_PALETTE_PATH;
+    }
+    // Ships/space objects also use space palette
+    if (containsIgnoreCase(filename, "SHIP") or containsIgnoreCase(filename, "APPEARNC")) {
+        return SPACE_PALETTE_PATH;
+    }
+    return DEFAULT_PALETTE_PATH;
+}
+
+fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len > haystack.len) return false;
+    var i: usize = 0;
+    while (i + needle.len <= haystack.len) : (i += 1) {
+        if (std.ascii.eqlIgnoreCase(haystack[i .. i + needle.len], needle)) return true;
+    }
+    return false;
 }
 
 /// Load a file from disk.

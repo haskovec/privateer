@@ -354,13 +354,14 @@ fn viewSpriteFile(
         return;
     }
 
-    // Load palette
-    const palette = sprite_viewer.loadPalette(
+    // Load palette (with filename context for smart auto-detection)
+    const palette = sprite_viewer.loadPaletteForFile(
         allocator,
         view_args.palette,
         tre_data_opt,
         file_data,
         format,
+        filename,
     ) catch {
         std.debug.print("Error: could not load palette for {s}\n", .{filename});
         return;
