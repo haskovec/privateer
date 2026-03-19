@@ -167,7 +167,8 @@ privateer/
 - `zig build extract -- --data-dir <path> --output <dir>` -- extract all game assets from GAME.DAT
 - `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
 - `zig build sprite -- list --data-dir <path>` -- list all sprite-containing files in GAME.DAT
-- `zig build sprite -- view --data-dir <path> --file <tre-path>` -- view sprites inline or save as PNG (inline display requires Ghostty, Kitty, WezTerm, or Konsole)
+- `zig build sprite -- view --data-dir <path>` -- dump ALL sprites from GAME.DAT inline (requires Ghostty, Kitty, WezTerm, or Konsole)
+- `zig build sprite -- view --data-dir <path> --file <tre-path>` -- view sprites from a specific file inline or save as PNG
 - `./macos/bundle.sh` -- create a macOS .app bundle (native architecture)
 - `./macos/bundle.sh --universal` -- create a universal (x86_64 + aarch64) macOS .app bundle
 

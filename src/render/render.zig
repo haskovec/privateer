@@ -6,6 +6,7 @@ const sprite_mod = @import("../formats/sprite.zig");
 const pal_mod = @import("../formats/pal.zig");
 const iff_mod = @import("../formats/iff.zig");
 const png_mod = @import("png.zig");
+const scene_renderer = @import("scene_renderer.zig");
 
 /// An RGBA image ready for PNG encoding.
 pub const RgbaImage = struct {
@@ -74,18 +75,71 @@ pub fn findSprites(allocator: std.mem.Allocator, chunk: iff_mod.Chunk) ![]sprite
 
 fn findSpritesRecursive(allocator: std.mem.Allocator, chunk: iff_mod.Chunk, sprites: *std.ArrayListUnmanaged(sprite_mod.Sprite)) void {
     if (std.mem.eql(u8, &chunk.tag, "SHAP") and !chunk.isContainer()) {
+        if (chunk.data.len >= 8) {
+            // SHAP chunks typically contain a scene pack: 4-byte size + offset table + sprites.
+            // Try scene pack first, fall back to raw RLE.
+            if (decodeScenePackSprites(allocator, chunk.data)) |pack_sprites| {
+                for (pack_sprites) |s| {
+                    sprites.append(allocator, s) catch {
+                        var sp = s;
+                        sp.deinit();
+                        continue;
+                    };
+                }
+                allocator.free(pack_sprites);
+                return;
+            }
+        }
+        // Fallback: try raw RLE decode (some SHAP chunks may be bare sprites)
         if (chunk.data.len >= sprite_mod.HEADER_SIZE) {
             var s = sprite_mod.decode(allocator, chunk.data) catch return;
-            sprites.append(allocator, s) catch {
+            // Sanity check dimensions
+            if (s.width > 0 and s.height > 0 and s.width <= 640 and s.height <= 480) {
+                sprites.append(allocator, s) catch {
+                    s.deinit();
+                    return;
+                };
+            } else {
                 s.deinit();
-                return;
-            };
+            }
         }
     }
 
     for (chunk.children) |child| {
         findSpritesRecursive(allocator, child, sprites);
     }
+}
+
+/// Decode all sprites from a scene pack (offset table + sprite data).
+fn decodeScenePackSprites(allocator: std.mem.Allocator, data: []const u8) ?[]sprite_mod.Sprite {
+    var pack = scene_renderer.parseScenePack(allocator, data) catch return null;
+    defer pack.deinit();
+
+    var result: std.ArrayListUnmanaged(sprite_mod.Sprite) = .empty;
+    errdefer {
+        for (result.items) |*s| s.deinit();
+        result.deinit(allocator);
+    }
+
+    for (pack.sprite_offsets) |offset| {
+        if (offset + sprite_mod.HEADER_SIZE > data.len) continue;
+        var s = sprite_mod.decode(allocator, data[offset..]) catch continue;
+        // Sanity check dimensions
+        if (s.width > 0 and s.height > 0 and s.width <= 640 and s.height <= 480) {
+            result.append(allocator, s) catch {
+                s.deinit();
+                continue;
+            };
+        } else {
+            s.deinit();
+        }
+    }
+
+    if (result.items.len == 0) {
+        result.deinit(allocator);
+        return null;
+    }
+    return result.toOwnedSlice(allocator) catch null;
 }
 
 // --- Tests ---

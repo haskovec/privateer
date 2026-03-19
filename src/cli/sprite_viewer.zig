@@ -11,6 +11,7 @@ const shp_mod = @import("../formats/shp.zig");
 const pak_mod = @import("../formats/pak.zig");
 const pal_mod = @import("../formats/pal.zig");
 const render_mod = @import("../render/render.zig");
+const scene_renderer = @import("../render/scene_renderer.zig");
 const png_mod = @import("../render/png.zig");
 const upscale_mod = @import("../render/upscale.zig");
 const kitty = @import("../render/kitty_graphics.zig");
@@ -272,7 +273,22 @@ fn decodePakSprites(allocator: std.mem.Allocator, data: []const u8) ![]sprite_mo
         // Skip palettes
         if (res_data.len == pal_mod.PAL_FILE_SIZE) continue;
 
-        // Try as raw sprite
+        // Try as scene pack (offset table + sprites) first
+        if (res_data.len >= 8) {
+            if (decodeScenePackSprites(allocator, res_data)) |pack_sprites| {
+                defer allocator.free(pack_sprites);
+                for (pack_sprites) |s| {
+                    sprites.append(allocator, s) catch {
+                        var sp = s;
+                        sp.deinit();
+                        continue;
+                    };
+                }
+                continue;
+            }
+        }
+
+        // Fallback: try as raw sprite
         if (res_data.len >= sprite_mod.HEADER_SIZE) {
             var s = sprite_mod.decode(allocator, res_data) catch continue;
             if (s.width > 0 and s.height > 0 and s.width <= 640 and s.height <= 480) {
@@ -287,6 +303,37 @@ fn decodePakSprites(allocator: std.mem.Allocator, data: []const u8) ![]sprite_mo
     }
 
     return sprites.toOwnedSlice(allocator);
+}
+
+/// Decode all sprites from a scene pack (4-byte size + offset table + sprite data).
+fn decodeScenePackSprites(allocator: std.mem.Allocator, data: []const u8) ?[]sprite_mod.Sprite {
+    var pack = scene_renderer.parseScenePack(allocator, data) catch return null;
+    defer pack.deinit();
+
+    var result: std.ArrayListUnmanaged(sprite_mod.Sprite) = .empty;
+    errdefer {
+        for (result.items) |*s| s.deinit();
+        result.deinit(allocator);
+    }
+
+    for (pack.sprite_offsets) |offset| {
+        if (offset + sprite_mod.HEADER_SIZE > data.len) continue;
+        var s = sprite_mod.decode(allocator, data[offset..]) catch continue;
+        if (s.width > 0 and s.height > 0 and s.width <= 640 and s.height <= 480) {
+            result.append(allocator, s) catch {
+                s.deinit();
+                continue;
+            };
+        } else {
+            s.deinit();
+        }
+    }
+
+    if (result.items.len == 0) {
+        result.deinit(allocator);
+        return null;
+    }
+    return result.toOwnedSlice(allocator) catch null;
 }
 
 /// Try to find an embedded palette in PAK data (resource 0 if exactly 772 bytes).

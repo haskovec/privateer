@@ -142,10 +142,11 @@ Offset  Size  Description
 - `APPEARNC/STARS.PAK` - Star field data
 - Speech and sound packs
 
-### Scene Pack Sub-Format (OPTSHPS.PAK Resources)
+### Scene Pack Sub-Format (OPTSHPS.PAK Resources, IFF SHAP Chunks)
 
-Each L1 resource within OPTSHPS.PAK is a "scene pack" -- a self-contained bundle of
-RLE sprites with its own internal offset table:
+Each L1 resource within OPTSHPS.PAK — and each SHAP chunk in IFF files (e.g. cockpit
+files) — is a "scene pack": a self-contained bundle of RLE sprites with its own
+internal offset table:
 
 ```
 Offset  Size  Description

@@ -68,6 +68,7 @@ fn printUsage() void {
         \\View options:
         \\  --data-dir <path>    Directory containing GAME.DAT (for TRE access)
         \\  --file <tre-path>    File path within TRE (e.g. FONTS/PCFONT.SHP)
+        \\                       Omit --file to dump ALL sprites from GAME.DAT
         \\  --input <file>       Path to an extracted file on disk
         \\  --palette <path>     Override palette (TRE path or filesystem path)
         \\  --index <n>          Show only sprite at index N (default: all)
@@ -193,8 +194,8 @@ fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     const view_args = parseViewArgs(args);
 
-    if (view_args.input_file == null and (view_args.data_dir == null or view_args.tre_file == null)) {
-        std.debug.print("Error: either --input <file> or --data-dir + --file are required\n", .{});
+    if (view_args.input_file == null and view_args.data_dir == null) {
+        std.debug.print("Error: either --input <file> or --data-dir is required\n", .{});
         std.process.exit(1);
     }
 
@@ -204,7 +205,13 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         std.process.exit(1);
     }
 
-    // Load sprite data
+    // If --data-dir provided without --file, dump all sprites from GAME.DAT
+    if (view_args.tre_file == null and view_args.input_file == null) {
+        try runViewAll(allocator, view_args);
+        return;
+    }
+
+    // Load sprite data for a single file
     var file_data: []u8 = undefined;
     var tre_data_opt: ?[]const u8 = null;
     var game_dat: ?[]u8 = null;
@@ -269,11 +276,82 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     defer allocator.free(file_data);
     defer if (game_dat) |gd| allocator.free(gd);
 
+    try viewSpriteFile(allocator, view_args, file_data, filename, tre_data_opt);
+}
+
+/// Dump all sprites from every sprite-containing file in GAME.DAT.
+fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs) !void {
+    const data_path = view_args.data_dir.?;
+    const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
+    defer allocator.free(gd_path);
+
+    std.debug.print("Loading {s}...\n", .{gd_path});
+
+    const game_dat = loadFile(allocator, gd_path) catch {
+        std.debug.print("Error: could not open {s}\n", .{gd_path});
+        std.process.exit(1);
+    };
+    defer allocator.free(game_dat);
+
+    const tre_data = sprite_viewer.loadTreFromGameDat(allocator, game_dat) catch {
+        std.debug.print("Error: could not find PRIV.TRE in GAME.DAT\n", .{});
+        std.process.exit(1);
+    };
+
+    std.debug.print("Scanning for sprite files...\n\n", .{});
+
+    const files = try sprite_viewer.listSpriteFiles(allocator, tre_data);
+    defer {
+        for (files) |f| allocator.free(f.path);
+        allocator.free(files);
+    }
+
+    var total_sprites: u32 = 0;
+    for (files) |f| total_sprites += f.sprite_count;
+
+    std.debug.print("Found {} sprite files ({} total sprites)\n\n", .{ files.len, total_sprites });
+
+    // Iterate through each sprite file
+    const header = try privateer.tre.readHeader(tre_data);
+    for (files) |f| {
+        // Find and extract this file from the TRE
+        var file_data: ?[]u8 = null;
+        for (0..header.entry_count) |idx| {
+            var entry = try privateer.tre.readEntry(allocator, tre_data, @intCast(idx));
+            defer entry.deinit();
+
+            const normalized = sprite_viewer.normalizeTrePath(entry.path) orelse continue;
+            if (std.ascii.eqlIgnoreCase(normalized, f.path)) {
+                const raw = try privateer.tre.extractFileData(tre_data, entry.offset, entry.size);
+                file_data = try allocator.dupe(u8, raw);
+                break;
+            }
+        }
+
+        const data = file_data orelse continue;
+        defer allocator.free(data);
+
+        std.debug.print("=== {s} ===\n", .{f.path});
+        viewSpriteFile(allocator, view_args, data, f.path, tre_data) catch |err| {
+            std.debug.print("  Error viewing {s}: {}\n\n", .{ f.path, err });
+        };
+        std.debug.print("\n", .{});
+    }
+}
+
+/// View sprites from a single file's data.
+fn viewSpriteFile(
+    allocator: std.mem.Allocator,
+    view_args: ViewArgs,
+    file_data: []const u8,
+    filename: []const u8,
+    tre_data_opt: ?[]const u8,
+) !void {
     // Detect format
     const format = sprite_viewer.detectFormat(filename, file_data);
     if (format == .unknown) {
         std.debug.print("Error: unrecognized sprite format for {s}\n", .{filename});
-        std.process.exit(1);
+        return;
     }
 
     // Load palette
@@ -284,14 +362,14 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         file_data,
         format,
     ) catch {
-        std.debug.print("Error: could not load palette. Use --palette to specify one.\n", .{});
-        std.process.exit(1);
+        std.debug.print("Error: could not load palette for {s}\n", .{filename});
+        return;
     };
 
     // Decode sprites
     const sprites = sprite_viewer.decodeSprites(allocator, file_data, format) catch {
         std.debug.print("Error: no sprites could be decoded from {s}\n", .{filename});
-        std.process.exit(1);
+        return;
     };
     defer {
         for (sprites) |*s| s.deinit();
