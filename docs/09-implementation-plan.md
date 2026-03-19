@@ -680,7 +680,7 @@ No phase should start until its dependencies are complete and tested green.
   - Recursive PAK→IFF→SHAP sprite extraction
   - Scale2x/3x/4x upscaling with side-by-side comparison mode
   - PNG export (`--save`)
-  - Kitty graphics protocol encoder (`src/render/kitty_graphics.zig`)
+  - Kitty graphics protocol encoder (`src/render/kitty_graphics.zig`): raw RGBA (f=32) with cell-based sizing (c/r), cursor hiding, and q=2 quiet mode for Ghostty/Kitty/WezTerm/Konsole compatibility
 
 ---
 

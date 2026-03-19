@@ -59,7 +59,7 @@ privateer/
 │   │   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
 │   │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
 │   │   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
-│   │   └── kitty_graphics.zig    # Kitty graphics protocol encoder (inline terminal image display)
+│   │   └── kitty_graphics.zig    # Kitty graphics protocol encoder (raw RGBA f=32, cell sizing, Ghostty/Kitty/WezTerm/Konsole)
 │   │
 │   ├── game/                      # World data & game flow
 │   │   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
@@ -167,7 +167,7 @@ privateer/
 - `zig build extract -- --data-dir <path> --output <dir>` -- extract all game assets from GAME.DAT
 - `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
 - `zig build sprite -- list --data-dir <path>` -- list all sprite-containing files in GAME.DAT
-- `zig build sprite -- view --data-dir <path> --file <tre-path>` -- view sprites inline (Kitty protocol) or save as PNG
+- `zig build sprite -- view --data-dir <path> --file <tre-path>` -- view sprites inline or save as PNG (inline display requires Ghostty, Kitty, WezTerm, or Konsole)
 - `./macos/bundle.sh` -- create a macOS .app bundle (native architecture)
 - `./macos/bundle.sh --universal` -- create a universal (x86_64 + aarch64) macOS .app bundle
 

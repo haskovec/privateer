@@ -63,12 +63,20 @@ fn getenv(name: [*:0]const u8) ?[]const u8 {
     return std.mem.sliceTo(ptr, 0);
 }
 
+/// Assumed terminal cell dimensions in pixels (typical monospace font).
+const CELL_WIDTH: u32 = 8;
+const CELL_HEIGHT: u32 = 16;
+
+/// Minimum display size in terminal cells for auto-sizing.
+const MIN_DISPLAY_COLS: u32 = 20;
+const MIN_DISPLAY_ROWS: u32 = 10;
+
 /// Display an RGBA image inline in the terminal using the Kitty graphics protocol.
-/// The image is encoded as PNG and transmitted in chunked base64.
+/// Uses raw RGBA transmission (f=32) with explicit dimensions, matching the approach
+/// used by chafa for maximum terminal compatibility (Ghostty, Kitty, WezTerm, Konsole).
 ///
-/// writer: any std.io.Writer (typically stdout)
-/// pixels: RGBA pixel data (4 bytes per pixel, row-major)
-/// width/height: image dimensions
+/// Automatically calculates display cell size (c/r) so small images are visible.
+/// Pass display_cols/display_rows as 0 to auto-calculate from pixel dimensions.
 pub fn displayImage(
     writer: anytype,
     allocator: std.mem.Allocator,
@@ -76,30 +84,96 @@ pub fn displayImage(
     width: u32,
     height: u32,
 ) !void {
-    // Encode pixels as PNG
-    const png_data = png_mod.encode(allocator, width, height, pixels) catch
-        return KittyError.PngEncodeFailed;
-    defer allocator.free(png_data);
+    _ = allocator;
+    // Auto-calculate display cells with a minimum size for visibility
+    const cols = @max(ceilDiv(width, CELL_WIDTH), MIN_DISPLAY_COLS);
+    const rows = @max(ceilDiv(height, CELL_HEIGHT), MIN_DISPLAY_ROWS);
+    try displayRgba(writer, pixels, width, height, cols, rows);
+}
 
-    try displayPng(writer, png_data);
+/// Display an RGBA image with explicit display cell dimensions.
+pub fn displayImageSized(
+    writer: anytype,
+    pixels: []const u8,
+    width: u32,
+    height: u32,
+    display_cols: u32,
+    display_rows: u32,
+) !void {
+    try displayRgba(writer, pixels, width, height, display_cols, display_rows);
+}
+
+fn ceilDiv(a: u32, b: u32) u32 {
+    if (b == 0) return 1;
+    return (a + b - 1) / b;
+}
+
+/// Display raw RGBA pixel data inline using the Kitty graphics protocol.
+/// Transmits as f=32 (raw 32-bit RGBA) with chunked base64, matching chafa's
+/// proven approach for broad terminal compatibility.
+/// c/r specify how many terminal cells the image spans for display.
+pub fn displayRgba(writer: anytype, pixels: []const u8, width: u32, height: u32, cols: u32, rows: u32) !void {
+    // Hide cursor during image rendering (as chafa does)
+    try writer.writeAll("\x1b[?25l");
+
+    // Write chunks of base64-encoded raw RGBA data
+    var src_offset: usize = 0;
+    var first = true;
+
+    var encode_buf: [MAX_CHUNK_SIZE]u8 = undefined;
+
+    while (src_offset < pixels.len) {
+        // 3 source bytes -> 4 base64 chars, so for MAX_CHUNK_SIZE base64 chars
+        // we need at most (MAX_CHUNK_SIZE / 4) * 3 source bytes.
+        const max_src_bytes = (MAX_CHUNK_SIZE / 4) * 3;
+        const remaining = pixels.len - src_offset;
+        const src_len = @min(remaining, max_src_bytes);
+        const src_slice = pixels[src_offset .. src_offset + src_len];
+
+        const encoded = std.base64.standard.Encoder.encode(&encode_buf, src_slice);
+        const is_last = (src_offset + src_len >= pixels.len);
+        const more: u8 = if (is_last) '0' else '1';
+
+        if (first) {
+            // First chunk: full parameters
+            // f=32: raw 32-bit RGBA pixel data
+            // s=width, v=height: pixel dimensions (required for raw format)
+            // c=cols, r=rows: display size in terminal cells
+            // q=2: suppress terminal responses
+            try writer.print("\x1b_Ga=T,f=32,s={d},v={d},c={d},r={d},q=2,m={c};{s}\x1b\\", .{ width, height, cols, rows, more, encoded });
+            first = false;
+        } else {
+            // Continuation chunks: only m= parameter
+            try writer.print("\x1b_Gm={c};{s}\x1b\\", .{ more, encoded });
+        }
+
+        src_offset += src_len;
+    }
+
+    // Handle empty image edge case
+    if (first) {
+        try writer.print("\x1b_Ga=T,f=32,s={d},v={d},c={d},r={d},q=2,m=0;\x1b\\", .{ width, height, cols, rows });
+    }
+
+    // Show cursor again
+    try writer.writeAll("\x1b[?25h");
+
+    // Newline after image for proper terminal flow
+    try writer.writeByte('\n');
 }
 
 /// Display a pre-encoded PNG image inline using the Kitty graphics protocol.
 pub fn displayPng(writer: anytype, png_data: []const u8) !void {
-    // Base64 encode the PNG data
-    const b64_len = std.base64.standard.Encoder.calcSize(png_data.len);
+    // Hide cursor during image rendering
+    try writer.writeAll("\x1b[?25l");
 
     // Write chunks
     var src_offset: usize = 0;
     var first = true;
 
-    // We encode and write in chunks to avoid allocating the entire base64 string
     var encode_buf: [MAX_CHUNK_SIZE]u8 = undefined;
 
     while (src_offset < png_data.len) {
-        // Calculate how many source bytes to encode in this chunk.
-        // 3 source bytes -> 4 base64 chars, so for MAX_CHUNK_SIZE base64 chars
-        // we need at most (MAX_CHUNK_SIZE / 4) * 3 source bytes.
         const max_src_bytes = (MAX_CHUNK_SIZE / 4) * 3;
         const remaining = png_data.len - src_offset;
         const src_len = @min(remaining, max_src_bytes);
@@ -110,26 +184,25 @@ pub fn displayPng(writer: anytype, png_data: []const u8) !void {
         const more: u8 = if (is_last) '0' else '1';
 
         if (first) {
-            // First chunk: include full parameters
-            try writer.print("\x1b_Ga=T,f=100,m={c};{s}\x1b\\", .{ more, encoded });
+            // f=100: PNG format, q=2: suppress terminal responses
+            try writer.print("\x1b_Ga=T,f=100,q=2,m={c};{s}\x1b\\", .{ more, encoded });
             first = false;
         } else {
-            // Continuation chunks: only m= parameter
             try writer.print("\x1b_Gm={c};{s}\x1b\\", .{ more, encoded });
         }
 
         src_offset += src_len;
     }
 
-    // Handle empty PNG edge case (shouldn't happen in practice)
     if (first) {
-        try writer.print("\x1b_Ga=T,f=100,m=0;\x1b\\", .{});
+        try writer.print("\x1b_Ga=T,f=100,q=2,m=0;\x1b\\", .{});
     }
+
+    // Show cursor again
+    try writer.writeAll("\x1b[?25h");
 
     // Newline after image for proper terminal flow
     try writer.writeByte('\n');
-
-    _ = b64_len;
 }
 
 /// Composite two RGBA images side by side with a gap between them.
@@ -191,7 +264,7 @@ pub const CompositeResult = struct {
 
 // --- Tests ---
 
-test "displayImage writes Kitty escape sequence with PNG payload" {
+test "displayImage writes Kitty escape sequence with raw RGBA payload" {
     const allocator = std.testing.allocator;
     var output: std.ArrayListUnmanaged(u8) = .empty;
     defer output.deinit(allocator);
@@ -202,12 +275,19 @@ test "displayImage writes Kitty escape sequence with PNG payload" {
 
     const result = output.items;
 
-    // Must start with Kitty escape sequence
-    try std.testing.expect(result.len > 10);
-    try std.testing.expect(std.mem.startsWith(u8, result, "\x1b_G"));
-    // Must contain the action and format parameters
+    // Must contain cursor hide/show
+    try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25l") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25h") != null);
+    // Must contain Kitty escape with raw RGBA format and cell sizing
+    try std.testing.expect(std.mem.indexOf(u8, result, "\x1b_G") != null);
     try std.testing.expect(std.mem.indexOf(u8, result, "a=T") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "f=100") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "f=32") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "s=1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "v=1") != null);
+    // Auto-sized to minimum display cells (c=20, r=10 for a 1x1 image)
+    try std.testing.expect(std.mem.indexOf(u8, result, "c=20") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "r=10") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "q=2") != null);
     // Must end with newline
     try std.testing.expectEqual(@as(u8, '\n'), result[result.len - 1]);
 }
@@ -222,7 +302,7 @@ test "displayImage contains valid base64 payload" {
 
     const result = output.items;
 
-    // Find the base64 payload between ';' and ESC
+    // Find the base64 payload between ';' and ESC (skip the cursor-hide prefix)
     if (std.mem.indexOf(u8, result, ";")) |semi_pos| {
         // Find the string terminator \x1b\ after the semicolon
         if (std.mem.indexOf(u8, result[semi_pos..], "\x1b\\")) |esc_pos| {
@@ -251,10 +331,16 @@ test "displayPng handles small PNG in single chunk" {
 
     const result = output.items;
 
+    // Must contain cursor hide/show
+    try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25l") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25h") != null);
     // Small image should fit in single chunk (m=0 means last/only chunk)
     try std.testing.expect(std.mem.indexOf(u8, result, "m=0") != null);
     // Should NOT have m=1 (no continuation needed)
     try std.testing.expect(std.mem.indexOf(u8, result, "m=1") == null);
+    // Should use PNG format
+    try std.testing.expect(std.mem.indexOf(u8, result, "f=100") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "q=2") != null);
 }
 
 test "compositeSideBySide produces correct dimensions" {

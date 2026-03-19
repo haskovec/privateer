@@ -416,6 +416,7 @@ fn scaleToFactor(scale: u8) upscale_mod.ScaleFactor {
     };
 }
 
+
 fn savePng(
     allocator: std.mem.Allocator,
     base_path: []const u8,
