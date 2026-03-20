@@ -366,11 +366,11 @@ test "renderCockpit with missing direction is no-op" {
 
     // Build minimal COCK IFF with only FRNT
     var sprite_data: [50]u8 = undefined;
-    // Header: x2=2, x1=2, y1=2, y2=2
-    std.mem.writeInt(i16, sprite_data[0..2], 2, .little);
+    // Header: x2=1, x1=2, y1=2, y2=1 → width=2+1+1=4, height=2+1+1=4
+    std.mem.writeInt(i16, sprite_data[0..2], 1, .little);
     std.mem.writeInt(i16, sprite_data[2..4], 2, .little);
     std.mem.writeInt(i16, sprite_data[4..6], 2, .little);
-    std.mem.writeInt(i16, sprite_data[6..8], 2, .little);
+    std.mem.writeInt(i16, sprite_data[6..8], 1, .little);
     // Row 0: key=8, x=0, y=0, pixels=[1,1,1,1]
     std.mem.writeInt(u16, sprite_data[8..10], 8, .little);
     std.mem.writeInt(u16, sprite_data[10..12], 0, .little);

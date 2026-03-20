@@ -218,6 +218,10 @@ Offset  Size  Description
 ...     var   RLE-encoded sprite data
 ```
 
+Each sprite within the SHP uses the same RLE format and 8-byte header described above.
+For font SHP files, each sprite index maps to a character: `glyph_index = char - first_char`.
+DEMOFONT.SHP uses `first_char = 32` (ASCII space).
+
 ### Files (11 files, 0.2 MB)
 - `FONTS/*.SHP` - Game fonts (CONVFONT, DEMOFONT, MSSGFONT, OPTFONT, PCFONT, PRIVFNT)
 - `MOUSE/PNT.SHP` - Mouse cursor sprites
@@ -279,24 +283,28 @@ Origin's proprietary Run-Length Encoding used for all sprite graphics.
 ### Image Header (8 bytes)
 ```
 Offset  Size  Description
-+0      2     X2 (pixels right of center)
-+2      2     X1 (pixels left of center)
-+4      2     Y1 (pixels above center)
-+6      2     Y2 (pixels below center)
++0      2     X2 (signed int16 LE, pixels right of center)
++2      2     X1 (signed int16 LE, pixels left of center)
++4      2     Y1 (signed int16 LE, pixels above center)
++6      2     Y2 (signed int16 LE, pixels below center)
 ```
 Coordinates use Cartesian system with (0,0) at image center.
+**Width = X1 + X2 + 1** (left extent + center pixel + right extent).
+**Height = Y1 + Y2 + 1** (top extent + center pixel + bottom extent).
+
+Full-screen backgrounds use X2=319, X1=0, Y1=0, Y2=199 → 320×200.
 
 ### RLE Data Structure
 ```
-2 bytes   Key number (encoding selector via LSB)
-2 bytes   X coordinate offset
-2 bytes   Y coordinate offset
+2 bytes   Key number (unsigned int16 LE, encoding selector via LSB)
+2 bytes   X coordinate offset (unsigned int16 LE, pixel-buffer-relative)
+2 bytes   Y coordinate offset (unsigned int16 LE, pixel-buffer-relative)
 variable  Pixel data
 0x0000    Row/segment terminator
 ```
 
 ### Decoding Rules
-- **Even key:** `key / 2` = pixel count; raw color bytes follow
-- **Odd key:** `key / 2` = pixel count; sub-encoded data:
-  - Even data byte: `byte / 2` = sub-pixel count; individual colors follow
-  - Odd data byte: `byte / 2` = sub-pixel count; single color byte repeats
+- **Even key (LSB=0):** `key / 2` = pixel count; raw color bytes follow
+- **Odd key (LSB=1):** `key / 2` = pixel count; sub-encoded data:
+  - Even sub-byte (LSB=0): `byte / 2` = sub-pixel count; individual color bytes follow
+  - Odd sub-byte (LSB=1): `byte / 2` = sub-pixel count; single color byte repeats

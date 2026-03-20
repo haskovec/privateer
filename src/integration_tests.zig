@@ -1317,9 +1317,9 @@ test "integration: decode scene background from OPTSHPS.PAK" {
     var spr = try pack.decodeSprite(allocator, 0);
     defer spr.deinit();
 
-    // Should be 319x199 (full screen minus 1 pixel border)
-    try std.testing.expectEqual(@as(u16, 319), spr.width);
-    try std.testing.expectEqual(@as(u16, 199), spr.height);
+    // Should be 320x200 (full screen: x2=319, x1=0 → 0+319+1=320)
+    try std.testing.expectEqual(@as(u16, 320), spr.width);
+    try std.testing.expectEqual(@as(u16, 200), spr.height);
 
     // Render to framebuffer
     var fb = framebuffer_mod.Framebuffer.create();
@@ -1356,8 +1356,8 @@ test "integration: render scene from CU.PAK with palette" {
     var spr = try pack.decodeSprite(allocator, 0);
     defer spr.deinit();
 
-    // CU.PAK backgrounds are 319x199 or 319x128
-    try std.testing.expectEqual(@as(u16, 319), spr.width);
+    // CU.PAK backgrounds are 320x200 or 320xN (x2=319, x1=0 → 320)
+    try std.testing.expectEqual(@as(u16, 320), spr.width);
     try std.testing.expect(spr.height > 100);
 
     // Render and verify
@@ -3021,8 +3021,8 @@ test "integration: scene click regions have proper bounds from sprite headers" {
                 if (spr_pack.getSpriteHeader(0)) |header| {
                     const w = header.width() catch continue;
                     const h = header.height() catch continue;
-                    // Hotspot sprites should be smaller than fullscreen
-                    if (w < 320 or h < 200) {
+                    // Hotspot sprites should be smaller than or equal to fullscreen
+                    if (w <= 320 or h <= 200) {
                         has_sized_region = true;
                     }
                 } else |_| {}

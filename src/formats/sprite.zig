@@ -18,14 +18,16 @@ pub const SpriteHeader = struct {
     /// Pixels below center.
     y2: i16,
 
+    /// Sprite width: x1 + 1 + x2 (left extent + center pixel + right extent).
     pub fn width(self: SpriteHeader) SpriteError!u16 {
-        const w = @as(i32, self.x1) + @as(i32, self.x2);
+        const w = @as(i32, self.x1) + @as(i32, self.x2) + 1;
         if (w <= 0) return SpriteError.InvalidDimensions;
         return @intCast(w);
     }
 
+    /// Sprite height: y1 + 1 + y2 (top extent + center pixel + bottom extent).
     pub fn height(self: SpriteHeader) SpriteError!u16 {
-        const h = @as(i32, self.y1) + @as(i32, self.y2);
+        const h = @as(i32, self.y1) + @as(i32, self.y2) + 1;
         if (h <= 0) return SpriteError.InvalidDimensions;
         return @intCast(h);
     }
@@ -211,10 +213,10 @@ test "parseHeader reads 8-byte sprite header" {
     defer allocator.free(data);
 
     const header = try parseHeader(data);
-    try std.testing.expectEqual(@as(i16, 2), header.x2);
-    try std.testing.expectEqual(@as(i16, 2), header.x1);
-    try std.testing.expectEqual(@as(i16, 2), header.y1);
-    try std.testing.expectEqual(@as(i16, 2), header.y2);
+    try std.testing.expectEqual(@as(i16, 3), header.x2);
+    try std.testing.expectEqual(@as(i16, 0), header.x1);
+    try std.testing.expectEqual(@as(i16, 0), header.y1);
+    try std.testing.expectEqual(@as(i16, 3), header.y2);
     try std.testing.expectEqual(@as(u16, 4), try header.width());
     try std.testing.expectEqual(@as(u16, 4), try header.height());
 }
@@ -291,17 +293,19 @@ test "decode produces correct dimensions from header" {
     var sprite = try decode(allocator, data);
     defer sprite.deinit();
 
-    // Header: X2=3, X1=3, Y1=1, Y2=1 => 6x2
-    try std.testing.expectEqual(@as(i16, 3), sprite.header.x2);
-    try std.testing.expectEqual(@as(i16, 3), sprite.header.x1);
-    try std.testing.expectEqual(@as(i16, 1), sprite.header.y1);
+    // Header: X2=5, X1=0, Y1=0, Y2=1 => 6x2
+    try std.testing.expectEqual(@as(i16, 5), sprite.header.x2);
+    try std.testing.expectEqual(@as(i16, 0), sprite.header.x1);
+    try std.testing.expectEqual(@as(i16, 0), sprite.header.y1);
     try std.testing.expectEqual(@as(i16, 1), sprite.header.y2);
     try std.testing.expectEqual(@as(usize, 12), sprite.pixels.len); // 6*2
 }
 
 test "decode rejects zero-dimension sprite" {
-    // Header with X1=0, X2=0 => width=0
+    // Header with X1=-1, X2=0 => width = 0 + (-1) + 1 = 0
     var data = [_]u8{0} ** 10;
+    data[2] = 0xFF; // X1 low byte
+    data[3] = 0xFF; // X1 high byte => X1 = -1 (little-endian i16)
     data[4] = 1; // Y1=1
     data[6] = 1; // Y2=1
     try std.testing.expectError(SpriteError.InvalidDimensions, decode(std.testing.allocator, &data));

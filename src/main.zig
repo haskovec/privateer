@@ -321,6 +321,10 @@ fn updateTitle(state: *GameState) void {
 
         // Render title menu text over the background
         if (state.title_font) |font| {
+            // Find the brightest color in the active palette for visible text
+            const active_pal = if (state.title_palette) |*tp| tp else &state.palette;
+            const text_color = findBrightestColor(active_pal);
+
             const menu_items = [_][]const u8{
                 "Play Privateer",
                 "Load a Saved Game",
@@ -330,7 +334,7 @@ fn updateTitle(state: *GameState) void {
             for (menu_items) |item| {
                 const text_w = font.measureText(item);
                 const x = center_x -| (text_w / 2);
-                _ = font.drawTextColored(&state.fb, x, y, item, 15);
+                _ = font.drawTextColored(&state.fb, x, y, item, text_color);
                 y += font.line_height + 4;
             }
         }
@@ -353,8 +357,14 @@ fn updateTitle(state: *GameState) void {
         state.viewport_mode,
     );
 
-    // Any click or key press transitions to the game (title → loading → landed)
-    if (state.window.mouse_clicked or state.window.key_pressed != 0) {
+    // Mouse click or Enter/Space/Escape transitions to the game (title → loading → landed)
+    // Ignore modifier keys (Cmd/Shift/etc.) so screenshot shortcuts don't advance the title
+    const key = state.window.key_pressed;
+    const is_action_key = (key == privateer.sdl.raw.SDLK_RETURN or
+        key == privateer.sdl.raw.SDLK_SPACE or
+        key == privateer.sdl.raw.SDLK_ESCAPE or
+        key == privateer.sdl.raw.SDLK_KP_ENTER);
+    if (state.window.mouse_clicked or is_action_key) {
         state.state_machine.transition(.loading) catch return;
         state.state_machine.transition(.landed) catch return;
 
@@ -468,6 +478,23 @@ fn updateDefault(state: *GameState) void {
     );
 }
 
+/// Find the brightest color in a palette (by luminance), skipping index 0 (transparent/black).
+/// Returns the palette index that will be most visible for text rendering.
+fn findBrightestColor(palette: *const pal.Palette) u8 {
+    var best_idx: u8 = 15; // fallback
+    var best_lum: u32 = 0;
+    for (1..pal.COLOR_COUNT) |i| {
+        const c = palette.colors[i];
+        // Approximate luminance: 2*R + 5*G + B (weighted for human perception, avoids floats)
+        const lum: u32 = @as(u32, c.r) * 2 + @as(u32, c.g) * 5 + @as(u32, c.b);
+        if (lum > best_lum) {
+            best_lum = lum;
+            best_idx = @intCast(i);
+        }
+    }
+    return best_idx;
+}
+
 /// Load all game data and initialize the game state.
 fn initGameState(
     allocator: std.mem.Allocator,
@@ -550,7 +577,7 @@ fn initGameState(
     if (tre_index.findEntry("DEMOFONT.SHP")) |font_entry| {
         const font_data = tre.extractFileData(tre_data, font_entry.offset, font_entry.size) catch null;
         if (font_data) |fd| {
-            title_font = text_mod.Font.load(allocator, fd, 0) catch null;
+            title_font = text_mod.Font.load(allocator, fd, 32) catch null;
             if (title_font != null) {
                 std.debug.print("DEMOFONT.SHP loaded ({d} glyphs)\n", .{title_font.?.glyphCount()});
             }

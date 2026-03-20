@@ -233,7 +233,7 @@ def gen_sprite_rle():
     """Generate test RLE sprite fixtures.
 
     Fixture 1: test_sprite_even.bin - 4x4 sprite using only even-key (raw) encoding.
-    Header: X2=2, X1=2, Y1=2, Y2=2 => width=4, height=4
+    Header: X2=3, X1=0, Y1=0, Y2=3 => width=0+3+1=4, height=0+3+1=4
     All 4 rows use even-key encoding (raw pixel runs).
     Expected pixels (row-major):
         Row 0: [1, 2, 3, 4]
@@ -242,7 +242,7 @@ def gen_sprite_rle():
         Row 3: [13, 14, 15, 16]
 
     Fixture 2: test_sprite_odd.bin - 4x4 sprite using odd-key (sub-encoded) runs.
-    Header: X2=2, X1=2, Y1=2, Y2=2 => width=4, height=4
+    Header: X2=3, X1=0, Y1=0, Y2=3 => width=0+3+1=4, height=0+3+1=4
     Row 0: odd key with repeat sub-byte (4 pixels of color 5)
     Row 1: odd key with literal sub-byte (4 individual colors)
     Row 2: odd key with mixed sub-bytes (2 literal + 2 repeat)
@@ -254,7 +254,7 @@ def gen_sprite_rle():
         Row 3: [20, 20, 20, 20]
 
     Fixture 3: test_sprite_offset.bin - 6x2 sprite with non-zero X offsets (sparse).
-    Header: X2=3, X1=3, Y1=1, Y2=1 => width=6, height=2
+    Header: X2=5, X1=0, Y1=0, Y2=1 => width=0+5+1=6, height=0+1+1=2
     Row 0: 3 pixels starting at x=1
     Row 1: 2 pixels starting at x=2
     Expected pixels:
@@ -263,8 +263,8 @@ def gen_sprite_rle():
     """
     # --- Fixture 1: Even-key only ---
     data = bytearray()
-    # Header: X2=2, X1=2, Y1=2, Y2=2 (all i16 LE)
-    data += struct.pack('<hhhh', 2, 2, 2, 2)
+    # Header: X2=3, X1=0, Y1=0, Y2=3 (all i16 LE) → width=4, height=4
+    data += struct.pack('<hhhh', 3, 0, 0, 3)
     # Row 0: even key=8 (8/2=4 pixels), x=0, y=0, raw pixels [1,2,3,4]
     data += struct.pack('<HHH', 8, 0, 0) + bytes([1, 2, 3, 4])
     # Row 1: even key=8, x=0, y=1, raw pixels [5,6,7,8]
@@ -279,8 +279,8 @@ def gen_sprite_rle():
 
     # --- Fixture 2: Odd-key (sub-encoded) ---
     data = bytearray()
-    # Header: X2=2, X1=2, Y1=2, Y2=2
-    data += struct.pack('<hhhh', 2, 2, 2, 2)
+    # Header: X2=3, X1=0, Y1=0, Y2=3 → width=4, height=4
+    data += struct.pack('<hhhh', 3, 0, 0, 3)
     # Row 0: odd key=9 (9/2=4 pixels), x=0, y=0
     #   Sub: odd byte 9 (9/2=4 repeat), color 5 => [5,5,5,5]
     data += struct.pack('<HHH', 9, 0, 0) + bytes([9, 5])
@@ -300,8 +300,8 @@ def gen_sprite_rle():
 
     # --- Fixture 3: Sparse with X offsets ---
     data = bytearray()
-    # Header: X2=3, X1=3, Y1=1, Y2=1 => width=6, height=2
-    data += struct.pack('<hhhh', 3, 3, 1, 1)
+    # Header: X2=5, X1=0, Y1=0, Y2=1 → width=6, height=2
+    data += struct.pack('<hhhh', 5, 0, 0, 1)
     # Row 0: even key=6 (6/2=3 pixels), x=1, y=0, raw [15,16,17]
     data += struct.pack('<HHH', 6, 1, 0) + bytes([15, 16, 17])
     # Row 1: even key=4 (4/2=2 pixels), x=2, y=1, raw [20,21]
@@ -330,7 +330,7 @@ def gen_shp_file():
 
     # Sprite 0: 4x4 even-key (same pattern as test_sprite_even.bin)
     s0 = bytearray()
-    s0 += struct.pack('<hhhh', 2, 2, 2, 2)  # header: width=4, height=4
+    s0 += struct.pack('<hhhh', 3, 0, 0, 3)  # header: width=4, height=4
     s0 += struct.pack('<HHH', 8, 0, 0) + bytes([1, 2, 3, 4])
     s0 += struct.pack('<HHH', 8, 0, 1) + bytes([5, 6, 7, 8])
     s0 += struct.pack('<HHH', 8, 0, 2) + bytes([9, 10, 11, 12])
@@ -339,14 +339,14 @@ def gen_shp_file():
 
     # Sprite 1: 2x2 even-key
     s1 = bytearray()
-    s1 += struct.pack('<hhhh', 1, 1, 1, 1)  # header: width=2, height=2
+    s1 += struct.pack('<hhhh', 1, 0, 0, 1)  # header: width=0+1+1=2, height=0+1+1=2
     s1 += struct.pack('<HHH', 4, 0, 0) + bytes([0xAA, 0xBB])
     s1 += struct.pack('<HHH', 4, 0, 1) + bytes([0xCC, 0xDD])
     s1 += struct.pack('<H', 0)  # terminator
 
     # Sprite 2: 3x2 even-key
     s2 = bytearray()
-    s2 += struct.pack('<hhhh', 2, 1, 1, 1)  # header: width=3, height=2
+    s2 += struct.pack('<hhhh', 2, 0, 0, 1)  # header: width=0+2+1=3, height=0+1+1=2
     s2 += struct.pack('<HHH', 6, 0, 0) + bytes([10, 20, 30])
     s2 += struct.pack('<HHH', 6, 0, 1) + bytes([40, 50, 60])
     s2 += struct.pack('<H', 0)  # terminator
@@ -370,7 +370,7 @@ def gen_shp_file():
 
     # Fixture 2: test_shp_single.bin - SHP with just 1 sprite (edge case)
     s_single = bytearray()
-    s_single += struct.pack('<hhhh', 1, 1, 1, 1)  # 2x2
+    s_single += struct.pack('<hhhh', 1, 0, 0, 1)  # width=0+1+1=2, height=0+1+1=2
     s_single += struct.pack('<HHH', 4, 0, 0) + bytes([0xFF, 0xFE])
     s_single += struct.pack('<HHH', 4, 0, 1) + bytes([0xFD, 0xFC])
     s_single += struct.pack('<H', 0)
@@ -855,25 +855,25 @@ def gen_font_file():
         #...   Row 1: [1, 0, 0, 0]
         ####   Row 2: [1, 1, 1, 1]
     """
-    # Glyph A: 3x3 (x2=2, x1=1 -> w=3; y1=2, y2=1 -> h=3)
+    # Glyph A: 3x3 (x2=2, x1=0 -> w=0+2+1=3; y1=0, y2=2 -> h=0+2+1=3)
     ga = bytearray()
-    ga += struct.pack('<hhhh', 2, 1, 2, 1)
+    ga += struct.pack('<hhhh', 2, 0, 0, 2)
     ga += struct.pack('<HHH', 6, 0, 0) + bytes([0, 1, 0])
     ga += struct.pack('<HHH', 6, 0, 1) + bytes([1, 1, 1])
     ga += struct.pack('<HHH', 6, 0, 2) + bytes([1, 0, 1])
     ga += struct.pack('<H', 0)
 
-    # Glyph B: 2x3 (x2=1, x1=1 -> w=2; y1=2, y2=1 -> h=3)
+    # Glyph B: 2x3 (x2=1, x1=0 -> w=0+1+1=2; y1=0, y2=2 -> h=0+2+1=3)
     gb = bytearray()
-    gb += struct.pack('<hhhh', 1, 1, 2, 1)
+    gb += struct.pack('<hhhh', 1, 0, 0, 2)
     gb += struct.pack('<HHH', 4, 0, 0) + bytes([1, 1])
     gb += struct.pack('<HHH', 4, 0, 1) + bytes([1, 0])
     gb += struct.pack('<HHH', 4, 0, 2) + bytes([1, 1])
     gb += struct.pack('<H', 0)
 
-    # Glyph C: 4x3 (x2=2, x1=2 -> w=4; y1=2, y2=1 -> h=3)
+    # Glyph C: 4x3 (x2=3, x1=0 -> w=0+3+1=4; y1=0, y2=2 -> h=0+2+1=3)
     gc = bytearray()
-    gc += struct.pack('<hhhh', 2, 2, 2, 1)
+    gc += struct.pack('<hhhh', 3, 0, 0, 2)
     gc += struct.pack('<HHH', 8, 0, 0) + bytes([1, 1, 1, 1])
     gc += struct.pack('<HHH', 8, 0, 1) + bytes([1, 0, 0, 0])
     gc += struct.pack('<HHH', 8, 0, 2) + bytes([1, 1, 1, 1])
@@ -989,7 +989,7 @@ def gen_midgame_pak():
         """Build a minimal scene pack with one 2x2 sprite."""
         # Sprite: header(8) + row0(8) + row1(8) + terminator(2) = 26 bytes
         sprite = bytearray()
-        sprite += struct.pack('<hhhh', 1, 1, 1, 1)  # 2x2 sprite
+        sprite += struct.pack('<hhhh', 1, 0, 0, 1)  # width=0+1+1=2, height=0+1+1=2
         sprite += struct.pack('<HHH', 4, 0, 0) + bytes([pixels[0], pixels[1]])
         sprite += struct.pack('<HHH', 4, 0, 1) + bytes([pixels[2], pixels[3]])
         sprite += struct.pack('<H', 0)  # terminator
@@ -1223,8 +1223,8 @@ def gen_cockpit_file():
     def make_cockpit_sprite(color):
         """Build a 4x4 RLE sprite in scene pack format (size + offset table + sprite data)."""
         # First build the raw RLE sprite
-        # Header: x2=2, x1=2, y1=2, y2=2 => 4x4
-        sprite = struct.pack('<hhhh', 2, 2, 2, 2)
+        # Header: x2=1, x1=2, y1=2, y2=1 => width=2+1+1=4, height=2+1+1=4 (center-relative)
+        sprite = struct.pack('<hhhh', 1, 2, 2, 1)
         # Row 0: all opaque [color, color, color, color]
         sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color, color, color, color])
         # Row 1: opaque, transparent, transparent, opaque [color, 0, 0, color]
@@ -1314,7 +1314,7 @@ def gen_mfd_file():
     """
     # Minimal front view sprite (same as cockpit fixture)
     def make_cockpit_sprite(color):
-        sprite = struct.pack('<hhhh', 2, 2, 2, 2)
+        sprite = struct.pack('<hhhh', 1, 2, 2, 1)  # 4x4 center-relative
         sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color]*4)
         sprite += struct.pack('<HHH', 8, 0, 1) + bytes([color, 0, 0, color])
         sprite += struct.pack('<HHH', 8, 0, 2) + bytes([color, 0, 0, color])
