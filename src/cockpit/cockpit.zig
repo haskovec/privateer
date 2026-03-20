@@ -371,34 +371,35 @@ test "renderCockpit with missing direction is no-op" {
     std.mem.writeInt(i16, sprite_data[2..4], 2, .little);
     std.mem.writeInt(i16, sprite_data[4..6], 2, .little);
     std.mem.writeInt(i16, sprite_data[6..8], 1, .little);
-    // Row 0: key=8, x=0, y=0, pixels=[1,1,1,1]
+    // RLE coords are center-relative: x from -2, y from -2 to +1
+    // Row 0 (y=-2): key=8, x=-2, y=-2, pixels=[1,1,1,1]
     std.mem.writeInt(u16, sprite_data[8..10], 8, .little);
-    std.mem.writeInt(u16, sprite_data[10..12], 0, .little);
-    std.mem.writeInt(u16, sprite_data[12..14], 0, .little);
+    std.mem.writeInt(i16, sprite_data[10..12], -2, .little);
+    std.mem.writeInt(i16, sprite_data[12..14], -2, .little);
     sprite_data[14] = 1;
     sprite_data[15] = 1;
     sprite_data[16] = 1;
     sprite_data[17] = 1;
-    // Row 1: key=8, x=0, y=1
+    // Row 1 (y=-1):
     std.mem.writeInt(u16, sprite_data[18..20], 8, .little);
-    std.mem.writeInt(u16, sprite_data[20..22], 0, .little);
-    std.mem.writeInt(u16, sprite_data[22..24], 1, .little);
+    std.mem.writeInt(i16, sprite_data[20..22], -2, .little);
+    std.mem.writeInt(i16, sprite_data[22..24], -1, .little);
     sprite_data[24] = 1;
     sprite_data[25] = 1;
     sprite_data[26] = 1;
     sprite_data[27] = 1;
-    // Row 2: key=8, x=0, y=2
+    // Row 2 (y=0):
     std.mem.writeInt(u16, sprite_data[28..30], 8, .little);
-    std.mem.writeInt(u16, sprite_data[30..32], 0, .little);
-    std.mem.writeInt(u16, sprite_data[32..34], 2, .little);
+    std.mem.writeInt(i16, sprite_data[30..32], -2, .little);
+    std.mem.writeInt(i16, sprite_data[32..34], 0, .little);
     sprite_data[34] = 1;
     sprite_data[35] = 1;
     sprite_data[36] = 1;
     sprite_data[37] = 1;
-    // Row 3: key=8, x=0, y=3
+    // Row 3 (y=+1):
     std.mem.writeInt(u16, sprite_data[38..40], 8, .little);
-    std.mem.writeInt(u16, sprite_data[40..42], 0, .little);
-    std.mem.writeInt(u16, sprite_data[42..44], 3, .little);
+    std.mem.writeInt(i16, sprite_data[40..42], -2, .little);
+    std.mem.writeInt(i16, sprite_data[42..44], 1, .little);
     sprite_data[44] = 1;
     sprite_data[45] = 1;
     sprite_data[46] = 1;

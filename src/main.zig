@@ -319,23 +319,28 @@ fn updateTitle(state: *GameState) void {
         const view = scene_renderer.SceneView{ .background = bg };
         scene_renderer.renderScene(&state.fb, view);
 
-        // Render title menu text over the background
+        // Render scaled title menu text over the background
         if (state.title_font) |font| {
-            // Find the brightest color in the active palette for visible text
             const active_pal = if (state.title_palette) |*tp| tp else &state.palette;
             const text_color = findBrightestColor(active_pal);
+            const scale: u16 = 2;
 
             const menu_items = [_][]const u8{
                 "Play Privateer",
                 "Load a Saved Game",
             };
             const center_x: u16 = framebuffer_mod.WIDTH / 2;
-            var y: u16 = 140;
+            const scaled_line_h = font.line_height * scale;
+            const line_spacing: u16 = scaled_line_h + 4;
+            const total_h: u16 = @intCast(menu_items.len * line_spacing);
+            const start_y: u16 = (framebuffer_mod.HEIGHT -| total_h) / 2 + 30;
+
+            var y: u16 = start_y;
             for (menu_items) |item| {
-                const text_w = font.measureText(item);
+                const text_w = font.measureTextScaled(item, scale);
                 const x = center_x -| (text_w / 2);
-                _ = font.drawTextColored(&state.fb, x, y, item, text_color);
-                y += font.line_height + 4;
+                _ = font.drawTextScaled(&state.fb, x, y, item, text_color, scale);
+                y += line_spacing;
             }
         }
 
@@ -577,7 +582,7 @@ fn initGameState(
     if (tre_index.findEntry("DEMOFONT.SHP")) |font_entry| {
         const font_data = tre.extractFileData(tre_data, font_entry.offset, font_entry.size) catch null;
         if (font_data) |fd| {
-            title_font = text_mod.Font.load(allocator, fd, 32) catch null;
+            title_font = text_mod.Font.load(allocator, fd, 0) catch null;
             if (title_font != null) {
                 std.debug.print("DEMOFONT.SHP loaded ({d} glyphs)\n", .{title_font.?.glyphCount()});
             }

@@ -3,3 +3,4 @@
 zig-out/
 privateer.json
 GAME.DAT
+tools/__pycache__/

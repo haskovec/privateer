@@ -220,7 +220,8 @@ Offset  Size  Description
 
 Each sprite within the SHP uses the same RLE format and 8-byte header described above.
 For font SHP files, each sprite index maps to a character: `glyph_index = char - first_char`.
-DEMOFONT.SHP uses `first_char = 32` (ASCII space).
+DEMOFONT.SHP uses `first_char = 0` (glyph index = ASCII code directly). Uppercase letters
+start at index 65 ('A'), with glyphs typically 9x12 pixels.
 
 ### Files (11 files, 0.2 MB)
 - `FONTS/*.SHP` - Game fonts (CONVFONT, DEMOFONT, MSSGFONT, OPTFONT, PCFONT, PRIVFNT)
@@ -297,11 +298,15 @@ Full-screen backgrounds use X2=319, X1=0, Y1=0, Y2=199 → 320×200.
 ### RLE Data Structure
 ```
 2 bytes   Key number (unsigned int16 LE, encoding selector via LSB)
-2 bytes   X coordinate offset (unsigned int16 LE, pixel-buffer-relative)
-2 bytes   Y coordinate offset (unsigned int16 LE, pixel-buffer-relative)
+2 bytes   X coordinate offset (signed int16 LE, center-relative)
+2 bytes   Y coordinate offset (signed int16 LE, center-relative)
 variable  Pixel data
 0x0000    Row/segment terminator
 ```
+Coordinates are relative to the sprite center (0,0). To convert to pixel buffer
+positions: `buf_x = x_off + X1`, `buf_y = y_off + Y1`. Full-screen sprites
+(X1=0, Y1=0) have non-negative offsets. Font glyphs with Y1=11 use negative
+y_off values (e.g. y_off=-11 for the top row).
 
 ### Decoding Rules
 - **Even key (LSB=0):** `key / 2` = pixel count; raw color bytes follow

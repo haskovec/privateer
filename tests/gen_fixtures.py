@@ -1224,15 +1224,16 @@ def gen_cockpit_file():
         """Build a 4x4 RLE sprite in scene pack format (size + offset table + sprite data)."""
         # First build the raw RLE sprite
         # Header: x2=1, x1=2, y1=2, y2=1 => width=2+1+1=4, height=2+1+1=4 (center-relative)
+        # RLE coordinates are center-relative: x from -2 to +1, y from -2 to +1
         sprite = struct.pack('<hhhh', 1, 2, 2, 1)
-        # Row 0: all opaque [color, color, color, color]
-        sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color, color, color, color])
-        # Row 1: opaque, transparent, transparent, opaque [color, 0, 0, color]
-        sprite += struct.pack('<HHH', 8, 0, 1) + bytes([color, 0, 0, color])
-        # Row 2: opaque, transparent, transparent, opaque
-        sprite += struct.pack('<HHH', 8, 0, 2) + bytes([color, 0, 0, color])
-        # Row 3: all opaque
-        sprite += struct.pack('<HHH', 8, 0, 3) + bytes([color, color, color, color])
+        # Row 0 (y=-2): all opaque
+        sprite += struct.pack('<Hhh', 8, -2, -2) + bytes([color, color, color, color])
+        # Row 1 (y=-1): opaque, transparent, transparent, opaque
+        sprite += struct.pack('<Hhh', 8, -2, -1) + bytes([color, 0, 0, color])
+        # Row 2 (y=0): opaque, transparent, transparent, opaque
+        sprite += struct.pack('<Hhh', 8, -2, 0) + bytes([color, 0, 0, color])
+        # Row 3 (y=+1): all opaque
+        sprite += struct.pack('<Hhh', 8, -2, 1) + bytes([color, color, color, color])
         # Terminator
         sprite += struct.pack('<H', 0)
 
@@ -1315,10 +1316,10 @@ def gen_mfd_file():
     # Minimal front view sprite (same as cockpit fixture)
     def make_cockpit_sprite(color):
         sprite = struct.pack('<hhhh', 1, 2, 2, 1)  # 4x4 center-relative
-        sprite += struct.pack('<HHH', 8, 0, 0) + bytes([color]*4)
-        sprite += struct.pack('<HHH', 8, 0, 1) + bytes([color, 0, 0, color])
-        sprite += struct.pack('<HHH', 8, 0, 2) + bytes([color, 0, 0, color])
-        sprite += struct.pack('<HHH', 8, 0, 3) + bytes([color]*4)
+        sprite += struct.pack('<Hhh', 8, -2, -2) + bytes([color]*4)
+        sprite += struct.pack('<Hhh', 8, -2, -1) + bytes([color, 0, 0, color])
+        sprite += struct.pack('<Hhh', 8, -2, 0) + bytes([color, 0, 0, color])
+        sprite += struct.pack('<Hhh', 8, -2, 1) + bytes([color]*4)
         sprite += struct.pack('<H', 0)
         first_offset = 8
         declared_size = 4 + 4 + len(sprite)
@@ -1327,9 +1328,9 @@ def gen_mfd_file():
     # Minimal 3x3 RLE sprite for crosshair/nav indicators
     def make_tiny_sprite(color):
         sprite = struct.pack('<hhhh', 1, 1, 1, 1)  # 3x3 centered
-        sprite += struct.pack('<HHH', 6, 0, 0) + bytes([0, color, 0])
-        sprite += struct.pack('<HHH', 6, 0, 1) + bytes([color, color, color])
-        sprite += struct.pack('<HHH', 6, 0, 2) + bytes([0, color, 0])
+        sprite += struct.pack('<Hhh', 6, -1, -1) + bytes([0, color, 0])
+        sprite += struct.pack('<Hhh', 6, -1, 0) + bytes([color, color, color])
+        sprite += struct.pack('<Hhh', 6, -1, 1) + bytes([0, color, 0])
         sprite += struct.pack('<H', 0)
         first_offset = 8
         declared_size = 4 + 4 + len(sprite)

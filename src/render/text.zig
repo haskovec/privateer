@@ -59,7 +59,7 @@ pub const Font = struct {
                     .pixels = spr.pixels,
                 };
                 if (spr.height > line_height) line_height = spr.height;
-                // Don't deinit sprite — we took ownership of pixels
+                // Debug: dump glyph 'P' pixel grid
             } else |_| {
                 glyphs[i] = null;
             }
@@ -150,6 +150,31 @@ pub const Font = struct {
         return cursor_x - x;
     }
 
+    /// Render a text string scaled by an integer factor with an optional color override.
+    /// Each glyph pixel becomes a scale×scale block. Returns the total scaled pixel width.
+    pub fn drawTextScaled(self: Font, fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, text: []const u8, color_override: ?u8, scale: u16) u16 {
+        if (text.len == 0 or scale == 0) return 0;
+        if (scale == 1) return self.drawTextColored(fb, x, y, text, color_override);
+        var cursor_x: u16 = x;
+        for (text, 0..) |ch, i| {
+            if (self.getGlyph(ch)) |glyph| {
+                blitGlyphScaled(fb, glyph, cursor_x, y, color_override, scale);
+                cursor_x += glyph.width * scale;
+            } else {
+                cursor_x += self.spaceWidth() * scale;
+            }
+            if (i + 1 < text.len) {
+                cursor_x += self.spacing * scale;
+            }
+        }
+        return cursor_x - x;
+    }
+
+    /// Measure the scaled pixel width of a text string.
+    pub fn measureTextScaled(self: Font, text: []const u8, scale: u16) u16 {
+        return self.measureText(text) * scale;
+    }
+
     /// Blit a single glyph onto the framebuffer at (x, y) as top-left.
     fn blitGlyph(fb: *framebuffer_mod.Framebuffer, glyph: Glyph, x: u16, y: u16, color_override: ?u8) void {
         for (0..glyph.height) |gy| {
@@ -159,6 +184,27 @@ pub const Font = struct {
                 const fx: u16 = x +| @as(u16, @intCast(gx));
                 const fy: u16 = y +| @as(u16, @intCast(gy));
                 fb.setPixel(fx, fy, color_override orelse color);
+            }
+        }
+    }
+
+    /// Blit a single glyph scaled by an integer factor (each pixel becomes scale×scale).
+    fn blitGlyphScaled(fb: *framebuffer_mod.Framebuffer, glyph: Glyph, x: u16, y: u16, color_override: ?u8, scale: u16) void {
+        for (0..glyph.height) |gy| {
+            for (0..glyph.width) |gx| {
+                const color = glyph.pixels[gy * @as(usize, glyph.width) + gx];
+                if (color == 0) continue;
+                const c = color_override orelse color;
+                const bx: u16 = x +| @as(u16, @intCast(gx)) * scale;
+                const by: u16 = y +| @as(u16, @intCast(gy)) * scale;
+                // Fill a scale×scale block
+                var sy: u16 = 0;
+                while (sy < scale) : (sy += 1) {
+                    var sx: u16 = 0;
+                    while (sx < scale) : (sx += 1) {
+                        fb.setPixel(bx +| sx, by +| sy, c);
+                    }
+                }
             }
         }
     }

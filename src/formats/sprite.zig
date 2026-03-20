@@ -84,7 +84,9 @@ pub fn decode(allocator: std.mem.Allocator, data: []const u8) SpriteError!Sprite
     errdefer allocator.free(pixels);
     @memset(pixels, 0); // transparent by default
 
-    // Decode RLE data starting after the header
+    // Decode RLE data starting after the header.
+    // RLE coordinates are center-relative (signed); translate to buffer coordinates
+    // by adding x1 and y1 (the left/top extents from center).
     var offset: usize = HEADER_SIZE;
     while (offset + 1 < data.len) {
         const key = readU16LE(data, offset) catch break;
@@ -93,10 +95,18 @@ pub fn decode(allocator: std.mem.Allocator, data: []const u8) SpriteError!Sprite
         // Key of 0 terminates the sprite data
         if (key == 0) break;
 
-        const x_off = readU16LE(data, offset) catch return SpriteError.UnexpectedEnd;
+        // Read x/y offsets as signed center-relative, then translate to buffer coords
+        const x_raw = readI16LE(data, offset) catch return SpriteError.UnexpectedEnd;
         offset += 2;
-        const y_off = readU16LE(data, offset) catch return SpriteError.UnexpectedEnd;
+        const y_raw = readI16LE(data, offset) catch return SpriteError.UnexpectedEnd;
         offset += 2;
+
+        const buf_x: i32 = @as(i32, x_raw) + @as(i32, header.x1);
+        const buf_y: i32 = @as(i32, y_raw) + @as(i32, header.y1);
+
+        // Convert to unsigned buffer coordinates (per-pixel bounds checking handles overflow)
+        const x_off: u16 = if (buf_x >= 0) @intCast(@min(buf_x, @as(i32, w))) else 0;
+        const y_off: u16 = if (buf_y >= 0) @intCast(@min(buf_y, @as(i32, h))) else 0;
 
         const pixel_num: usize = key / 2;
 
@@ -201,6 +211,11 @@ fn decodeOddKey(
 fn readU16LE(data: []const u8, offset: usize) SpriteError!u16 {
     if (offset + 2 > data.len) return SpriteError.UnexpectedEnd;
     return std.mem.readInt(u16, data[offset..][0..2], .little);
+}
+
+fn readI16LE(data: []const u8, offset: usize) SpriteError!i16 {
+    if (offset + 2 > data.len) return SpriteError.UnexpectedEnd;
+    return std.mem.readInt(i16, data[offset..][0..2], .little);
 }
 
 // --- Tests ---
