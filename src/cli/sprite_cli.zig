@@ -3,9 +3,13 @@
 //! inline terminal display via the Kitty graphics protocol and PNG export.
 //!
 //! Usage:
-//!   privateer-sprite list --data-dir <path>
-//!   privateer-sprite view --data-dir <path> --file <tre-path> [options]
+//!   privateer-sprite list [--data-dir <path>]
+//!   privateer-sprite view [options]                    (dump all sprites)
+//!   privateer-sprite view --file <tre-path> [options]
 //!   privateer-sprite view --input <file> [options]
+//!
+//! The --data-dir flag is optional if data_dir is set in privateer.json
+//! or via the PRIVATEER_DATA environment variable.
 //!
 //! Options:
 //!   --palette <path>     Override palette (TRE path or filesystem path)
@@ -62,11 +66,11 @@ fn printUsage() void {
         \\  list    List all sprite-containing files in GAME.DAT
         \\  view    View sprites inline or save as PNG
         \\
-        \\List options:
-        \\  --data-dir <path>    Directory containing GAME.DAT
+        \\Common options:
+        \\  --data-dir <path>    Directory containing GAME.DAT (optional if set in
+        \\                       privateer.json or PRIVATEER_DATA env var)
         \\
         \\View options:
-        \\  --data-dir <path>    Directory containing GAME.DAT (for TRE access)
         \\  --file <tre-path>    File path within TRE (e.g. FONTS/PCFONT.SHP)
         \\                       Omit --file to dump ALL sprites from GAME.DAT
         \\  --input <file>       Path to an extracted file on disk
@@ -82,7 +86,6 @@ fn printUsage() void {
 
 /// Parsed CLI arguments for the view subcommand.
 const ViewArgs = struct {
-    data_dir: ?[]const u8 = null,
     tre_file: ?[]const u8 = null,
     input_file: ?[]const u8 = null,
     palette: ?[]const u8 = null,
@@ -99,7 +102,7 @@ fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
     while (i < args.len) : (i += 1) {
         if (i + 1 < args.len) {
             if (std.mem.eql(u8, args[i], "--data-dir")) {
-                result.data_dir = args[i + 1];
+                // Handled by config resolution, skip the value
                 i += 1;
             } else if (std.mem.eql(u8, args[i], "--file")) {
                 result.tre_file = args[i + 1];
@@ -136,19 +139,13 @@ fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
 }
 
 fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
-    var data_dir: ?[]const u8 = null;
-    var i: usize = 0;
-    while (i < args.len) : (i += 1) {
-        if (i + 1 < args.len and std.mem.eql(u8, args[i], "--data-dir")) {
-            data_dir = args[i + 1];
-            i += 1;
-        }
-    }
-
-    const data_path = data_dir orelse {
-        std.debug.print("Error: --data-dir is required for list command\n", .{});
+    var cfg = privateer.config.resolveForCli(allocator, args) catch {
+        std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
+    defer cfg.deinit();
+
+    const data_path = cfg.data_dir;
 
     // Load GAME.DAT
     const game_dat_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
@@ -192,12 +189,16 @@ fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 }
 
 fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
+    var cfg = privateer.config.resolveForCli(allocator, args) catch {
+        std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
+        std.process.exit(1);
+    };
+    defer cfg.deinit();
+
     const view_args = parseViewArgs(args);
 
-    if (view_args.input_file == null and view_args.data_dir == null) {
-        std.debug.print("Error: either --input <file> or --data-dir is required\n", .{});
-        std.process.exit(1);
-    }
+    // No validation needed here — if neither --file nor --input is given,
+    // runViewAll will dump all sprites using data_dir from config resolution.
 
     // Validate scale factor
     if (view_args.scale != 1 and view_args.scale != 2 and view_args.scale != 3 and view_args.scale != 4) {
@@ -205,9 +206,9 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         std.process.exit(1);
     }
 
-    // If --data-dir provided without --file, dump all sprites from GAME.DAT
+    // If neither --file nor --input provided, dump all sprites from GAME.DAT
     if (view_args.tre_file == null and view_args.input_file == null) {
-        try runViewAll(allocator, view_args);
+        try runViewAll(allocator, view_args, cfg.data_dir);
         return;
     }
 
@@ -224,9 +225,9 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         };
         filename = input_path;
 
-        // Also load TRE if data-dir specified (for palette access)
-        if (view_args.data_dir) |data_path| {
-            const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
+        // Also load TRE for palette access
+        {
+            const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{cfg.data_dir});
             defer allocator.free(gd_path);
             game_dat = loadFile(allocator, gd_path) catch null;
             if (game_dat) |gd| {
@@ -235,7 +236,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         }
     } else {
         // Load from TRE
-        const data_path = view_args.data_dir.?;
+        const data_path = cfg.data_dir;
         const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
         defer allocator.free(gd_path);
 
@@ -280,8 +281,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 }
 
 /// Dump all sprites from every sprite-containing file in GAME.DAT.
-fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs) !void {
-    const data_path = view_args.data_dir.?;
+fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs, data_path: []const u8) !void {
     const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
     defer allocator.free(gd_path);
 

@@ -109,6 +109,12 @@ The `privateer-extract` CLI tool extracts all 832 files from `GAME.DAT` into a
 directory tree for inspection or modding:
 
 ```bash
+zig build extract -- --output ./extracted
+```
+
+If `data_dir` is not set in `privateer.json` or `PRIVATEER_DATA`, pass it explicitly:
+
+```bash
 zig build extract -- --data-dir /path/to/directory/containing/GAME.DAT --output ./extracted
 ```
 

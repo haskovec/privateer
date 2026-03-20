@@ -1,7 +1,10 @@
 //! Asset extraction CLI tool for Wing Commander: Privateer.
 //! Extracts all 832 files from GAME.DAT (ISO 9660 → PRIV.TRE) to a directory tree.
 //!
-//! Usage: privateer-extract --data-dir <path> --output <dir>
+//! Usage: privateer-extract [--data-dir <path>] --output <dir>
+//!
+//! The --data-dir flag is optional if data_dir is set in privateer.json
+//! or via the PRIVATEER_DATA environment variable.
 
 const std = @import("std");
 const privateer = @import("privateer");
@@ -15,31 +18,29 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var data_dir: ?[]const u8 = null;
-    var output_dir: ?[]const u8 = null;
+    // Resolve data_dir from config file / env var / CLI args
+    var cfg = privateer.config.resolveForCli(allocator, args[1..]) catch {
+        std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
+        std.process.exit(1);
+    };
+    defer cfg.deinit();
 
-    var i: usize = 1; // skip program name
+    const data_path = cfg.data_dir;
+
+    // Parse --output manually (extract-specific)
+    var output_dir: ?[]const u8 = null;
+    var i: usize = 1;
     while (i < args.len) : (i += 1) {
-        if (i + 1 < args.len) {
-            if (std.mem.eql(u8, args[i], "--data-dir")) {
-                data_dir = args[i + 1];
-                i += 1;
-            } else if (std.mem.eql(u8, args[i], "--output")) {
-                output_dir = args[i + 1];
-                i += 1;
-            }
+        if (i + 1 < args.len and std.mem.eql(u8, args[i], "--output")) {
+            output_dir = args[i + 1];
+            i += 1;
         }
     }
 
-    const data_path = data_dir orelse {
-        std.debug.print("Usage: privateer-extract --data-dir <path-to-GAME.DAT-directory> --output <output-dir>\n", .{});
-        std.debug.print("  --data-dir  Directory containing GAME.DAT\n", .{});
-        std.debug.print("  --output    Directory to extract files to\n", .{});
-        std.process.exit(1);
-    };
-
     const out_path = output_dir orelse {
-        std.debug.print("Error: --output is required\n", .{});
+        std.debug.print("Usage: privateer-extract [--data-dir <path>] --output <output-dir>\n", .{});
+        std.debug.print("  --data-dir  Directory containing GAME.DAT (optional if set in privateer.json or PRIVATEER_DATA)\n", .{});
+        std.debug.print("  --output    Directory to extract files to\n", .{});
         std.process.exit(1);
     };
 

@@ -321,6 +321,17 @@ pub fn applyArgs(config: *Config, args: []const []const u8) !void {
     }
 }
 
+/// Resolve configuration for CLI tools.
+/// Loads config file → applies env var override → applies CLI arg overrides.
+/// Caller owns the returned Config and must call deinit().
+pub fn resolveForCli(allocator: std.mem.Allocator, cli_args: []const []const u8) !Config {
+    var cfg = try load(allocator, CONFIG_FILE);
+    errdefer cfg.deinit();
+    applyEnvOverride(&cfg) catch {};
+    try applyArgs(&cfg, cli_args);
+    return cfg;
+}
+
 /// Apply PRIVATEER_DATA environment variable override to data_dir.
 /// Env var takes precedence over the config file value but not CLI args.
 pub fn applyEnvOverride(config: *Config) !void {
@@ -637,4 +648,37 @@ test "Settings sanitize clamps values" {
     try testing.expectApproxEqAbs(@as(f32, 1.0), s.sfx_volume, 0.001);
     try testing.expectApproxEqAbs(@as(f32, 0.0), s.music_volume, 0.001);
     try testing.expectApproxEqAbs(@as(f32, 1.0), s.joystick_deadzone, 0.001);
+}
+
+test "resolveForCli succeeds with no args" {
+    const allocator = testing.allocator;
+    var cfg = try resolveForCli(allocator, &.{});
+    defer cfg.deinit();
+
+    // Should return a valid config (from file or defaults)
+    try testing.expect(cfg.data_dir.len > 0);
+    try testing.expect(cfg.mod_dir.len > 0);
+    try testing.expect(cfg.output_dir.len > 0);
+}
+
+test "resolveForCli applies --data-dir from CLI args" {
+    const allocator = testing.allocator;
+    const args = [_][]const u8{ "--data-dir", "/custom/data" };
+    var cfg = try resolveForCli(allocator, &args);
+    defer cfg.deinit();
+
+    // CLI arg overrides config file / env var
+    try testing.expectEqualStrings("/custom/data", cfg.data_dir);
+}
+
+test "resolveForCli applies multiple CLI overrides" {
+    const allocator = testing.allocator;
+    const args = [_][]const u8{ "--data-dir", "/my/data", "--output-dir", "/my/out" };
+    var cfg = try resolveForCli(allocator, &args);
+    defer cfg.deinit();
+
+    try testing.expectEqualStrings("/my/data", cfg.data_dir);
+    try testing.expectEqualStrings("/my/out", cfg.output_dir);
+    // mod_dir unchanged from config file / default
+    try testing.expect(cfg.mod_dir.len > 0);
 }
