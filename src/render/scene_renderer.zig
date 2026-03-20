@@ -9,7 +9,7 @@
 //!
 //! The first resource in a scene PAK is often a palette (772 bytes).
 //! Subsequent resources contain one or more RLE-encoded sprites that cover
-//! most of the 320x200 screen (typically 319x199).
+//! the full 320x200 screen (header X2=319, X1=0, Y1=0, Y2=199).
 
 const std = @import("std");
 const framebuffer_mod = @import("framebuffer.zig");

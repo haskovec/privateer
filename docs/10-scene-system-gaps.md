@@ -27,7 +27,7 @@ Each scene pack entry contains:
 - `[offsets..]`: Sprite data (8-byte header + RLE pixel data)
 
 Most scene backgrounds (scenes 0-16, 19-20, 23, 25, 35-37, 40-43, 47-48, 50-61)
-are single 319x199 full-screen sprites. Others have multiple sprites (overlays).
+are single 320x200 full-screen sprites. Others have multiple sprites (overlays).
 
 ### Palette Mapping
 
@@ -44,7 +44,7 @@ Palettes are in `..\..\DATA\OPTIONS\OPTPALS.PAK` (42 L1 entries, 772 bytes each)
 ### CU.PAK (Close-Up Views)
 
 `..\..\DATA\OPTIONS\CU.PAK` contains 30 L1 entries with E0 markers. Each entry is a
-single 319x128 or 319x199 sprite. These are close-up views used for NPC conversations
+single 319x128 or 320x200 sprite. These are close-up views used for NPC conversations
 and character creation, NOT for scene backgrounds. Referenced in the EXE as `cu`/`cu2`
 (base game / Righteous Fire variants).
 
@@ -146,7 +146,7 @@ exchange, 0x1D = mission computer, 0x1E = equipment dealer.
 
 ## OPTSHPS.PAK Scene Index Reference
 
-Scene backgrounds are full-screen 319x199 sprites unless noted. Scene ID is also the
+Scene backgrounds are full-screen 320x200 sprites unless noted. Scene ID is also the
 OPTSHPS.PAK L1 index.
 
 | Scene | Sprites | Description | Tune | Notes |
