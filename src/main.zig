@@ -323,11 +323,11 @@ fn updateTitle(state: *GameState) void {
         if (state.title_font) |font| {
             const active_pal = if (state.title_palette) |*tp| tp else &state.palette;
             const text_color = findBrightestColor(active_pal);
-            const scale: u16 = 2;
+            const scale: u16 = 1;
 
             const menu_items = [_][]const u8{
-                "Play Privateer",
-                "Load a Saved Game",
+                "PLAY PRIVATEER",
+                "LOAD A SAVED GAME",
             };
             const center_x: u16 = framebuffer_mod.WIDTH / 2;
             const scaled_line_h = font.line_height * scale;

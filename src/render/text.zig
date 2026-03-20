@@ -88,11 +88,14 @@ pub const Font = struct {
     }
 
     /// Get the glyph for a character, or null if unmapped/failed to decode.
+    /// Glyphs that are 1x1 stubs are treated as missing (returns null).
     pub fn getGlyph(self: Font, char: u8) ?Glyph {
         if (char < self.first_char) return null;
         const idx = char - self.first_char;
         if (idx >= self.glyphs.len) return null;
-        return self.glyphs[idx];
+        const glyph = self.glyphs[idx] orelse return null;
+        if (glyph.width <= 1 and glyph.height <= 1) return null;
+        return glyph;
     }
 
     /// Width of the space used for missing/unmapped characters.

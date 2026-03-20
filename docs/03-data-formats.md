@@ -221,7 +221,10 @@ Offset  Size  Description
 Each sprite within the SHP uses the same RLE format and 8-byte header described above.
 For font SHP files, each sprite index maps to a character: `glyph_index = char - first_char`.
 DEMOFONT.SHP uses `first_char = 0` (glyph index = ASCII code directly). Uppercase letters
-start at index 65 ('A'), with glyphs typically 9x12 pixels.
+start at index 65 ('A'), with glyphs typically 9x12 pixels. Lowercase letters and most
+control/punctuation indices are 1x1 stub sprites (no visible content) — only uppercase
+A-Z, digits, and select punctuation have real glyphs. The font renderer treats 1x1 stubs
+as missing characters and substitutes a space-width gap (half line height).
 
 ### Files (11 files, 0.2 MB)
 - `FONTS/*.SHP` - Game fonts (CONVFONT, DEMOFONT, MSSGFONT, OPTFONT, PCFONT, PRIVFNT)
