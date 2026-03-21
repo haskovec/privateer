@@ -44,6 +44,7 @@ pub const MusicState = enum {
 /// or animations, the current track keeps playing).
 pub fn musicForGameState(state: game_state.State) ?MusicState {
     return switch (state) {
+        .intro_movie => null,
         .title => .opening,
         .loading => null,
         .space_flight => .none,

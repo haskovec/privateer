@@ -846,7 +846,7 @@ shows this timeline:
   - GREEN: Implement SOUNDFX.PAK loader and event-to-sound dispatch during
     movie playback, using SoundMixer for concurrent multi-channel output
 
-- [ ] **16.8 Movie player integration**
+- [x] **16.8 Movie player integration**
   - Add `State.intro_movie` to the game state machine
   - On startup: transition to intro_movie state, play OPENING sequence
   - Execute scenes in order (mid1a → mid1f), advancing per SPED timing

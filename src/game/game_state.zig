@@ -8,6 +8,8 @@ const click_region = @import("click_region.zig");
 
 /// High-level game states.
 pub const State = enum {
+    /// Playing the intro cinematic movie on startup.
+    intro_movie,
     /// Title/main menu screen.
     title,
     /// Loading/transition screen (between major areas).
@@ -59,6 +61,7 @@ pub const GameStateMachine = struct {
     /// the current state. Self-transitions are not allowed.
     pub fn canTransition(self: *const GameStateMachine, target: State) bool {
         return switch (self.state) {
+            .intro_movie => target == .title,
             .title => target == .loading or target == .options,
             .loading => target == .space_flight or target == .landed,
             .space_flight => target == .landed or target == .combat or target == .dead or target == .loading or target == .animation,
@@ -608,6 +611,25 @@ test "transition from options to landed succeeds" {
 test "transition from options to space_flight is rejected" {
     var sm = GameStateMachine.init();
     try sm.transition(.options);
+    try std.testing.expectError(error.InvalidTransition, sm.transition(.space_flight));
+}
+
+// Intro movie state
+
+test "transition from intro_movie to title succeeds" {
+    var sm = GameStateMachine{ .state = .intro_movie, .current_room = null, .current_scene = null };
+    try sm.transition(.title);
+    try std.testing.expectEqual(State.title, sm.state);
+}
+
+test "transition from intro_movie to loading is rejected" {
+    var sm = GameStateMachine{ .state = .intro_movie, .current_room = null, .current_scene = null };
+    try std.testing.expectError(error.InvalidTransition, sm.transition(.loading));
+    try std.testing.expectEqual(State.intro_movie, sm.state);
+}
+
+test "transition from intro_movie to space_flight is rejected" {
+    var sm = GameStateMachine{ .state = .intro_movie, .current_room = null, .current_scene = null };
     try std.testing.expectError(error.InvalidTransition, sm.transition(.space_flight));
 }
 

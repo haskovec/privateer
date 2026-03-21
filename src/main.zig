@@ -14,6 +14,9 @@ const click_region = privateer.click_region;
 const sprite_mod = privateer.sprite;
 const room_assets = privateer.room_assets;
 const text_mod = privateer.text;
+const movie_player_mod = privateer.movie_player;
+const opening_mod = privateer.opening;
+const movie_music_mod = privateer.movie_music;
 
 /// Holds all live game data and rendering state for the main loop.
 const GameState = struct {
@@ -51,12 +54,16 @@ const GameState = struct {
     /// Fade-in progress for title screen (0 = start of fade, TITLE_FADE_FRAMES = done).
     title_fade_frame: u32,
 
+    // Intro movie player (null when not playing intro)
+    movie_player: ?movie_player_mod.MoviePlayer,
+
     frame_count: u64,
 
     /// Number of frames for the title screen fade-in (~1 second at 60fps).
     const TITLE_FADE_FRAMES: u32 = 60;
 
     fn deinit(self: *GameState) void {
+        if (self.movie_player) |*mp| mp.deinit();
         if (self.current_bg) |*bg| {
             var s = bg.*;
             s.deinit();
@@ -322,10 +329,59 @@ fn update(state_ptr: *anyopaque) void {
     state.frame_count += 1;
 
     switch (state.state_machine.state) {
+        .intro_movie => updateIntroMovie(state),
         .title => updateTitle(state),
         .landed => updateLanded(state),
         .conversation => updateConversation(state),
         else => updateDefault(state),
+    }
+}
+
+fn updateIntroMovie(state: *GameState) void {
+    var mp = &(state.movie_player orelse {
+        // No movie player — skip to title
+        state.state_machine.transition(.title) catch {};
+        state.title_fade_frame = 0;
+        return;
+    });
+
+    // Escape key skips the intro
+    if (state.window.key_pressed == privateer.sdl.raw.SDLK_ESCAPE) {
+        mp.skip();
+    }
+
+    // Advance movie state
+    mp.update();
+
+    // Render framebuffer with the movie palette and fade
+    if (mp.getPalette()) |pal_val| {
+        var movie_pal = pal_val;
+        const fade = mp.getFade();
+        if (fade < 1.0) {
+            state.fb.applyPaletteWithFade(&movie_pal, fade);
+        } else {
+            state.fb.applyPalette(&movie_pal);
+        }
+    } else {
+        state.fb.applyPalette(&state.palette);
+    }
+
+    state.fb.presentWithMode(
+        state.renderer,
+        @intCast(state.window.width),
+        @intCast(state.window.height),
+        state.viewport_mode,
+    );
+
+    // Check if movie is done
+    if (mp.status == .done) {
+        // Clean up movie player
+        mp.deinit();
+        state.movie_player = null;
+        // Transition to title screen with fade-in
+        state.state_machine.transition(.title) catch {};
+        state.title_fade_frame = 0;
+        std.debug.print("Intro movie complete, transitioning to title screen\n", .{});
     }
 }
 
@@ -632,6 +688,39 @@ fn initGameState(
         std.debug.print("Warning: Could not load DEMOFONT.SHP\n", .{});
     }
 
+    // Load opening sequence for intro movie
+    var movie_player: ?movie_player_mod.MoviePlayer = null;
+    var initial_state = game_state_mod.GameStateMachine.init();
+    load_opening: {
+        // Parse GFMIDGAM.IFF to find OPENING.PAK filename
+        const gfmidgam_entry = tre_index.findEntry("GFMIDGAM.IFF") orelse break :load_opening;
+        const gfmidgam_data = tre.extractFileData(tre_data, gfmidgam_entry.offset, gfmidgam_entry.size) catch break :load_opening;
+        var midgame_table = opening_mod.parseMidgameTable(allocator, gfmidgam_data) catch break :load_opening;
+        defer midgame_table.deinit();
+
+        // Get the opening playlist filename (index 2 = "OPENING.PAK")
+        const opening_filename = midgame_table.getOpeningFilename() orelse break :load_opening;
+        const opening_entry = tre_index.findEntry(opening_filename) orelse break :load_opening;
+        const opening_data = tre.extractFileData(tre_data, opening_entry.offset, opening_entry.size) catch break :load_opening;
+
+        // Parse the playlist into scene names
+        var sequence = opening_mod.parsePlaylist(allocator, opening_data) catch break :load_opening;
+
+        std.debug.print("Opening sequence loaded ({d} scenes)\n", .{sequence.sceneCount()});
+
+        // Create movie player — takes ownership of sequence
+        movie_player = movie_player_mod.MoviePlayer.init(
+            allocator,
+            sequence,
+            tre_data,
+            &tre_index,
+            &fb,
+        );
+
+        // Start in intro_movie state
+        initial_state = .{ .state = .intro_movie, .current_room = null, .current_scene = null };
+    }
+
     // Allocate GameState on the heap (too large for stack)
     const state = try allocator.create(GameState);
     state.* = .{
@@ -645,7 +734,7 @@ fn initGameState(
         .window = win,
         .viewport_mode = cfg.settings.viewport_mode,
         .gameflow = gameflow,
-        .state_machine = game_state_mod.GameStateMachine.init(),
+        .state_machine = initial_state,
         .current_bg = null,
         .current_overlays = &.{},
         .click_regions = &.{},
@@ -653,8 +742,16 @@ fn initGameState(
         .title_palette = title_palette,
         .title_font = title_font,
         .title_fade_frame = 0,
+        .movie_player = movie_player,
         .frame_count = 0,
     };
+
+    // Fix movie player's borrowed pointers — they were pointing at stack locals,
+    // now redirect to the heap-allocated GameState fields.
+    if (state.movie_player) |*mp| {
+        mp.fb = &state.fb;
+        mp.tre_index = &state.tre_index;
+    }
 
     return state;
 }
