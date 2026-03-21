@@ -2250,8 +2250,12 @@ def gen_movie_file():
     file_chunk = make_iff_chunk(b"FILE", file_paths)
 
     # FORM:ACTS with FILD, SPRI, and BFOR sub-chunks
-    # FILD: 6 bytes — file_ref(u8) + sprite_index(u16 BE) + x(u8) + y(u8) + flags(u8)
-    fild_data = struct.pack('>BHBBB', 0, 5, 100, 50, 0)
+    # FILD: packed 10-byte records — [object_id:u16 LE][file_ref:u16 LE][p1:u16 LE][p2:u16 LE][p3:u16 LE]
+    # Two records: object_id=23 file_ref=0 p1=5 p2=100 p3=50, object_id=24 file_ref=1 p1=3 p2=0 p3=0
+    fild_data = (
+        struct.pack('<HHHHH', 23, 0, 5, 100, 50)
+        + struct.pack('<HHHHH', 24, 1, 3, 0, 0)
+    )
     fild = make_iff_chunk(b"FILD", fild_data)
 
     # SPRI: 8 bytes — file_ref(u8) + sprite_index(u16 BE) + x(i16 BE) + y(i16 BE) + flags(u8)
@@ -2268,7 +2272,8 @@ def gen_movie_file():
 
     # --- Fixture 2: Multiple ACTS blocks ---
     # Second ACTS block with different commands
-    fild2_data = struct.pack('>BHBBB', 1, 10, 0, 0, 0)
+    # FILD: single 10-byte record — object_id=30 file_ref=1 p1=10 p2=0 p3=0
+    fild2_data = struct.pack('<HHHHH', 30, 1, 10, 0, 0)
     fild2 = make_iff_chunk(b"FILD", fild2_data)
     spri2_data = struct.pack('>BHhhB', 1, 7, 50, 25, 0)
     spri2 = make_iff_chunk(b"SPRI", spri2_data)

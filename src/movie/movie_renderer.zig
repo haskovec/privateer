@@ -131,15 +131,16 @@ pub const MovieRenderer = struct {
         }
     }
 
-    /// Render a FILD command: load sprite from PAK and blit at (x, y).
+    /// Render a FILD command: load sprite from PAK and blit at origin.
+    /// file_ref indexes into the loaded PAK table, param1 is the sprite/resource index.
     fn renderFieldCommand(self: *MovieRenderer, cmd: movie_mod.FieldCommand) MovieRendererError!void {
         if (cmd.file_ref >= self.loaded_paks.len) return MovieRendererError.InvalidFileRef;
         const loaded = self.loaded_paks[cmd.file_ref] orelse return MovieRendererError.InvalidFileRef;
 
-        var spr = self.decodeSpriteFromPak(loaded, cmd.sprite_index) catch return MovieRendererError.SpriteDecodeFailed;
+        var spr = self.decodeSpriteFromPak(loaded, cmd.param1) catch return MovieRendererError.SpriteDecodeFailed;
         defer spr.deinit();
 
-        self.fb.blitSprite(spr, @as(i32, cmd.x), @as(i32, cmd.y));
+        self.fb.blitSprite(spr, 0, 0);
     }
 
     /// Render a SPRI command: load sprite from PAK and blit at signed (x, y).
@@ -476,9 +477,9 @@ test "MovieRenderer.executeActsBlock renders FILD command" {
 
     try renderer.loadPak(0, pak_data);
 
-    // FILD command: file_ref=0, sprite_index=1, x=30, y=40
+    // FILD command: object_id=1, file_ref=0, param1=1 (sprite index), param2=0, param3=0
     const fild_cmds = [_]movie_mod.FieldCommand{
-        .{ .file_ref = 0, .sprite_index = 1, .x = 30, .y = 40, .flags = 0 },
+        .{ .object_id = 1, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
     };
     try renderer.executeActsBlock(.{
         .field_commands = &fild_cmds,
@@ -486,9 +487,9 @@ test "MovieRenderer.executeActsBlock renders FILD command" {
         .layer_orders = &.{},
     });
 
-    // Sprite should appear at (30, 40)
-    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(30, 40));
-    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(31, 40));
-    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(30, 41));
-    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(31, 41));
+    // FILD blits at origin (0, 0) — sprite has 2x2 pixels
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(1, 0));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 1));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(1, 1));
 }

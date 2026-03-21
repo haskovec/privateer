@@ -3425,9 +3425,12 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
 
         // Check what file_refs are used
         for (block.field_commands) |cmd| {
-            std.debug.print("DIAG:   FILD file_ref={d} sprite_idx={d} (slot {s})\n", .{
+            std.debug.print("DIAG:   FILD object_id={d} file_ref={d} p1={d} p2={d} p3={d} (slot {s})\n", .{
+                cmd.object_id,
                 cmd.file_ref,
-                cmd.sprite_index,
+                cmd.param1,
+                cmd.param2,
+                cmd.param3,
                 if (cmd.file_ref < renderer.loaded_paks.len and renderer.loaded_paks[cmd.file_ref] != null) "loaded" else "EMPTY",
             });
         }

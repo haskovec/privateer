@@ -36,18 +36,20 @@ pub const FileSlot = struct {
     path: []const u8,
 };
 
-/// A FILD command: display a sprite frame at a position.
+/// A FILD command: packed 10-byte record defining a field object.
+/// Real format: [object_id: u16 LE][file_ref: u16 LE][param1: u16 LE][param2: u16 LE][param3: u16 LE]
+/// Object IDs are referenced by BFOR commands to drive rendering order.
 pub const FieldCommand = struct {
-    /// Index into the FILE reference list (which PAK to read from).
-    file_ref: u8,
-    /// Sprite index within the referenced file.
-    sprite_index: u16,
-    /// X position on screen.
-    x: u8,
-    /// Y position on screen.
-    y: u8,
-    /// Flags (meaning TBD from reverse engineering).
-    flags: u8,
+    /// Unique object ID (referenced by BFOR composition commands).
+    object_id: u16,
+    /// File reference slot (index into FILE slot table).
+    file_ref: u16,
+    /// Parameter 1 (sprite/resource index within the referenced file).
+    param1: u16,
+    /// Parameter 2.
+    param2: u16,
+    /// Parameter 3.
+    param3: u16,
 };
 
 /// A SPRI command: position/animate a sprite with signed coordinates.
@@ -239,14 +241,18 @@ fn parseActsBlock(allocator: std.mem.Allocator, acts_form: *const iff.Chunk) Mov
     var field_cmds: std.ArrayListUnmanaged(FieldCommand) = .empty;
     errdefer field_cmds.deinit(allocator);
     for (fild_chunks) |fild| {
-        if (fild.data.len >= 6) {
+        // Each FILD chunk contains packed 10-byte records:
+        // [object_id: u16 LE][file_ref: u16 LE][param1: u16 LE][param2: u16 LE][param3: u16 LE]
+        var pos: usize = 0;
+        while (pos + 10 <= fild.data.len) {
             field_cmds.append(allocator, .{
-                .file_ref = fild.data[0],
-                .sprite_index = std.mem.readInt(u16, fild.data[1..3], .big),
-                .x = fild.data[3],
-                .y = fild.data[4],
-                .flags = fild.data[5],
+                .object_id = std.mem.readInt(u16, fild.data[pos..][0..2], .little),
+                .file_ref = std.mem.readInt(u16, fild.data[pos + 2 ..][0..2], .little),
+                .param1 = std.mem.readInt(u16, fild.data[pos + 4 ..][0..2], .little),
+                .param2 = std.mem.readInt(u16, fild.data[pos + 6 ..][0..2], .little),
+                .param3 = std.mem.readInt(u16, fild.data[pos + 8 ..][0..2], .little),
             }) catch return MovieError.OutOfMemory;
+            pos += 10;
         }
     }
 
@@ -367,12 +373,20 @@ test "parse FORM:MOVI from fixture" {
     try std.testing.expectEqual(@as(usize, 1), script.acts_blocks.len);
     const acts = script.acts_blocks[0];
 
-    // FILD: file_ref=0, sprite_index=5, x=100, y=50, flags=0
-    try std.testing.expectEqual(@as(usize, 1), acts.field_commands.len);
-    try std.testing.expectEqual(@as(u8, 0), acts.field_commands[0].file_ref);
-    try std.testing.expectEqual(@as(u16, 5), acts.field_commands[0].sprite_index);
-    try std.testing.expectEqual(@as(u8, 100), acts.field_commands[0].x);
-    try std.testing.expectEqual(@as(u8, 50), acts.field_commands[0].y);
+    // FILD: 2 packed 10-byte records
+    try std.testing.expectEqual(@as(usize, 2), acts.field_commands.len);
+    // Record 0: object_id=23, file_ref=0, param1=5, param2=100, param3=50
+    try std.testing.expectEqual(@as(u16, 23), acts.field_commands[0].object_id);
+    try std.testing.expectEqual(@as(u16, 0), acts.field_commands[0].file_ref);
+    try std.testing.expectEqual(@as(u16, 5), acts.field_commands[0].param1);
+    try std.testing.expectEqual(@as(u16, 100), acts.field_commands[0].param2);
+    try std.testing.expectEqual(@as(u16, 50), acts.field_commands[0].param3);
+    // Record 1: object_id=24, file_ref=1, param1=3, param2=0, param3=0
+    try std.testing.expectEqual(@as(u16, 24), acts.field_commands[1].object_id);
+    try std.testing.expectEqual(@as(u16, 1), acts.field_commands[1].file_ref);
+    try std.testing.expectEqual(@as(u16, 3), acts.field_commands[1].param1);
+    try std.testing.expectEqual(@as(u16, 0), acts.field_commands[1].param2);
+    try std.testing.expectEqual(@as(u16, 0), acts.field_commands[1].param3);
 
     // SPRI: file_ref=0, sprite_index=3, x=160, y=100, flags=1
     try std.testing.expectEqual(@as(usize, 1), acts.sprite_commands.len);
@@ -409,16 +423,17 @@ test "parse FORM:MOVI with multiple ACTS blocks" {
     // 2 ACTS blocks
     try std.testing.expectEqual(@as(usize, 2), script.acts_blocks.len);
 
-    // First ACTS block (same as fixture 1)
-    try std.testing.expectEqual(@as(usize, 1), script.acts_blocks[0].field_commands.len);
+    // First ACTS block (same as fixture 1 — 2 FILD records)
+    try std.testing.expectEqual(@as(usize, 2), script.acts_blocks[0].field_commands.len);
     try std.testing.expectEqual(@as(usize, 1), script.acts_blocks[0].sprite_commands.len);
     try std.testing.expectEqual(@as(usize, 1), script.acts_blocks[0].layer_orders.len);
 
     // Second ACTS block
     const acts2 = script.acts_blocks[1];
     try std.testing.expectEqual(@as(usize, 1), acts2.field_commands.len);
-    try std.testing.expectEqual(@as(u8, 1), acts2.field_commands[0].file_ref);
-    try std.testing.expectEqual(@as(u16, 10), acts2.field_commands[0].sprite_index);
+    try std.testing.expectEqual(@as(u16, 30), acts2.field_commands[0].object_id);
+    try std.testing.expectEqual(@as(u16, 1), acts2.field_commands[0].file_ref);
+    try std.testing.expectEqual(@as(u16, 10), acts2.field_commands[0].param1);
     try std.testing.expectEqual(@as(usize, 1), acts2.sprite_commands.len);
     try std.testing.expectEqual(@as(u8, 1), acts2.sprite_commands[0].file_ref);
     try std.testing.expectEqual(@as(u16, 7), acts2.sprite_commands[0].sprite_index);

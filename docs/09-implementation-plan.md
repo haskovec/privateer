@@ -878,7 +878,7 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Return a slot map (sparse array or hash map) instead of a dense array
   - Update test fixtures to match real FILE chunk format
 
-- [ ] **17.2 Fix FILD chunk parser (packed 10-byte records)**
+- [x] **17.2 Fix FILD chunk parser (packed 10-byte records)**
   - Current parser reads one command per FILD chunk with u8+BE fields (wrong)
   - Real format: packed 10-byte records `[object_id: u16 LE][file_ref: u16 LE][3 x u16 LE params]`
   - A single FILD chunk contains multiple records (e.g., 96 bytes = ~10 records)
