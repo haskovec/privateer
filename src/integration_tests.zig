@@ -3435,10 +3435,11 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
             });
         }
         for (block.sprite_commands) |cmd| {
-            std.debug.print("DIAG:   SPRI file_ref={d} sprite_idx={d} (slot {s})\n", .{
-                cmd.file_ref,
-                cmd.sprite_index,
-                if (cmd.file_ref < renderer.loaded_paks.len and renderer.loaded_paks[cmd.file_ref] != null) "loaded" else "EMPTY",
+            std.debug.print("DIAG:   SPRI object_id={d} ref={d} type={d} params={d}\n", .{
+                cmd.object_id,
+                cmd.ref,
+                cmd.sprite_type,
+                cmd.param_count,
             });
         }
 

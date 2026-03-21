@@ -2258,8 +2258,10 @@ def gen_movie_file():
     )
     fild = make_iff_chunk(b"FILD", fild_data)
 
-    # SPRI: 8 bytes — file_ref(u8) + sprite_index(u16 BE) + x(i16 BE) + y(i16 BE) + flags(u8)
-    spri_data = struct.pack('>BHhhB', 0, 3, 160, 100, 1)
+    # SPRI: packed variable-length records
+    # Format: [object_id: u16 LE][ref: u16 LE][0x8000: u16 LE][type: u16 LE][params: N × u16 LE]
+    # Record: object_id=35, ref=23 (FILD ref), sentinel=0x8000, type=1, params=[0, 25, 0] (3 params)
+    spri_data = struct.pack('<HHHHhhh', 35, 23, 0x8000, 1, 0, 25, 0)
     spri = make_iff_chunk(b"SPRI", spri_data)
 
     # BFOR: 2 bytes — layer ordering value (big-endian u16)
@@ -2275,7 +2277,8 @@ def gen_movie_file():
     # FILD: single 10-byte record — object_id=30 file_ref=1 p1=10 p2=0 p3=0
     fild2_data = struct.pack('<HHHHH', 30, 1, 10, 0, 0)
     fild2 = make_iff_chunk(b"FILD", fild2_data)
-    spri2_data = struct.pack('>BHhhB', 1, 7, 50, 25, 0)
+    # SPRI: object_id=40, ref=30 (FILD ref), sentinel=0x8000, type=1, params=[50, 25, 0]
+    spri2_data = struct.pack('<HHHHhhh', 40, 30, 0x8000, 1, 50, 25, 0)
     spri2 = make_iff_chunk(b"SPRI", spri2_data)
     acts2 = make_iff_form(b"ACTS", fild2 + spri2)
 

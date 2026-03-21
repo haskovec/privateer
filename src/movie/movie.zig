@@ -52,19 +52,38 @@ pub const FieldCommand = struct {
     param3: u16,
 };
 
-/// A SPRI command: position/animate a sprite with signed coordinates.
+/// A SPRI command: packed variable-length record defining a sprite object.
+/// Real format: [object_id: u16 LE][ref: u16 LE][0x8000: u16 LE sentinel][type: u16 LE][params: N × u16 LE]
+/// The ref field is a FILD object reference, or 0x8000 for "self-defined".
+/// The type determines the number of parameter words (see spriteTypeParamCount).
 pub const SpriteCommand = struct {
-    /// Index into the FILE reference list.
-    file_ref: u8,
-    /// Sprite index within the referenced file.
-    sprite_index: u16,
-    /// X position (signed, can be negative for off-screen).
-    x: i16,
-    /// Y position (signed).
-    y: i16,
-    /// Flags.
-    flags: u8,
+    /// Unique object ID (referenced by BFOR composition commands).
+    object_id: u16,
+    /// Reference to a FILD object, or 0x8000 for self-defined sprite.
+    ref: u16,
+    /// Sprite command type — determines behavior and parameter count.
+    sprite_type: u16,
+    /// Variable-length parameters (up to 9 u16 values, depending on type).
+    params: [9]u16,
+    /// Number of valid entries in params.
+    param_count: u8,
+
+    /// Sentinel value meaning "self-defined" (no FILD reference).
+    pub const SELF_REF: u16 = 0x8000;
 };
+
+/// Return the number of u16 LE parameter words for a SPRI command type.
+/// Returns null for unknown types.
+pub fn spriteTypeParamCount(sprite_type: u16) ?u8 {
+    return switch (sprite_type) {
+        0, 1 => 3,
+        3, 11 => 5,
+        12 => 6,
+        18 => 7,
+        4, 19, 20 => 9,
+        else => null,
+    };
+}
 
 /// A BFOR command: background/foreground layer ordering.
 pub const LayerOrder = struct {
@@ -256,21 +275,39 @@ fn parseActsBlock(allocator: std.mem.Allocator, acts_form: *const iff.Chunk) Mov
         }
     }
 
-    // Collect SPRI commands
+    // Collect SPRI commands — packed variable-length records within each SPRI chunk.
+    // Format: [object_id: u16 LE][ref: u16 LE][0x8000: u16 LE][type: u16 LE][params: N × u16 LE]
     const spri_chunks = acts_form.findChildren(allocator, "SPRI".*) catch return MovieError.OutOfMemory;
     defer allocator.free(spri_chunks);
 
     var sprite_cmds: std.ArrayListUnmanaged(SpriteCommand) = .empty;
     errdefer sprite_cmds.deinit(allocator);
     for (spri_chunks) |spri| {
-        if (spri.data.len >= 8) {
-            sprite_cmds.append(allocator, .{
-                .file_ref = spri.data[0],
-                .sprite_index = std.mem.readInt(u16, spri.data[1..3], .big),
-                .x = std.mem.readInt(i16, spri.data[3..5], .big),
-                .y = std.mem.readInt(i16, spri.data[5..7], .big),
-                .flags = spri.data[7],
-            }) catch return MovieError.OutOfMemory;
+        var pos: usize = 0;
+        while (pos + 8 <= spri.data.len) {
+            const object_id = std.mem.readInt(u16, spri.data[pos..][0..2], .little);
+            const ref = std.mem.readInt(u16, spri.data[pos + 2 ..][0..2], .little);
+            // Skip sentinel (0x8000) at pos+4
+            const sprite_type = std.mem.readInt(u16, spri.data[pos + 6 ..][0..2], .little);
+
+            const param_count = spriteTypeParamCount(sprite_type) orelse break;
+            const rec_size = 8 + @as(usize, param_count) * 2;
+            if (pos + rec_size > spri.data.len) break;
+
+            var cmd = SpriteCommand{
+                .object_id = object_id,
+                .ref = ref,
+                .sprite_type = sprite_type,
+                .params = [_]u16{0} ** 9,
+                .param_count = param_count,
+            };
+            for (0..param_count) |i| {
+                const offset = pos + 8 + i * 2;
+                cmd.params[i] = std.mem.readInt(u16, spri.data[offset..][0..2], .little);
+            }
+
+            sprite_cmds.append(allocator, cmd) catch return MovieError.OutOfMemory;
+            pos += rec_size;
         }
     }
 
@@ -388,13 +425,15 @@ test "parse FORM:MOVI from fixture" {
     try std.testing.expectEqual(@as(u16, 0), acts.field_commands[1].param2);
     try std.testing.expectEqual(@as(u16, 0), acts.field_commands[1].param3);
 
-    // SPRI: file_ref=0, sprite_index=3, x=160, y=100, flags=1
+    // SPRI: object_id=35, ref=23, type=1, params=[0, 25, 0]
     try std.testing.expectEqual(@as(usize, 1), acts.sprite_commands.len);
-    try std.testing.expectEqual(@as(u8, 0), acts.sprite_commands[0].file_ref);
-    try std.testing.expectEqual(@as(u16, 3), acts.sprite_commands[0].sprite_index);
-    try std.testing.expectEqual(@as(i16, 160), acts.sprite_commands[0].x);
-    try std.testing.expectEqual(@as(i16, 100), acts.sprite_commands[0].y);
-    try std.testing.expectEqual(@as(u8, 1), acts.sprite_commands[0].flags);
+    try std.testing.expectEqual(@as(u16, 35), acts.sprite_commands[0].object_id);
+    try std.testing.expectEqual(@as(u16, 23), acts.sprite_commands[0].ref);
+    try std.testing.expectEqual(@as(u16, 1), acts.sprite_commands[0].sprite_type);
+    try std.testing.expectEqual(@as(u8, 3), acts.sprite_commands[0].param_count);
+    try std.testing.expectEqual(@as(u16, 0), acts.sprite_commands[0].params[0]);
+    try std.testing.expectEqual(@as(u16, 25), acts.sprite_commands[0].params[1]);
+    try std.testing.expectEqual(@as(u16, 0), acts.sprite_commands[0].params[2]);
 
     // BFOR: value=1
     try std.testing.expectEqual(@as(usize, 1), acts.layer_orders.len);
@@ -435,8 +474,9 @@ test "parse FORM:MOVI with multiple ACTS blocks" {
     try std.testing.expectEqual(@as(u16, 1), acts2.field_commands[0].file_ref);
     try std.testing.expectEqual(@as(u16, 10), acts2.field_commands[0].param1);
     try std.testing.expectEqual(@as(usize, 1), acts2.sprite_commands.len);
-    try std.testing.expectEqual(@as(u8, 1), acts2.sprite_commands[0].file_ref);
-    try std.testing.expectEqual(@as(u16, 7), acts2.sprite_commands[0].sprite_index);
+    try std.testing.expectEqual(@as(u16, 40), acts2.sprite_commands[0].object_id);
+    try std.testing.expectEqual(@as(u16, 30), acts2.sprite_commands[0].ref);
+    try std.testing.expectEqual(@as(u16, 1), acts2.sprite_commands[0].sprite_type);
     // No BFOR in second block
     try std.testing.expectEqual(@as(usize, 0), acts2.layer_orders.len);
 }

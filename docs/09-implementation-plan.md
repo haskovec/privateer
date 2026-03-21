@@ -886,13 +886,14 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - GREEN: Rewrite FILD parsing to iterate 10-byte records within a single chunk
   - Update FieldCommand struct to use u16 LE fields
 
-- [ ] **17.3 Fix SPRI chunk parser (packed variable-length records)**
+- [x] **17.3 Fix SPRI chunk parser (packed variable-length records)**
   - Current parser reads one command per SPRI chunk (wrong)
-  - Real format: packed variable-length records (14, 20, or 26 bytes per record)
-  - Record length depends on flag words at bytes 2-5
+  - Real format: [object_id: u16 LE][ref: u16 LE][0x8000 sentinel: u16 LE][type: u16 LE][params: N × u16 LE]
+  - Record length determined by type field: 0,1→3 params (14B), 3,11→5 params (18B), 12→6 params (20B), 18→7 params (22B), 4,19,20→9 params (26B)
   - RED: Test SPRI parser with real MID1A.IFF data: expect 12 records with correct sizes
-  - GREEN: Implement variable-length record reader; determine record boundaries from flags
-  - Update SpriteCommand struct to use u16 LE fields and support variable params
+  - GREEN: Implement variable-length record reader with type→param_count lookup
+  - Updated SpriteCommand struct to use u16 LE fields with object_id, ref, sprite_type, params[9], param_count
+  - Verified against all 26 SPRI chunks across 22 MOVI files (intro + victory + misc)
 
 - [ ] **17.4 Parse BFOR chunk (packed 24-byte composition commands)**
   - Current parser extracts only a u16 value from BFOR (wrong)
