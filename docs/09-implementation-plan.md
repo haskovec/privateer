@@ -729,7 +729,18 @@ planet scene, then a scripted sequence of cockpit views, character encounters,
 and asteroid fields. The data lives in MIDGAMES/ and uses a FORM:MOVI IFF
 scripting format to control frame-by-frame animation with sprite overlays.
 
+The intro has a full audio mix of three layers: background music, voice dialog,
+and sound effects. Analysis of a DOSBox capture (134s, PCM 22050 Hz stereo)
+shows this timeline:
+- 0:00–0:19 — Silence (text crawl over planet)
+- 0:19–0:50 — Music + SFX (cockpit/flight with engine hum, weapon fire)
+- 0:50–0:53 — Brief silence (scene transition)
+- 0:54–1:55 — Music + Voice dialog + SFX (pirate encounter with spoken lines)
+- 1:55–2:14 — Silence (fade to title screen)
+
 ### Data Architecture (reverse-engineered)
+
+#### Visual Data
 - `GFMIDGAM.IFF`: FORM:MIDG with TABL+FNAM entries mapping type indices to
   control files (index 2 = OPENING.PAK = the intro sequence)
 - `OPENING.PAK`: PAK file whose string resources list the scene sequence:
@@ -748,13 +759,25 @@ scripting format to control frame-by-frame animation with sprite overlays.
     - `BFOR` — background/foreground layer ordering
 - `MID1.PAK`: 80 resources with 1501 sprite frames (resource 0 = palette,
   resources 1-79 = scene packs with delta-encoded sprites)
-- `MIDTEXT.PAK`: PAK with null-terminated text strings:
+- `MIDTEXT.PAK` / `MID1TXT.PAK`: PAK files with null-terminated text strings:
   - "2669, GEMINI SECTOR, TROY SYSTEM..."
   - "THE TERRAN FRONTIER..."
   - "BETWEEN THE KILRATHI EMPIRE..."
   - "...AND THE UNKNOWN."
   - Plus dialogue lines for the pirate encounter
-- `OPENING.ADL` / `OPENING.GEN`: Music tracks for the intro
+
+#### Audio Data
+- `OPENING.ADL` / `OPENING.GEN`: Background music tracks for the intro
+  (IFF-wrapped XMIDI, already parseable by `src/formats/music.zig`)
+- `SPEECH/MID01/PC_1MG1.VOC` through `PC_1MG8.VOC`: Player character voice
+  lines for the pirate encounter scene (8 Creative Voice files, 8-bit PCM
+  11025 Hz, already parseable by `src/formats/voc.zig`)
+- `SPEECH/MID01/PIR1MG1.VOC` through `PIR1MG9.VOC`: Pirate voice lines for
+  the encounter scene (9 Creative Voice files, same format)
+- `SOUND/SOUNDFX.PAK`: Sound effects bank used across the game (engine hum,
+  weapon fire, explosions — PAK format with indexed sound entries)
+- `SOUND/COMBAT.DAT`: Combat event → sound effect index mapping table (1,896
+  bytes, maps events like "gun fire" or "explosion" to SOUNDFX.PAK indices)
 
 - [ ] **16.1 FORM:MOVI IFF parser**
   - Parse FORM:MOVI container with CLRC, SPED, FILE, FORM:ACTS chunks
@@ -790,17 +813,51 @@ scripting format to control frame-by-frame animation with sprite overlays.
   - RED: Test MID1.PAK resource 0 is a valid 772-byte palette
   - GREEN: Implement MovieRenderer that executes ACTS commands frame-by-frame
 
-- [ ] **16.5 Movie player integration**
+- [ ] **16.5 Movie music playback**
+  - Load OPENING.ADL or OPENING.GEN from TRE via existing `music.zig` parser
+  - Decode XMIDI events and render to PCM using existing `MusicPlayer`
+  - Start music when FILE chunk index 4 is referenced by the movie script
+  - Music plays continuously across scene transitions (mid1a → mid1f)
+  - Stop music on movie completion or Escape skip
+  - RED: Test OPENING.GEN parses to valid XMIDI sequence with EVNT data
+  - GREEN: Wire MusicPlayer.playPcm() into movie player, triggered by FILE ref
+
+- [ ] **16.6 Movie voice dialog playback**
+  - Load VOC files from SPEECH/MID01/ in the TRE:
+    - `PC_1MG1.VOC`–`PC_1MG8.VOC` (8 player character lines)
+    - `PIR1MG1.VOC`–`PIR1MG9.VOC` (9 pirate lines)
+  - Parse using existing `voc.zig` parser (8-bit unsigned PCM, 11025 Hz)
+  - Play voice clips at script-specified times during the pirate encounter
+    scenes (mid1c*, mid1d, mid1e*) using `AudioPlayer.play()`
+  - Voice plays layered over music (requires concurrent audio streams)
+  - RED: Test loading PC_1MG1.VOC produces valid PCM with sample rate 11025
+  - RED: Test loading PIR1MG1.VOC produces valid PCM with sample rate 11025
+  - GREEN: Implement VOC loader for SPEECH/MID01/ files, wire into movie
+    script executor to play voice at ACTS-specified trigger points
+
+- [ ] **16.7 Movie sound effects**
+  - Parse SOUNDFX.PAK from DATA/SOUND/ to extract indexed sound effect samples
+  - Parse COMBAT.DAT (1,896 bytes) to map event types to SOUNDFX.PAK indices
+  - Play sound effects (engine hum, weapon fire, explosions) during flight
+    scenes (mid1b, mid1c*, mid1e*) as triggered by ACTS commands
+  - Layer SFX over music and voice using `SoundMixer` (8-channel mixer)
+  - RED: Test SOUNDFX.PAK can be opened and contains indexed sound resources
+  - RED: Test COMBAT.DAT maps at least one event to a valid SOUNDFX index
+  - GREEN: Implement SOUNDFX.PAK loader and event-to-sound dispatch during
+    movie playback, using SoundMixer for concurrent multi-channel output
+
+- [ ] **16.8 Movie player integration**
   - Add `State.intro_movie` to the game state machine
   - On startup: transition to intro_movie state, play OPENING sequence
   - Execute scenes in order (mid1a → mid1f), advancing per SPED timing
-  - Play OPENING music track during the intro
-  - Escape key skips the intro and transitions to title screen
-  - On completion: fade to black, transition to title state with fade-in
+  - Coordinate all three audio layers: music (MusicPlayer), voice (AudioPlayer),
+    and SFX (SoundMixer) — all play concurrently via separate SDL3 AudioStreams
+  - Escape key skips the intro (stops all audio) and transitions to title screen
+  - On completion: fade to black, stop music, transition to title state with fade-in
   - RED: Test state machine supports intro_movie → title transition
-  - GREEN: Wire movie player into main.zig startup flow
+  - GREEN: Wire movie player into main.zig startup flow with full audio
 
-- [ ] **16.6 Scene variant selection**
+- [ ] **16.9 Scene variant selection**
   - OPENING.PAK lists variant groups (mid1c1-c4, mid1e1-e4)
   - Select one variant randomly per playthrough (matching original behavior)
   - RED: Test variant selection always picks one from each group

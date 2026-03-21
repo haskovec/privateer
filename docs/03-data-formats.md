@@ -200,9 +200,9 @@ Standard Creative Labs voice format for digital audio.
 
 ### Files (17 files, 0.4 MB)
 Located in `DATA/SPEECH/MID01/`:
-- `PC_1MG1.VOC` through `PC_1MG8.VOC` - Player character speech
-- `PIR1MG1.VOC` through `PIR1MG5.VOC` - Pirate speech
-- Additional speech clips
+- `PC_1MG1.VOC` through `PC_1MG8.VOC` - Player character voice lines (intro pirate encounter)
+- `PIR1MG1.VOC` through `PIR1MG9.VOC` - Pirate voice lines (intro pirate encounter)
+These are used during the opening cinematic's pirate encounter scenes (mid1c*, mid1d, mid1e*).
 
 ---
 
