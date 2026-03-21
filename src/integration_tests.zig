@@ -34,6 +34,7 @@ const opening = @import("movie/opening.zig");
 const movie_text = @import("movie/movie_text.zig");
 const movie_renderer = @import("movie/movie_renderer.zig");
 const movie_music = @import("movie/movie_music.zig");
+const movie_voice = @import("movie/movie_voice.zig");
 const music_player = @import("audio/music_player.zig");
 
 const app_config = @import("config.zig");
@@ -859,6 +860,71 @@ test "integration: load all VOC files, verify sample rates" {
     // Per docs: 17 VOC files in DATA\SPEECH\MID01\
     try std.testing.expect(voc_count > 0);
     try std.testing.expect(total_samples > 0);
+}
+
+// --- Movie voice dialog integration tests ---
+
+test "integration: load PC_1MG1.VOC from TRE with valid PCM at 11025 Hz" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer index.deinit();
+
+    var clip = movie_voice.loadFromTreIndex(allocator, &index, loaded.tre_data, "PC_1MG1.VOC") catch return;
+    defer clip.deinit();
+
+    // Player voice: 8-bit unsigned PCM at ~11025 Hz (VOC divisor yields ~11111)
+    try std.testing.expect(clip.samples.len > 0);
+    try std.testing.expect(clip.sample_rate > 10000);
+    try std.testing.expect(clip.sample_rate < 12000);
+    try std.testing.expect(clip.duration_ms > 0);
+}
+
+test "integration: load PIR1MG1.VOC from TRE with valid PCM at 11025 Hz" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer index.deinit();
+
+    var clip = movie_voice.loadFromTreIndex(allocator, &index, loaded.tre_data, "PIR1MG1.VOC") catch return;
+    defer clip.deinit();
+
+    // Pirate voice: 8-bit unsigned PCM at ~11025 Hz (VOC divisor yields ~11111)
+    try std.testing.expect(clip.samples.len > 0);
+    try std.testing.expect(clip.sample_rate > 10000);
+    try std.testing.expect(clip.sample_rate < 12000);
+    try std.testing.expect(clip.duration_ms > 0);
+}
+
+test "integration: MovieVoiceSet loads all 17 speech clips from TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer index.deinit();
+
+    var voice_set = movie_voice.MovieVoiceSet.init(allocator);
+    defer voice_set.deinit();
+
+    voice_set.loadFromTre(&index, loaded.tre_data);
+
+    // All 17 clips should load successfully (8 player + 9 pirate)
+    try std.testing.expectEqual(@as(usize, 17), voice_set.loadedCount());
+
+    // Spot-check: first player clip should be valid
+    const pc1 = voice_set.getPlayerClip(0).?;
+    try std.testing.expect(pc1.samples.len > 0);
+    try std.testing.expect(pc1.sample_rate >= 11000);
+
+    // Spot-check: first pirate clip should be valid
+    const pir1 = voice_set.getPirateClip(0).?;
+    try std.testing.expect(pir1.samples.len > 0);
+    try std.testing.expect(pir1.sample_rate >= 11000);
 }
 
 // --- VPK/VPF voice pack integration tests ---

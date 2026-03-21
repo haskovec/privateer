@@ -21,7 +21,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 ## Project Status
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
-Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.5 done).
+Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.6 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -78,7 +78,8 @@ privateer/
 │   │   ├── opening.zig            # Opening sequence playlist parser (GFMIDGAM.IFF + OPENING.PAK scene list)
 │   │   ├── movie_text.zig         # Movie text overlay system (MIDTEXT.PAK string parser, centered text rendering)
 │   │   ├── movie_renderer.zig     # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)
-│   │   └── movie_music.zig        # Movie music system (OPENING.GEN XMIDI loader, PCM rendering for intro cinematic music)
+│   │   ├── movie_music.zig        # Movie music system (OPENING.GEN XMIDI loader, PCM rendering for intro cinematic music)
+│   │   └── movie_voice.zig       # Movie voice dialog (SPEECH/MID01 VOC loader, player/pirate voice clips for pirate encounter)
 │   │
 │   ├── persistence/               # Save/load & serialization
 │   │   ├── save_game.zig          # Save game serialization (binary format, round-trip encode/decode)

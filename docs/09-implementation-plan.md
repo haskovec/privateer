@@ -822,7 +822,7 @@ shows this timeline:
   - RED: Test OPENING.GEN parses to valid XMIDI sequence with EVNT data
   - GREEN: Wire MusicPlayer.playPcm() into movie player, triggered by FILE ref
 
-- [ ] **16.6 Movie voice dialog playback**
+- [x] **16.6 Movie voice dialog playback**
   - Load VOC files from SPEECH/MID01/ in the TRE:
     - `PC_1MG1.VOC`–`PC_1MG8.VOC` (8 player character lines)
     - `PIR1MG1.VOC`–`PIR1MG9.VOC` (9 pirate lines)

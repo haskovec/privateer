@@ -42,6 +42,7 @@ pub const opening = @import("movie/opening.zig");
 pub const movie_text = @import("movie/movie_text.zig");
 pub const movie_renderer = @import("movie/movie_renderer.zig");
 pub const movie_music = @import("movie/movie_music.zig");
+pub const movie_voice = @import("movie/movie_voice.zig");
 pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");
