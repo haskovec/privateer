@@ -72,7 +72,9 @@ privateer/
 │   │   ├── game_state.zig         # Game state machine (state transitions, action handling, scene tracking)
 │   │   ├── click_region.zig       # Click region system (EFCT action parser, hit-testing, scene transitions)
 │   │   ├── room_assets.zig        # Room asset mapping (scene ID → OPTSHPS.PAK index, palette selection from OPTPALS.PAK)
-│   │   ├── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │   └── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
+│   │
+│   ├── movie/                     # Intro movie/cinematic system
 │   │   ├── opening.zig            # Opening sequence playlist parser (GFMIDGAM.IFF + OPENING.PAK scene list)
 │   │   ├── movie_text.zig         # Movie text overlay system (MIDTEXT.PAK string parser, centered text rendering)
 │   │   ├── movie_renderer.zig     # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)

@@ -30,10 +30,10 @@ const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
 const text = @import("render/text.zig");
-const opening = @import("game/opening.zig");
-const movie_text = @import("game/movie_text.zig");
-const movie_renderer = @import("game/movie_renderer.zig");
-const movie_music = @import("game/movie_music.zig");
+const opening = @import("movie/opening.zig");
+const movie_text = @import("movie/movie_text.zig");
+const movie_renderer = @import("movie/movie_renderer.zig");
+const movie_music = @import("movie/movie_music.zig");
 const music_player = @import("audio/music_player.zig");
 
 const app_config = @import("config.zig");
