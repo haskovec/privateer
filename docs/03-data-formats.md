@@ -268,6 +268,103 @@ DOS TSR sound drivers: ADLIB.DRV, PAS.DRV, ROLAND.DRV, SB.DRV
 
 ---
 
+## FORM:MOVI - Movie/Cinematic Script Format
+
+IFF-based animation scripting format for intro cinematics and cutscenes.
+Each scene (MID1A.IFF through MID1F.IFF) is a FORM:MOVI container that
+defines a composited animation frame-by-frame using a scene graph of
+background layers, animated sprites, and composition ordering.
+
+### Structure
+```
+FORM:MOVI
+  CLRC (2 bytes)     — Clear screen flag (BE u16, nonzero = clear framebuffer)
+  SPED (2 bytes)     — Frame speed in DOS ticks per frame (BE u16, 70 Hz base)
+  FILE (variable)    — Indexed file reference table (see below)
+  FORM:ACTS (1+)     — Animation action blocks, one per frame/keyframe:
+    FILD (variable)  — Background/field sprite definitions (packed records)
+    SPRI (variable)  — Animated sprite definitions (packed variable-length records)
+    BFOR (variable)  — Composition/render order commands (packed 24-byte records)
+```
+
+### FILE Chunk — Indexed File References
+NOT null-separated strings. Each entry is a slot ID + null-terminated path:
+```
+Repeated entries:
+  u16 LE   Slot ID (referenced by FILD/SPRI file_ref fields)
+  char[]   Null-terminated DOS path (e.g., "..\..\data\midgames\mid1.pak")
+```
+
+Example from MID1A.IFF (124 bytes, 4 entries):
+```
+Slot 0: ..\..\data\midgames\mid1.pak      (sprite PAK — backgrounds, objects)
+Slot 1: ..\..\data\midgames\midtext.pak    (text overlay strings)
+Slot 2: ..\..\data\fonts\demofont.shp      (font glyphs)
+Slot 4: ..\..\data\sound\opening           (audio reference)
+```
+Slot IDs can be sparse (slot 3 is skipped above).
+
+### FILD Chunk — Field/Background Sprite Definitions
+Packed 10-byte records defining background layers. Each record assigns an
+object ID to a sprite loaded from a PAK file reference.
+```
+Offset  Size  Description
++0      2     Object ID (LE u16, unique identifier for BFOR referencing)
++2      2     File reference slot (LE u16, index into FILE slot table)
++4      2     Parameter 1 (LE u16, layer type or sprite sub-index)
++6      2     Parameter 2 (LE u16)
++8      2     Parameter 3 (LE u16, possibly a secondary sprite index)
+```
+Number of records = chunk size / 10 (final record may be 8 bytes if chunk
+size is not evenly divisible by 10).
+
+### SPRI Chunk — Animated Sprite Definitions
+Packed variable-length records defining animated or positioned sprites.
+Each record starts with a 2-byte object ID and has a variable-length
+parameter block.
+
+Observed record sizes: 14, 20, or 26 bytes. The record length appears
+to depend on the flags/type at bytes 2-5:
+```
+Offset  Size  Description
++0      2     Object ID (LE u16)
++2      2     Flags/type word 1 (LE u16, 0x8000 = standalone, else FILD ref)
++4      2     Flags/type word 2 (LE u16, 0x8000 = has extended params)
++6      2     Data length or type indicator (LE u16)
++8      var   Variable parameters (animation keyframes, coordinates, etc.)
+```
+
+When words 1-2 are both 0x8000 and word 3 > 0, the record has word 3
+additional bytes of keyframe/path data. When word 1 is a small value
+(not 0x8000), it references a FILD object ID.
+
+### BFOR Chunk — Composition/Render Order
+Packed 24-byte records that define the scene composition order and
+drive actual rendering. BFOR references object IDs defined by FILD
+and SPRI to compose the final frame.
+```
+Offset  Size  Description
++0      2     Object ID or command type (LE u16)
++2      2     Flags (LE u16, 0x7FFF = layer command, else object ref)
++4      20    Parameters (coordinates, clip regions, render flags)
+```
+
+The rendering model is scene-graph based:
+1. FILD defines static sprite resources (assign IDs, load from PAK)
+2. SPRI defines animated/dynamic sprites (assign IDs, keyframe data)
+3. BFOR drives the actual composition (references IDs, sets draw order)
+
+FILD and SPRI are definition-only — BFOR executes the rendering.
+
+### Files
+- `MIDGAMES/MID1A.IFF` through `MID1F.IFF` — Opening intro scenes
+- `MIDGAMES/MID1C1-C4.IFF`, `MID1E1-E4.IFF` — Scene variants
+- `MIDGAMES/VICTORY1-5.IFF` — Victory cinematics
+- Referenced PAK files: `MID1.PAK` (sprites), `MIDTEXT.PAK` (text),
+  `MID1TXT.PAK` (additional text)
+
+---
+
 ## DAT - Data Tables
 
 ### TABLE.DAT (4,761 bytes)

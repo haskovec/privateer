@@ -341,7 +341,43 @@ mission progress, story flags.
 
 ---
 
-## 10. Sound / Music System
+## 10. Intro Movie / Cinematic System
+
+### Data Files
+- `MIDGAMES/GFMIDGAM.IFF` — FORM:MIDG master table mapping type indices to control files
+- `MIDGAMES/OPENING.PAK` — Scene playlist (ordered list of scene names: mid1a, mid1b, ...)
+- `MIDGAMES/MID1A.IFF` through `MID1F.IFF` — FORM:MOVI scene scripts
+- `MIDGAMES/MID1C1-C4.IFF`, `MID1E1-E4.IFF` — Scene variants (one per group picked randomly)
+- `MIDGAMES/MID1.PAK` — Sprite/background PAK (resource 0 = palette, resources 1+ = scene packs)
+- `MIDGAMES/MIDTEXT.PAK` — Text overlay strings (24 entries for dialogue/narration)
+- `FONTS/DEMOFONT.SHP` — Font glyphs for text rendering
+- `SOUND/OPENING.GEN` — XMIDI music for intro cinematic
+
+### Architecture — Scene Composition Model
+The movie system uses a **scene-graph composition model**, not a direct draw model.
+Each FORM:MOVI scene defines objects with unique IDs, then composes them:
+
+1. **FILE** — Declares external file references (PAK sprites, fonts, audio) with slot IDs
+2. **FILD** — Defines static/background sprites: loads a PAK resource and assigns an object ID
+3. **SPRI** — Defines animated sprites: assigns an object ID with keyframe/position data
+4. **BFOR** — Drives rendering: references FILD/SPRI object IDs, sets draw order and clipping
+
+FILD and SPRI are definition-only. BFOR executes the actual rendering composition.
+
+### Playback Flow
+1. Parse `GFMIDGAM.IFF` to find `OPENING.PAK` filename
+2. Parse `OPENING.PAK` playlist to get scene names (12 entries including variants)
+3. Collapse variant groups (mid1c1-c4 → pick one, mid1e1-e4 → pick one) → 6 scenes
+4. For each scene: parse FORM:MOVI, load FILE references, execute ACTS blocks per SPED timing
+5. Each ACTS block: process FILD definitions, SPRI definitions, BFOR composition
+6. Audio layers play concurrently: music (OPENING.GEN), voice (SPEECH/MID01), SFX (SOUNDFX.PAK)
+
+### Timing
+- SPED value = DOS ticks per frame (70 Hz timer base)
+- Frame advance: accumulate 70 per game frame (60 fps), advance ACTS block when accumulator >= SPED * 60
+- Typical SPED values: 512 (≈7.3s per block), 768 (≈11s per block)
+
+## 11. Sound / Music System
 
 ### Music
 - XMIDI format (Extended MIDI) - used for in-game music

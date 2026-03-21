@@ -22,6 +22,8 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
 Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) complete.
+Phase 17 (MOVI Parser & Renderer Rewrite) planned — reverse engineering revealed the FORM:MOVI
+format uses a scene-graph composition model, not the simple draw-command model originally assumed.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -191,9 +193,9 @@ All project documentation lives in the `docs/` directory:
 |----------|-------------|
 | [Game Overview](docs/01-game-overview.md) | What the game is, world structure, ships, economy, factions, and how the EA release is packaged |
 | [Executable Analysis](docs/02-executable-analysis.md) | Reverse engineering of PRIV.EXE (loader) and PRCD.EXE (game binary) -- compiler, source files, game systems, rendering pipeline |
-| [Data Formats](docs/03-data-formats.md) | Specifications for every file format: TRE archives, IFF chunks, PAK resources, VPK/VPF voice packs, VOC audio, SHP sprites, PAL palettes, RLE compression |
+| [Data Formats](docs/03-data-formats.md) | Specifications for every file format: TRE archives, IFF chunks, PAK resources, VPK/VPF voice packs, VOC audio, SHP sprites, PAL palettes, RLE compression, FORM:MOVI cinematics |
 | [Data Inventory](docs/04-data-inventory.md) | Complete inventory of all 832 game files across 14 directories with size breakdowns and descriptions |
-| [Game Systems](docs/05-game-systems.md) | Architecture of the 10 major game systems: universe, ships, combat, AI, economy, missions, conversations, rendering, saves, audio |
+| [Game Systems](docs/05-game-systems.md) | Architecture of the 11 major game systems: universe, ships, combat, AI, economy, missions, conversations, rendering, saves, movie/cinematics, audio |
 | [Existing Work](docs/06-existing-work.md) | Community projects (Gemini Gold, Confederation), modding tools (wctools, Originator, HCl's tools), and key technical references |
 | [Recommendations](docs/07-recommendations.md) | Language/framework evaluation and the rationale for choosing Zig + SDL3 |
 | [Design Decisions](docs/08-design-decisions.md) | Locked-in decisions: 4x upscaling, original audio, widescreen, moddability, single-player, Righteous Fire deferred |
@@ -239,3 +241,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_combat_dat.py` | Analyze COMBAT.DAT event mapping and DATA/SOUND/ file catalog |
 | `analyze_soundfx.py` | Deep analysis of SOUNDFX.PAK nested PAK structure and VOC sound resources |
 | `analyze_soundfx2.py` | Inner PAK structure analysis showing 43 VOC sound clips |
+| `analyze_movi.py` | Deep analysis of FORM:MOVI intro cinematic IFF files (FILE/FILD/SPRI/BFOR chunk formats) |

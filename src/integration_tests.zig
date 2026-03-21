@@ -3365,6 +3365,116 @@ test "integration: MovieRenderer loads MID1.PAK and renders SPRI command from MI
     std.debug.print("MovieRenderer: rendered {d} non-black pixels from MID1A.IFF first ACTS block\n", .{non_black});
 }
 
+test "integration: MoviePlayer full loading path for MID1A.IFF" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Build TreIndex (same as main.zig)
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    // Load MID1A.IFF via TreIndex (like MoviePlayer does)
+    const mid1a_entry = tre_index.findEntry("MID1A.IFF") orelse {
+        std.debug.print("DIAG: MID1A.IFF not found via TreIndex\n", .{});
+        return;
+    };
+    const mid1a_data = try tre.extractFileData(loaded.tre_data, mid1a_entry.offset, mid1a_entry.size);
+
+    // Parse script
+    var script = try movie.parse(allocator, mid1a_data);
+    defer script.deinit();
+
+    std.debug.print("DIAG: MID1A.IFF file_references ({d}):\n", .{script.file_references.len});
+    for (script.file_references, 0..) |ref, i| {
+        const basename = std.fs.path.basename(ref);
+        const found = tre_index.findEntry(basename);
+        std.debug.print("  [{d}] \"{s}\" → basename \"{s}\" → {s}\n", .{
+            i,
+            ref,
+            basename,
+            if (found != null) "FOUND" else "NOT FOUND",
+        });
+    }
+
+    // Create renderer and load PAKs (like MoviePlayer)
+    var fb = framebuffer_mod.Framebuffer.create();
+    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.file_references.len);
+    defer renderer.deinit();
+
+    for (script.file_references, 0..) |ref_path, i| {
+        const ref_basename = std.fs.path.basename(ref_path);
+        if (tre_index.findEntry(ref_basename)) |ref_entry| {
+            const pak_data = tre.extractFileData(loaded.tre_data, ref_entry.offset, ref_entry.size) catch {
+                std.debug.print("DIAG: PAK[{d}] extract failed\n", .{i});
+                continue;
+            };
+            renderer.loadPak(i, pak_data) catch |err| {
+                std.debug.print("DIAG: PAK[{d}] loadPak failed: {}\n", .{ i, err });
+                continue;
+            };
+        }
+    }
+
+    std.debug.print("DIAG: Palette: {s}\n", .{if (renderer.getPalette() != null) "loaded" else "MISSING"});
+
+    // Try rendering first ACTS block
+    if (script.acts_blocks.len > 0) {
+        const block = script.acts_blocks[0];
+        std.debug.print("DIAG: ACTS[0] has {d} FILD, {d} SPRI commands\n", .{ block.field_commands.len, block.sprite_commands.len });
+
+        // Check what file_refs are used
+        for (block.field_commands) |cmd| {
+            std.debug.print("DIAG:   FILD file_ref={d} sprite_idx={d} (slot {s})\n", .{
+                cmd.file_ref,
+                cmd.sprite_index,
+                if (cmd.file_ref < renderer.loaded_paks.len and renderer.loaded_paks[cmd.file_ref] != null) "loaded" else "EMPTY",
+            });
+        }
+        for (block.sprite_commands) |cmd| {
+            std.debug.print("DIAG:   SPRI file_ref={d} sprite_idx={d} (slot {s})\n", .{
+                cmd.file_ref,
+                cmd.sprite_index,
+                if (cmd.file_ref < renderer.loaded_paks.len and renderer.loaded_paks[cmd.file_ref] != null) "loaded" else "EMPTY",
+            });
+        }
+
+        renderer.executeActsBlock(block) catch |err| {
+            std.debug.print("DIAG: ACTS[0] render error: {}\n", .{err});
+        };
+    }
+
+    // Dump raw FILD/SPRI chunk bytes from the IFF tree
+    const result2 = iff.parseChunk(allocator, mid1a_data, 0) catch return;
+    var root2 = result2.chunk;
+    defer root2.deinit();
+
+    const acts_forms = root2.findForms(allocator, "ACTS".*) catch return;
+    defer allocator.free(acts_forms);
+
+    if (acts_forms.len > 0) {
+        const acts0 = acts_forms[0];
+        const fild_chunks = acts0.findChildren(allocator, "FILD".*) catch return;
+        defer allocator.free(fild_chunks);
+        for (fild_chunks, 0..) |fild, fi| {
+            std.debug.print("DIAG: raw FILD[{d}] ({d} bytes):", .{ fi, fild.data.len });
+            for (fild.data) |b| {
+                std.debug.print(" {x:0>2}", .{b});
+            }
+            std.debug.print("\n", .{});
+        }
+        const spri_chunks = acts0.findChildren(allocator, "SPRI".*) catch return;
+        defer allocator.free(spri_chunks);
+        for (spri_chunks, 0..) |spri, si| {
+            std.debug.print("DIAG: raw SPRI[{d}] ({d} bytes):", .{ si, spri.data.len });
+            for (spri.data) |b| {
+                std.debug.print(" {x:0>2}", .{b});
+            }
+            std.debug.print("\n", .{});
+        }
+    }
+}
+
 test "integration: OPENING.GEN parses to valid XMIDI sequence with EVNT data" {
     const allocator = std.testing.allocator;
     const loaded = try loadTreData(allocator) orelse return;

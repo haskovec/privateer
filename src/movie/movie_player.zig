@@ -159,7 +159,9 @@ pub const MoviePlayer = struct {
 
         // Execute current ACTS block (render sprites to framebuffer)
         if (self.current_acts_idx < script.acts_blocks.len) {
-            renderer.executeActsBlock(script.acts_blocks[self.current_acts_idx]) catch {};
+            renderer.executeActsBlock(script.acts_blocks[self.current_acts_idx]) catch |err| {
+                std.debug.print("  ACTS[{d}] render error: {}\n", .{ self.current_acts_idx, err });
+            };
         }
 
         // Advance timing
@@ -257,6 +259,7 @@ pub const MoviePlayer = struct {
         }
 
         // Load PAK files referenced by the script (use basename for TRE lookup)
+        var paks_loaded: usize = 0;
         for (script.file_references, 0..) |ref_path, i| {
             const ref_basename = std.fs.path.basename(ref_path);
             if (self.tre_index.findEntry(ref_basename)) |ref_entry| {
@@ -264,14 +267,26 @@ pub const MoviePlayer = struct {
                     self.tre_data,
                     ref_entry.offset,
                     ref_entry.size,
-                ) catch continue;
-                renderer.loadPak(i, pak_data) catch continue;
+                ) catch {
+                    std.debug.print("  PAK[{d}] {s}: extract failed\n", .{ i, ref_basename });
+                    continue;
+                };
+                renderer.loadPak(i, pak_data) catch {
+                    std.debug.print("  PAK[{d}] {s}: parse failed ({d} bytes)\n", .{ i, ref_basename, pak_data.len });
+                    continue;
+                };
+                paks_loaded += 1;
+            } else {
+                std.debug.print("  PAK[{d}] {s}: not found in TRE\n", .{ i, ref_basename });
             }
         }
 
         // Extract palette from renderer (first loaded PAK with a palette)
         if (renderer.getPalette()) |pal_val| {
             self.current_palette = pal_val;
+            std.debug.print("  Palette loaded, {d}/{d} PAKs loaded\n", .{ paks_loaded, script.file_references.len });
+        } else {
+            std.debug.print("  WARNING: No palette found, {d}/{d} PAKs loaded\n", .{ paks_loaded, script.file_references.len });
         }
 
         self.script = script;

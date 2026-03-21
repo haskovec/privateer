@@ -865,6 +865,67 @@ shows this timeline:
 
 ---
 
+## Phase 17: FORM:MOVI Parser & Renderer Rewrite
+*The Phase 16 movie system assumed a simple draw-command model. Reverse engineering
+of real game data (via analyze_movi.py) revealed a scene-graph composition architecture.
+The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was implemented.*
+
+- [ ] **17.1 Fix FILE chunk parser (slot-indexed references)**
+  - Current parser splits on null bytes (wrong) — real format is `[slot_id: u16 LE][path\0]` pairs
+  - Slot IDs can be sparse (e.g., 0, 1, 2, 4 — slot 3 skipped)
+  - RED: Test FILE parser with real MID1A.IFF data: expect slot 0=mid1.pak, 1=midtext.pak, 2=demofont.shp, 4=opening
+  - GREEN: Rewrite parseFileReferences to read `[u16 LE slot_id][null-terminated path]` pairs
+  - Return a slot map (sparse array or hash map) instead of a dense array
+  - Update test fixtures to match real FILE chunk format
+
+- [ ] **17.2 Fix FILD chunk parser (packed 10-byte records)**
+  - Current parser reads one command per FILD chunk with u8+BE fields (wrong)
+  - Real format: packed 10-byte records `[object_id: u16 LE][file_ref: u16 LE][3 x u16 LE params]`
+  - A single FILD chunk contains multiple records (e.g., 96 bytes = ~10 records)
+  - RED: Test FILD parser with real MID1A.IFF data: expect 10 records, first has object_id=23 file_ref=0
+  - GREEN: Rewrite FILD parsing to iterate 10-byte records within a single chunk
+  - Update FieldCommand struct to use u16 LE fields
+
+- [ ] **17.3 Fix SPRI chunk parser (packed variable-length records)**
+  - Current parser reads one command per SPRI chunk (wrong)
+  - Real format: packed variable-length records (14, 20, or 26 bytes per record)
+  - Record length depends on flag words at bytes 2-5
+  - RED: Test SPRI parser with real MID1A.IFF data: expect 12 records with correct sizes
+  - GREEN: Implement variable-length record reader; determine record boundaries from flags
+  - Update SpriteCommand struct to use u16 LE fields and support variable params
+
+- [ ] **17.4 Parse BFOR chunk (packed 24-byte composition commands)**
+  - Current parser extracts only a u16 value from BFOR (wrong)
+  - Real format: packed 24-byte records defining composition/render order
+  - BFOR references object IDs from FILD/SPRI to drive actual rendering
+  - RED: Test BFOR parser with real MID1A.IFF data: expect 8 records from 192-byte chunk
+  - GREEN: Implement BFOR record parser with object_id, flags, and parameter fields
+
+- [ ] **17.5 Rewrite MovieRenderer for scene-graph composition**
+  - Current renderer directly blits from FILD/SPRI commands (wrong model)
+  - Real model: FILD/SPRI define objects, BFOR drives rendering order
+  - Build an object table from FILD+SPRI definitions (keyed by object_id)
+  - BFOR commands reference object_ids to composite the frame
+  - RED: Test renderer with MID1A.IFF scene data produces non-black pixels
+  - GREEN: Implement object table + BFOR-driven composition pipeline
+  - Verify palette extraction still works from PAK resource 0
+
+- [ ] **17.6 Wire movie audio layers**
+  - movie_music.zig, movie_voice.zig, movie_sfx.zig exist but are not connected
+  - Load OPENING.GEN music at movie start, play concurrently
+  - Trigger voice clips and SFX based on ACTS block timing or BFOR commands
+  - Stop all audio on skip (Escape) or movie completion
+  - RED: Test music starts playing when MoviePlayer initializes
+  - GREEN: Import and wire audio modules into MoviePlayer
+
+- [ ] **17.7 Update test fixtures and integration tests**
+  - Replace hand-crafted MOVI test fixtures with data matching real format
+  - Update all existing movie unit tests to work with new parser
+  - Add integration test that renders MID1A.IFF and verifies non-black pixels
+  - Verify full 6-scene playback sequence loads and renders without errors
+
+---
+
 ## Future Considerations (Not in Current Scope)
 
 ### Righteous Fire Expansion
