@@ -696,7 +696,7 @@ Our current implementation loads the wrong resource (scene pack 1, a base scene)
 with incorrect palette, and shows only two menu items ("PLAY PRIVATEER" /
 "LOAD A SAVED GAME").
 
-- [ ] **15.1 Fix title screen background**
+- [x] **15.1 Fix title screen background**
   - Load OPTSHPS.PAK scene pack 0 (not 1) as the title background
   - Composite all sprites in scene pack 0 (starfield base + overlay sprites)
   - Apply OPTPALS.PAK palette 0 with VGA 6-bit→8-bit conversion
@@ -704,7 +704,7 @@ with incorrect palette, and shows only two menu items ("PLAY PRIVATEER" /
   - GREEN: Change `loadSceneBackground` call from resource index 1 to 0
   - Golden test: Compare rendered title screen against DOSBox reference frame
 
-- [ ] **15.2 Fix title menu to match original**
+- [x] **15.2 Fix title menu to match original**
   - Change menu items from ["PLAY PRIVATEER", "LOAD A SAVED GAME"] to
     ["NEW", "LOAD", "OPTIONS", "QUIT"]
   - Position menu items at the bottom of the screen (matching original layout)
