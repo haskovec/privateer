@@ -117,6 +117,40 @@ pub const Framebuffer = struct {
         self.blitSpriteScaled(spr, center_x, center_y, 1, 1);
     }
 
+    /// Blit a sprite opaquely — ALL pixels are written including index 0 (black).
+    /// Use for full-screen backgrounds where index 0 means black, not transparent.
+    pub fn blitSpriteOpaque(self: *Framebuffer, spr: sprite_mod.Sprite, center_x: i32, center_y: i32) void {
+        const src_w: i32 = @intCast(spr.width);
+        const src_h: i32 = @intCast(spr.height);
+        if (src_w <= 0 or src_h <= 0) return;
+
+        const top_x = center_x - @as(i32, spr.header.x1);
+        const top_y = center_y - @as(i32, spr.header.y1);
+
+        const start_dx: i32 = @max(0, -top_x);
+        const start_dy: i32 = @max(0, -top_y);
+        const end_dx: i32 = @min(src_w, @as(i32, WIDTH) - top_x);
+        const end_dy: i32 = @min(src_h, @as(i32, HEIGHT) - top_y);
+        if (start_dx >= end_dx or start_dy >= end_dy) return;
+
+        var dy: i32 = start_dy;
+        while (dy < end_dy) : (dy += 1) {
+            const src_y: usize = @intCast(dy);
+            const fb_y: usize = @intCast(top_y + dy);
+            if (src_y >= spr.height) continue;
+
+            var dx: i32 = start_dx;
+            while (dx < end_dx) : (dx += 1) {
+                const src_x: usize = @intCast(dx);
+                if (src_x >= spr.width) continue;
+
+                const color = spr.pixels[src_y * @as(usize, spr.width) + src_x];
+                const fb_x: usize = @intCast(top_x + dx);
+                self.pixels[fb_y * WIDTH + fb_x] = color;
+            }
+        }
+    }
+
     /// Blit a decoded sprite with scaling (nearest-neighbor).
     /// Scale is expressed as a fraction: scale_numer / scale_denom.
     /// (1/1 = 100%, 1/2 = 50%, 2/1 = 200%)

@@ -168,7 +168,7 @@ pub const MovieRenderer = struct {
         } else {
             // No BFOR: fall back to rendering FILD commands directly
             for (block.field_commands) |cmd| {
-                self.renderFieldSprite(cmd.file_ref, cmd.param3 + 1, 0, 0) catch {};
+                self.renderFieldSprite(cmd.file_ref, cmd.param3 + 1, 0, 0, cmd.param1 == 2) catch {};
             }
         }
     }
@@ -194,7 +194,7 @@ pub const MovieRenderer = struct {
 
             // Look up in FILD table first
             if (findFild(block.field_commands, ref_id)) |fild| {
-                self.renderFieldSprite(fild.file_ref, fild.param3 + 1, 0, 0) catch {};
+                self.renderFieldSprite(fild.file_ref, fild.param3 + 1, 0, 0, fild.param1 == 2) catch {};
                 continue;
             }
 
@@ -240,7 +240,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
-                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y, false) catch {};
                     }
                 }
             },
@@ -251,7 +251,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
-                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y, false) catch {};
                     }
                 }
             },
@@ -265,7 +265,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = if (spri.param_count >= 3) @as(i32, @as(i16, @bitCast(spri.params[2]))) else 0;
-                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y, false) catch {};
                     }
                 }
             },
@@ -281,7 +281,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = 0;
-                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y, false) catch {};
                     }
                 }
             },
@@ -342,7 +342,9 @@ pub const MovieRenderer = struct {
     /// Render a sprite from a loaded PAK file at a given position.
     /// file_ref indexes into the loaded file table, resource_idx is the
     /// resource index within the PAK (ScenePack with RLE sprites).
-    fn renderFieldSprite(self: *MovieRenderer, file_ref: u16, resource_idx: u16, x: i32, y: i32) MovieRendererError!void {
+    /// When opaque=true, all pixels are written (for backgrounds where
+    /// index 0 means black, not transparent).
+    fn renderFieldSprite(self: *MovieRenderer, file_ref: u16, resource_idx: u16, x: i32, y: i32, is_background: bool) MovieRendererError!void {
         if (file_ref >= self.loaded_files.len) return MovieRendererError.InvalidFileRef;
         const loaded_file = self.loaded_files[file_ref] orelse return MovieRendererError.InvalidFileRef;
         const loaded = switch (loaded_file) {
@@ -353,7 +355,11 @@ pub const MovieRenderer = struct {
         var spr = self.decodeSpriteFromPak(loaded, resource_idx) catch return MovieRendererError.SpriteDecodeFailed;
         defer spr.deinit();
 
-        self.fb.blitSprite(spr, x, y);
+        if (is_background) {
+            self.fb.blitSpriteOpaque(spr, x, y);
+        } else {
+            self.fb.blitSprite(spr, x, y);
+        }
     }
 
     /// Find a FILD command by object_id in the field commands array.
