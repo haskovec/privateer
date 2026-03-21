@@ -706,6 +706,14 @@ fn initGameState(
         // Parse the playlist into scene names
         var sequence = opening_mod.parsePlaylist(allocator, opening_data) catch break :load_opening;
 
+        // Collapse variant groups (mid1c1-c4, mid1e1-e4 → random pick per group)
+        collapse_variants: {
+            var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+            const collapsed = opening_mod.selectVariants(allocator, &sequence, prng.random()) catch break :collapse_variants;
+            sequence.deinit();
+            sequence = collapsed;
+        }
+
         std.debug.print("Opening sequence loaded ({d} scenes)\n", .{sequence.sceneCount()});
 
         // Create movie player — takes ownership of sequence

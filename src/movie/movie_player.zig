@@ -218,8 +218,9 @@ pub const MoviePlayer = struct {
         };
         defer self.allocator.free(path);
 
-        // Find in TRE archive
-        const entry = self.tre_index.findEntry(path) orelse {
+        // Find in TRE archive (findEntry matches by basename, so extract it)
+        const basename = std.fs.path.basename(path);
+        const entry = self.tre_index.findEntry(basename) orelse {
             self.advanceScene();
             return;
         };
@@ -255,9 +256,10 @@ pub const MoviePlayer = struct {
             renderer.clearScreen();
         }
 
-        // Load PAK files referenced by the script
+        // Load PAK files referenced by the script (use basename for TRE lookup)
         for (script.file_references, 0..) |ref_path, i| {
-            if (self.tre_index.findEntry(ref_path)) |ref_entry| {
+            const ref_basename = std.fs.path.basename(ref_path);
+            if (self.tre_index.findEntry(ref_basename)) |ref_entry| {
                 const pak_data = tre_mod.extractFileData(
                     self.tre_data,
                     ref_entry.offset,
