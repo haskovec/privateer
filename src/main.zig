@@ -330,26 +330,8 @@ fn updateTitle(state: *GameState) void {
         const view = scene_renderer.SceneView{ .background = bg };
         scene_renderer.renderScene(&state.fb, view);
 
-        // Render title menu: NEW / LOAD / OPTIONS / QUIT at bottom of screen
-        if (state.title_font) |font| {
-            const active_pal = if (state.title_palette) |*tp| tp else &state.palette;
-            const text_color = findBrightestColor(active_pal);
-            const scale: u16 = 1;
-
-            const menu_items = [_][]const u8{ "NEW", "LOAD", "OPTIONS", "QUIT" };
-            const menu_y: u16 = framebuffer_mod.HEIGHT - font.line_height * scale - 6;
-
-            // Distribute items evenly across the screen width
-            const total_w: u16 = framebuffer_mod.WIDTH;
-            const spacing = total_w / @as(u16, menu_items.len);
-
-            for (menu_items, 0..) |item, i| {
-                const text_w = font.measureTextScaled(item, scale);
-                const region_center = spacing / 2 + spacing * @as(u16, @intCast(i));
-                const x = region_center -| (text_w / 2);
-                _ = font.drawTextScaled(&state.fb, x, menu_y, item, text_color, scale);
-            }
-        }
+        // Menu text (NEW/LOAD/OPTIONS/QUIT) is already part of the pre-rendered
+        // title screen image in scene pack 181. No font overlay needed.
 
         if (state.title_palette) |tp| {
             state.fb.applyPalette(&tp);
@@ -607,20 +589,20 @@ fn initGameState(
     var fb = framebuffer_mod.Framebuffer.create();
     try fb.createTexture(win.renderer);
 
-    // Load title screen from OPTSHPS.PAK scene pack 0 (starfield + overlays)
-    // with OPTPALS.PAK palette 0 (the correct title screen palette).
+    // Load title screen from OPTSHPS.PAK scene pack 181 (the pre-rendered title
+    // screen image: planet, ship, "PRIVATEER" text, frame, and menu bar) with
+    // OPTPALS.PAK palette 39 (the title screen's dark purple palette).
     var title_bg: ?sprite_mod.Sprite = null;
     var title_palette: ?pal.Palette = null;
-    const title_result = loadSceneBackground(allocator, tre_data, &tre_index, "OPTSHPS.PAK", 0) catch null;
+    const title_result = loadSceneBackground(allocator, tre_data, &tre_index, "OPTSHPS.PAK", 181) catch null;
     if (title_result) |result| {
         title_bg = result.sprite;
-        // Prefer OPTPALS.PAK palette 0 over the scene pack's embedded palette
-        if (loadOptpalsPalette(tre_data, &tre_index, 0)) |title_pal| {
+        if (loadOptpalsPalette(tre_data, &tre_index, 39)) |title_pal| {
             title_palette = title_pal;
         } else {
             title_palette = result.palette;
         }
-        std.debug.print("Title screen loaded from OPTSHPS.PAK scene pack 0\n", .{});
+        std.debug.print("Title screen loaded from OPTSHPS.PAK scene pack 181\n", .{});
     } else {
         std.debug.print("Warning: Could not load title screen\n", .{});
     }
