@@ -174,8 +174,10 @@ pub const MovieRenderer = struct {
     }
 
     /// Build an object table from FILD+SPRI definitions and render via BFOR.
-    /// After BFOR composition, render any SPRI objects not referenced by BFOR
-    /// (many SPRI objects define animations/text that are not in the BFOR chain).
+    /// After BFOR-referenced rendering, also render text overlays (type 12)
+    /// that are not in the BFOR chain — text is additive and safe to overlay.
+    /// Type 4/19/20 self-ref sprites are animation keyframes that require
+    /// interpolation, so they are only rendered when directly referenced by BFOR.
     fn executeComposition(self: *MovieRenderer, block: movie_mod.ActsBlock) MovieRendererError!void {
         // Track which SPRI objects are rendered via BFOR (by index in sprite_commands)
         var rendered_via_bfor: [256]bool = [_]bool{false} ** 256;
@@ -206,12 +208,23 @@ pub const MovieRenderer = struct {
             // Object not found — skip silently (may be audio/control object)
         }
 
-        // Render SPRI objects not referenced by any BFOR entry.
-        // This covers type 4 animations, type 12 text overlays, etc. that
-        // are defined in the ACTS block but not in the BFOR composition chain.
+        // Render unreferenced SPRI objects that are safe to overlay:
+        // - Type 12 (text overlays): additive, won't destroy background
+        // - Type 0/1 with FILD ref: positioned sprites, safe to overlay
+        // Skip type 4/19/20 self-ref (animation keyframes need interpolation,
+        // rendering them statically overwrites the scene with wrong content).
         for (block.sprite_commands, 0..) |spri, i| {
             if (i < 256 and rendered_via_bfor[i]) continue;
-            self.renderSpriteObject(spri, block.field_commands) catch {};
+            switch (spri.sprite_type) {
+                12 => self.renderSpriteObject(spri, block.field_commands) catch {},
+                0, 1, 3, 11 => {
+                    // Only render positioned sprites that have a FILD reference
+                    if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                        self.renderSpriteObject(spri, block.field_commands) catch {};
+                    }
+                },
+                else => {}, // Skip animation types (4/18/19/20) not in BFOR
+            }
         }
     }
 
@@ -222,52 +235,38 @@ pub const MovieRenderer = struct {
         switch (spri.sprite_type) {
             // Type 0, 1: simple positioned sprite — params[0]=x, params[1]=y
             0, 1 => {
-                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
-                    spri.ref
-                else if (spri.param_count >= 2)
-                    spri.params[1] // Self-ref type 0/1: params[1] may be FILD ref
-                else
-                    return;
-                if (findFild(fild_table, fild_ref)) |fild| {
-                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
-                    const y: i32 = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
-                        @as(i32, @as(i16, @bitCast(spri.params[1])))
-                    else
-                        0;
-                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                    // References a FILD object — get PAK file/resource from it
+                    if (findFild(fild_table, spri.ref)) |fild| {
+                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
+                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                    }
                 }
             },
 
             // Type 3, 11: extended positioned sprite — treat like type 0/1
             3, 11 => {
-                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
-                    spri.ref
-                else if (spri.param_count >= 2)
-                    spri.params[1]
-                else
-                    return;
-                if (findFild(fild_table, fild_ref)) |fild| {
-                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
-                    const y: i32 = 0;
-                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                    if (findFild(fild_table, spri.ref)) |fild| {
+                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
+                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                    }
                 }
             },
 
-            // Type 4, 19, 20: animated sprite sequence — render at initial position
-            // params[1] is a FILD object_id for the sprite source
+            // Type 4, 19, 20: animated sprite sequence
+            // Only render when directly referenced (non-self-ref has a FILD target).
+            // Self-ref type 4 sprites are animation keyframes that need interpolation;
+            // rendering them statically at the wrong position destroys the scene.
             4, 19, 20 => {
-                // For self-ref: params[1] is the FILD reference
-                // For FILD-ref: spri.ref is the FILD reference
-                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
-                    spri.ref
-                else if (spri.param_count >= 2)
-                    spri.params[1]
-                else
-                    return;
-                if (findFild(fild_table, fild_ref)) |fild| {
-                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
-                    const y: i32 = if (spri.param_count >= 3) @as(i32, @as(i16, @bitCast(spri.params[2]))) else 0;
-                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                    if (findFild(fild_table, spri.ref)) |fild| {
+                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                        const y: i32 = if (spri.param_count >= 3) @as(i32, @as(i16, @bitCast(spri.params[2]))) else 0;
+                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                    }
                 }
             },
 
@@ -276,18 +275,14 @@ pub const MovieRenderer = struct {
                 self.renderTextSprite(spri, fild_table);
             },
 
-            // Type 18: extended animation — treat like type 4
+            // Type 18: extended animation — treat like type 4 (non-self-ref only)
             18 => {
-                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
-                    spri.ref
-                else if (spri.param_count >= 2)
-                    spri.params[1]
-                else
-                    return;
-                if (findFild(fild_table, fild_ref)) |fild| {
-                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
-                    const y: i32 = 0;
-                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                    if (findFild(fild_table, spri.ref)) |fild| {
+                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                        const y: i32 = 0;
+                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                    }
                 }
             },
 
