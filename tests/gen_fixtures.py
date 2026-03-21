@@ -2189,6 +2189,69 @@ def gen_commtxt_file():
     write("test_commtxt.bin", root)
 
 
+def gen_movie_file():
+    """Generate FORM:MOVI test fixtures for the intro movie IFF parser.
+
+    FORM:MOVI structure:
+        CLRC (2 bytes) — clear screen flag (big-endian u16)
+        SPED (2 bytes) — frame speed in ticks (big-endian u16)
+        FILE (variable) — null-terminated indexed file paths
+        FORM:ACTS — animation action blocks containing:
+            FILD — field/frame display commands
+            SPRI — sprite positioning commands
+            BFOR — background/foreground layer ordering
+
+    Fixture 1: test_movi.bin — Single FORM:MOVI with 1 ACTS block
+    Fixture 2: test_movi_multi_acts.bin — FORM:MOVI with 2 ACTS blocks
+    """
+    # --- Fixture 1: Single ACTS block ---
+    # CLRC: clear screen = 1 (big-endian u16)
+    clrc = make_iff_chunk(b"CLRC", struct.pack('>H', 1))
+
+    # SPED: frame speed = 10 ticks (big-endian u16)
+    sped = make_iff_chunk(b"SPED", struct.pack('>H', 10))
+
+    # FILE: indexed file paths, null-terminated strings
+    file_paths = (
+        b"..\\..\\data\\midgames\\mid1.pak\x00"
+        b"..\\..\\data\\midgames\\midtext.pak\x00"
+        b"..\\..\\data\\fonts\\demofont.shp\x00"
+    )
+    file_chunk = make_iff_chunk(b"FILE", file_paths)
+
+    # FORM:ACTS with FILD, SPRI, and BFOR sub-chunks
+    # FILD: 6 bytes — file_ref(u8) + sprite_index(u16 BE) + x(u8) + y(u8) + flags(u8)
+    fild_data = struct.pack('>BHBBB', 0, 5, 100, 50, 0)
+    fild = make_iff_chunk(b"FILD", fild_data)
+
+    # SPRI: 8 bytes — file_ref(u8) + sprite_index(u16 BE) + x(i16 BE) + y(i16 BE) + flags(u8)
+    spri_data = struct.pack('>BHhhB', 0, 3, 160, 100, 1)
+    spri = make_iff_chunk(b"SPRI", spri_data)
+
+    # BFOR: 2 bytes — layer ordering value (big-endian u16)
+    bfor = make_iff_chunk(b"BFOR", struct.pack('>H', 1))
+
+    acts = make_iff_form(b"ACTS", fild + spri + bfor)
+
+    root = make_iff_form(b"MOVI", clrc + sped + file_chunk + acts)
+    write("test_movi.bin", root)
+
+    # --- Fixture 2: Multiple ACTS blocks ---
+    # Second ACTS block with different commands
+    fild2_data = struct.pack('>BHBBB', 1, 10, 0, 0, 0)
+    fild2 = make_iff_chunk(b"FILD", fild2_data)
+    spri2_data = struct.pack('>BHhhB', 1, 7, 50, 25, 0)
+    spri2 = make_iff_chunk(b"SPRI", spri2_data)
+    acts2 = make_iff_form(b"ACTS", fild2 + spri2)
+
+    # CLRC = 0 (no clear), SPED = 5
+    clrc2 = make_iff_chunk(b"CLRC", struct.pack('>H', 0))
+    sped2 = make_iff_chunk(b"SPED", struct.pack('>H', 5))
+
+    root2 = make_iff_form(b"MOVI", clrc2 + sped2 + file_chunk + acts + acts2)
+    write("test_movi_multi_acts.bin", root2)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -2229,4 +2292,5 @@ if __name__ == "__main__":
     gen_pfc_file()
     gen_comptext_file()
     gen_commtxt_file()
+    gen_movie_file()
     print("Done.")

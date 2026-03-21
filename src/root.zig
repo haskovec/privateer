@@ -19,6 +19,7 @@ pub const pak = @import("formats/pak.zig");
 pub const voc = @import("formats/voc.zig");
 pub const vpk = @import("formats/vpk.zig");
 pub const music = @import("formats/music.zig");
+pub const movie = @import("formats/movie.zig");
 
 // Rendering pipeline
 pub const png = @import("render/png.zig");

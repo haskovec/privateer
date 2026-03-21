@@ -12,6 +12,7 @@ const pak = @import("formats/pak.zig");
 const voc = @import("formats/voc.zig");
 const vpk = @import("formats/vpk.zig");
 const music = @import("formats/music.zig");
+const movie = @import("formats/movie.zig");
 const extract = @import("cli/extract.zig");
 const render = @import("render/render.zig");
 const png = @import("render/png.zig");
@@ -3076,4 +3077,52 @@ test "integration: title screen uses OPTSHPS.PAK scene pack 181 with OPTPALS pal
     try std.testing.expectEqual(@as(u8, 16), title_pal.colors[0].r);
     try std.testing.expectEqual(@as(u8, 0), title_pal.colors[0].g);
     try std.testing.expectEqual(@as(u8, 16), title_pal.colors[0].b);
+}
+
+// --- FORM:MOVI movie script integration tests ---
+
+test "integration: parse all MIDGAMES IFF files as FORM:MOVI" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const entries = try tre.readAllEntries(allocator, loaded.tre_data);
+    defer {
+        for (entries) |*entry| {
+            var e = entry.*;
+            e.deinit();
+        }
+        allocator.free(entries);
+    }
+
+    var movi_count: usize = 0;
+    var movi_errors: usize = 0;
+    for (entries) |entry| {
+        // Check if this is a MIDGAMES IFF file (MID1*.IFF pattern)
+        const is_midgames = std.mem.indexOf(u8, entry.path, "MIDGAMES") != null;
+        const is_iff = std.mem.endsWith(u8, entry.path, ".IFF");
+        if (!is_midgames or !is_iff) continue;
+
+        const file_data = tre.extractFileData(loaded.tre_data, entry.offset, entry.size) catch continue;
+
+        // Only try to parse files that look like FORM:MOVI
+        if (!movie.isMovi(file_data)) continue;
+
+        var script = movie.parse(allocator, file_data) catch {
+            movi_errors += 1;
+            continue;
+        };
+        defer script.deinit();
+
+        // Every MOVI script should have a valid speed and at least one ACTS block
+        try std.testing.expect(script.frame_speed_ticks > 0);
+        try std.testing.expect(script.acts_blocks.len > 0);
+        try std.testing.expect(script.file_references.len > 0);
+
+        movi_count += 1;
+    }
+
+    // Should find multiple MOVI files (MID1A.IFF through MID1F.IFF = 12 files)
+    try std.testing.expect(movi_count > 0);
+    try std.testing.expectEqual(@as(usize, 0), movi_errors);
 }

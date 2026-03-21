@@ -779,7 +779,7 @@ shows this timeline:
 - `SOUND/COMBAT.DAT`: Combat event → sound effect index mapping table (1,896
   bytes, maps events like "gun fire" or "explosion" to SOUNDFX.PAK indices)
 
-- [ ] **16.1 FORM:MOVI IFF parser**
+- [x] **16.1 FORM:MOVI IFF parser**
   - Parse FORM:MOVI container with CLRC, SPED, FILE, FORM:ACTS chunks
   - Parse ACTS sub-chunks: FILD (field commands), SPRI (sprite commands),
     BFOR (layer ordering)

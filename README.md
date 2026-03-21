@@ -21,7 +21,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 ## Project Status
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
-Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) planned.
+Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -49,7 +49,8 @@ privateer/
 │   │   ├── pal.zig                # PAL palette file parser (256-color VGA palettes)
 │   │   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
 │   │   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
-│   │   └── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
+│   │   ├── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
+│   │   └── movie.zig             # FORM:MOVI movie script parser (intro cinematic IFF sequences)
 │   │
 │   ├── render/                    # Rendering pipeline & display
 │   │   ├── framebuffer.zig        # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
