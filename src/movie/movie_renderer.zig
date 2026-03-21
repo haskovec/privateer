@@ -1,14 +1,16 @@
 //! Movie sprite renderer for Wing Commander: Privateer intro cinematic.
 //!
-//! Executes FORM:MOVI ACTS commands frame-by-frame, rendering sprites from
-//! PAK resources onto a persistent 320x200 framebuffer. Supports delta/
-//! incremental compositing (each frame updates, not full redraws) and CLRC
-//! clearing between scenes.
+//! Uses a scene-graph composition model driven by BFOR commands:
+//!   1. FILD commands define background sprite objects (keyed by object_id)
+//!   2. SPRI commands define sprite overlay objects (keyed by object_id)
+//!   3. BFOR commands drive rendering order by referencing object_ids
 //!
-//! Data flow for a SPRI command:
-//!   1. Look up file_references[file_ref] → normalized TRE path
-//!   2. PAK resource at sprite_index → ScenePack → RLE sprite
-//!   3. Blit sprite to framebuffer at (x, y)
+//! BFOR records with flags=0x7FFF are layer/clip commands that define
+//! viewport regions (params[0..3] = x1, y1, x2, y2). Records with
+//! flags != 0x7FFF reference a FILD/SPRI object_id for rendering.
+//!
+//! When no BFOR commands are present (some ACTS blocks), falls back to
+//! direct FILD rendering for backward compatibility.
 //!
 //! Resource 0 of each MID*.PAK is a 772-byte palette.
 //! Resources 1+ are ScenePack sprite containers.
@@ -44,7 +46,18 @@ pub const LoadedPak = struct {
     }
 };
 
+/// An object in the scene graph — either a FILD (background sprite) or
+/// a SPRI (sprite overlay), keyed by object_id.
+const ObjectEntry = union(enum) {
+    fild: movie_mod.FieldCommand,
+    spri: movie_mod.SpriteCommand,
+};
+
 /// Movie renderer that executes ACTS commands against a persistent framebuffer.
+///
+/// Uses a scene-graph composition model: FILD/SPRI commands define objects,
+/// BFOR commands drive rendering order by referencing object_ids. When no
+/// BFOR commands are present, falls back to direct FILD rendering.
 ///
 /// The renderer maintains references to loaded PAK files (indexed by file_ref)
 /// and composites sprites incrementally — each ACTS block adds to the existing
@@ -118,37 +131,103 @@ pub const MovieRenderer = struct {
         self.fb.clear(0);
     }
 
-    /// Execute a single ACTS block, rendering all its commands to the framebuffer.
-    /// Commands are applied incrementally on top of existing framebuffer content.
+    /// Execute a single ACTS block using the scene-graph composition model.
+    ///
+    /// If BFOR commands are present: builds an object table from FILD+SPRI
+    /// definitions, then processes BFOR records in order to composite the frame.
+    /// BFOR records with flags=0x7FFF are layer/clip commands; others reference
+    /// objects by their object_id (stored in the flags field).
+    ///
+    /// If no BFOR commands: falls back to direct FILD rendering (legacy mode
+    /// for ACTS blocks that only contain definitions for later frames).
     pub fn executeActsBlock(self: *MovieRenderer, block: movie_mod.ActsBlock) MovieRendererError!void {
-        // Process FILD commands (background/field sprites)
-        for (block.field_commands) |cmd| {
-            try self.renderFieldCommand(cmd);
-        }
-        // Process SPRI commands (positioned sprites)
-        for (block.sprite_commands) |cmd| {
-            try self.renderSpriteCommand(cmd);
+        if (block.composition_cmds.len > 0) {
+            // BFOR-driven composition: build object table, then render via BFOR
+            try self.executeComposition(block);
+        } else {
+            // No BFOR: fall back to rendering FILD commands directly
+            for (block.field_commands) |cmd| {
+                self.renderFieldSprite(cmd.file_ref, cmd.param1, 0, 0) catch {};
+            }
         }
     }
 
-    /// Render a FILD command: load sprite from PAK and blit at origin.
-    /// file_ref indexes into the loaded PAK table, param1 is the sprite/resource index.
-    fn renderFieldCommand(self: *MovieRenderer, cmd: movie_mod.FieldCommand) MovieRendererError!void {
-        if (cmd.file_ref >= self.loaded_paks.len) return MovieRendererError.InvalidFileRef;
-        const loaded = self.loaded_paks[cmd.file_ref] orelse return MovieRendererError.InvalidFileRef;
+    /// Build an object table from FILD+SPRI definitions and render via BFOR.
+    fn executeComposition(self: *MovieRenderer, block: movie_mod.ActsBlock) MovieRendererError!void {
+        // Process BFOR commands in order
+        for (block.composition_cmds) |bfor| {
+            if (bfor.isLayerCommand()) {
+                // Layer/clip command — currently a no-op (clip regions deferred)
+                continue;
+            }
 
-        var spr = self.decodeSpriteFromPak(loaded, cmd.param1) catch return MovieRendererError.SpriteDecodeFailed;
+            // flags field references an object_id from FILD or SPRI
+            const ref_id = bfor.flags;
+
+            // Look up in FILD table first
+            if (findFild(block.field_commands, ref_id)) |fild| {
+                self.renderFieldSprite(fild.file_ref, fild.param1, 0, 0) catch {};
+                continue;
+            }
+
+            // Look up in SPRI table
+            if (findSpri(block.sprite_commands, ref_id)) |spri| {
+                self.renderSpriteObject(spri, block.field_commands) catch {};
+                continue;
+            }
+
+            // Object not found — skip silently (may be audio/control object)
+        }
+    }
+
+    /// Render a SPRI object. For types with a FILD reference, looks up the
+    /// referenced FILD to get the PAK file/resource, then blits at the
+    /// position specified by SPRI params.
+    fn renderSpriteObject(self: *MovieRenderer, spri: movie_mod.SpriteCommand, fild_table: []const movie_mod.FieldCommand) MovieRendererError!void {
+        switch (spri.sprite_type) {
+            // Type 0, 1: simple positioned sprite — params[0]=x, params[1]=y
+            0, 1 => {
+                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
+                    // References a FILD object — get PAK file/resource from it
+                    if (findFild(fild_table, spri.ref)) |fild| {
+                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
+                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                    }
+                }
+            },
+            // Types 3, 4, 11, 12, 18, 19, 20: complex animation/text — deferred
+            else => {},
+        }
+    }
+
+    /// Render a sprite from a loaded PAK file at a given position.
+    /// file_ref indexes into the loaded PAK table, resource_idx is the
+    /// resource index within the PAK (ScenePack with RLE sprites).
+    fn renderFieldSprite(self: *MovieRenderer, file_ref: u16, resource_idx: u16, x: i32, y: i32) MovieRendererError!void {
+        if (file_ref >= self.loaded_paks.len) return MovieRendererError.InvalidFileRef;
+        const loaded = self.loaded_paks[file_ref] orelse return MovieRendererError.InvalidFileRef;
+
+        var spr = self.decodeSpriteFromPak(loaded, resource_idx) catch return MovieRendererError.SpriteDecodeFailed;
         defer spr.deinit();
 
-        self.fb.blitSprite(spr, 0, 0);
+        self.fb.blitSprite(spr, x, y);
     }
 
-    /// Render a SPRI command: placeholder until Phase 17.5 rewrites the renderer
-    /// for the scene-graph composition model (BFOR-driven rendering).
-    /// For now, this is a no-op — the real renderer needs BFOR to drive composition.
-    fn renderSpriteCommand(self: *MovieRenderer, cmd: movie_mod.SpriteCommand) MovieRendererError!void {
-        _ = self;
-        _ = cmd;
+    /// Find a FILD command by object_id in the field commands array.
+    fn findFild(fild_table: []const movie_mod.FieldCommand, object_id: u16) ?movie_mod.FieldCommand {
+        for (fild_table) |cmd| {
+            if (cmd.object_id == object_id) return cmd;
+        }
+        return null;
+    }
+
+    /// Find a SPRI command by object_id in the sprite commands array.
+    fn findSpri(spri_table: []const movie_mod.SpriteCommand, object_id: u16) ?movie_mod.SpriteCommand {
+        for (spri_table) |cmd| {
+            if (cmd.object_id == object_id) return cmd;
+        }
+        return null;
     }
 
     /// Decode a sprite from a loaded PAK file.
@@ -314,7 +393,7 @@ test "MovieRenderer.clearScreen resets framebuffer to black" {
     }
 }
 
-test "MovieRenderer.executeActsBlock renders SPRI command to framebuffer" {
+test "MovieRenderer BFOR-driven composition renders referenced FILD object" {
     const allocator = std.testing.allocator;
     var fb = framebuffer_mod.Framebuffer.create();
 
@@ -326,28 +405,100 @@ test "MovieRenderer.executeActsBlock renders SPRI command to framebuffer" {
 
     try renderer.loadPak(0, pak_data);
 
-    // Create an ACTS block with a SPRI command (new packed format)
-    // SPRI rendering is a no-op until Phase 17.5 rewrites the renderer
-    // for BFOR-driven composition. Test that it doesn't crash.
-    const sprite_cmds = [_]movie_mod.SpriteCommand{
+    // FILD object 23 loads sprite from PAK resource 1 (2x2 red sprite)
+    const fild_cmds = [_]movie_mod.FieldCommand{
+        .{ .object_id = 23, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
+    };
+    // BFOR: layer command (0x7FFF), then render object 23
+    const bfor_cmds = [_]movie_mod.BforRecord{
+        .{ .object_id = 7, .flags = movie_mod.BforRecord.LAYER_FLAG, .params = [_]u16{0} ** 10 },
+        .{ .object_id = 9, .flags = 23, .params = [_]u16{0} ** 10 },
+    };
+    try renderer.executeActsBlock(.{
+        .field_commands = &fild_cmds,
+        .sprite_commands = &.{},
+        .composition_cmds = &bfor_cmds,
+    });
+
+    // BFOR record with flags=23 should render FILD object 23's sprite at origin
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(1, 0));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 1));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(1, 1));
+}
+
+test "MovieRenderer BFOR skips unreferenced FILD objects" {
+    const allocator = std.testing.allocator;
+    var fb = framebuffer_mod.Framebuffer.create();
+
+    var renderer = try MovieRenderer.init(allocator, &fb, 1);
+    defer renderer.deinit();
+
+    const pak_data = try makeTestMoviePak(allocator);
+    defer allocator.free(pak_data);
+
+    try renderer.loadPak(0, pak_data);
+
+    // FILD object 23 has sprite data, but BFOR only has a layer command (no object refs)
+    const fild_cmds = [_]movie_mod.FieldCommand{
+        .{ .object_id = 23, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
+    };
+    const bfor_cmds = [_]movie_mod.BforRecord{
+        .{ .object_id = 7, .flags = movie_mod.BforRecord.LAYER_FLAG, .params = [_]u16{0} ** 10 },
+    };
+    try renderer.executeActsBlock(.{
+        .field_commands = &fild_cmds,
+        .sprite_commands = &.{},
+        .composition_cmds = &bfor_cmds,
+    });
+
+    // BFOR has no object references, so nothing should be rendered
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(0, 0));
+}
+
+test "MovieRenderer BFOR renders SPRI type 0 at position from FILD ref" {
+    const allocator = std.testing.allocator;
+    var fb = framebuffer_mod.Framebuffer.create();
+
+    var renderer = try MovieRenderer.init(allocator, &fb, 2);
+    defer renderer.deinit();
+
+    const pak_data = try makeTestMoviePak(allocator);
+    defer allocator.free(pak_data);
+
+    try renderer.loadPak(0, pak_data);
+
+    // FILD object 25 loads from PAK resource 1 (2x2 red sprite)
+    const fild_cmds = [_]movie_mod.FieldCommand{
+        .{ .object_id = 25, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
+    };
+    // SPRI object 39 references FILD 25, type 0, positioned at (10, 20)
+    const spri_cmds = [_]movie_mod.SpriteCommand{
         .{
-            .object_id = 35,
-            .ref = 23,
-            .sprite_type = 1,
-            .params = [_]u16{ 0, 25, 0, 0, 0, 0, 0, 0, 0 },
+            .object_id = 39,
+            .ref = 25,
+            .sprite_type = 0,
+            .params = [_]u16{ 10, 20, 0, 0, 0, 0, 0, 0, 0 },
             .param_count = 3,
         },
     };
-    const block = movie_mod.ActsBlock{
-        .field_commands = &.{},
-        .sprite_commands = &sprite_cmds,
-        .composition_cmds = &.{},
+    // BFOR references SPRI object 39
+    const bfor_cmds = [_]movie_mod.BforRecord{
+        .{ .object_id = 11, .flags = 39, .params = [_]u16{0} ** 10 },
     };
+    try renderer.executeActsBlock(.{
+        .field_commands = &fild_cmds,
+        .sprite_commands = &spri_cmds,
+        .composition_cmds = &bfor_cmds,
+    });
 
-    try renderer.executeActsBlock(block);
-
-    // SPRI rendering is currently a no-op (deferred to Phase 17.5),
-    // so just verify the call doesn't crash. FILD rendering still works.
+    // SPRI type 0 renders FILD 25's sprite at (10, 20)
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(10, 20));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(11, 20));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(10, 21));
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(11, 21));
+    // Origin should still be black (sprite is at 10,20 not 0,0)
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(0, 0));
 }
 
 test "MovieRenderer delta compositing preserves prior frame content" {
@@ -362,28 +513,28 @@ test "MovieRenderer delta compositing preserves prior frame content" {
 
     try renderer.loadPak(0, pak_data);
 
-    // Frame 1: sprite at (10, 10)
-    const cmds1 = [_]movie_mod.SpriteCommand{
-        .{ .object_id = 35, .ref = 23, .sprite_type = 1, .params = [_]u16{ 0, 25, 0, 0, 0, 0, 0, 0, 0 }, .param_count = 3 },
+    // Frame 1: FILD renders 2x2 sprite at origin (no BFOR = direct FILD mode)
+    const fild1 = [_]movie_mod.FieldCommand{
+        .{ .object_id = 1, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
     };
     try renderer.executeActsBlock(.{
-        .field_commands = &.{},
-        .sprite_commands = &cmds1,
+        .field_commands = &fild1,
+        .sprite_commands = &.{},
         .composition_cmds = &.{},
     });
 
-    // Frame 2: sprite at (20, 20) — should NOT erase the one at (10, 10)
-    const cmds2 = [_]movie_mod.SpriteCommand{
-        .{ .object_id = 36, .ref = 24, .sprite_type = 1, .params = [_]u16{ 0, 25, 0, 0, 0, 0, 0, 0, 0 }, .param_count = 3 },
-    };
+    // Verify frame 1 rendered
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0));
+
+    // Frame 2: empty block should NOT erase frame 1 content
     try renderer.executeActsBlock(.{
         .field_commands = &.{},
-        .sprite_commands = &cmds2,
+        .sprite_commands = &.{},
         .composition_cmds = &.{},
     });
 
-    // SPRI rendering is currently a no-op (deferred to Phase 17.5),
-    // so just verify executeActsBlock doesn't crash with multiple blocks.
+    // Prior frame content should be preserved (delta compositing)
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0));
 }
 
 test "MovieRenderer CLRC clears between scenes" {
@@ -392,21 +543,6 @@ test "MovieRenderer CLRC clears between scenes" {
 
     var renderer = try MovieRenderer.init(allocator, &fb, 1);
     defer renderer.deinit();
-
-    const pak_data = try makeTestMoviePak(allocator);
-    defer allocator.free(pak_data);
-
-    try renderer.loadPak(0, pak_data);
-
-    // Render a sprite
-    const cmds = [_]movie_mod.SpriteCommand{
-        .{ .object_id = 35, .ref = 23, .sprite_type = 1, .params = [_]u16{ 0, 25, 0, 0, 0, 0, 0, 0, 0 }, .param_count = 3 },
-    };
-    try renderer.executeActsBlock(.{
-        .field_commands = &.{},
-        .sprite_commands = &cmds,
-        .composition_cmds = &.{},
-    });
 
     // Fill pixel manually to test CLRC
     fb.setPixel(10, 10, 5);
@@ -430,18 +566,20 @@ test "MovieRenderer.executeScript processes clear_screen flag and ACTS blocks" {
 
     try renderer.loadPak(0, pak_data);
 
-    // Build a script with clear_screen=true and one ACTS block
-    const sprite_cmds = [_]movie_mod.SpriteCommand{
-        .{ .object_id = 37, .ref = 25, .sprite_type = 1, .params = [_]u16{ 0, 25, 0, 0, 0, 0, 0, 0, 0 }, .param_count = 3 },
+    // Build a script with clear_screen=true and one ACTS block using BFOR
+    const fild_cmds = [_]movie_mod.FieldCommand{
+        .{ .object_id = 23, .file_ref = 0, .param1 = 1, .param2 = 0, .param3 = 0 },
+    };
+    const bfor_cmds = [_]movie_mod.BforRecord{
+        .{ .object_id = 9, .flags = 23, .params = [_]u16{0} ** 10 },
     };
     const acts_blocks = [_]movie_mod.ActsBlock{
         .{
-            .field_commands = &.{},
-            .sprite_commands = &sprite_cmds,
-            .composition_cmds = &.{},
+            .field_commands = &fild_cmds,
+            .sprite_commands = &.{},
+            .composition_cmds = &bfor_cmds,
         },
     };
-    // We construct a MovieScript-like structure for executeScript
     const script = movie_mod.MovieScript{
         .clear_screen = true,
         .frame_speed_ticks = 10,
@@ -452,9 +590,9 @@ test "MovieRenderer.executeScript processes clear_screen flag and ACTS blocks" {
 
     try renderer.executeScript(script);
 
-    // Pre-fill should be cleared (CLRC)
-    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(0, 0)); // was 42, now cleared
-    // SPRI rendering is no-op (Phase 17.5), just verify no crash
+    // Pre-fill at (5,5) should be cleared (CLRC), sprite renders at (0,0)
+    try std.testing.expectEqual(@as(u8, 0), fb.getPixel(5, 5)); // was 42, now cleared
+    try std.testing.expectEqual(@as(u8, 5), fb.getPixel(0, 0)); // sprite rendered via BFOR
 }
 
 test "MovieRenderer.executeActsBlock renders FILD command" {

@@ -905,14 +905,18 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Renamed layer_orders → composition_cmds throughout codebase
   - Verified against real MID1A.IFF: 8 records, flags=0x7FFF for layers, object refs for FILD links
 
-- [ ] **17.5 Rewrite MovieRenderer for scene-graph composition**
+- [x] **17.5 Rewrite MovieRenderer for scene-graph composition**
   - Current renderer directly blits from FILD/SPRI commands (wrong model)
   - Real model: FILD/SPRI define objects, BFOR drives rendering order
   - Build an object table from FILD+SPRI definitions (keyed by object_id)
   - BFOR commands reference object_ids to composite the frame
-  - RED: Test renderer with MID1A.IFF scene data produces non-black pixels
-  - GREEN: Implement object table + BFOR-driven composition pipeline
-  - Verify palette extraction still works from PAK resource 0
+  - BFOR records with flags=0x7FFF are layer/clip commands (viewport regions in params[0..3])
+  - BFOR records with flags != 0x7FFF reference FILD/SPRI objects by object_id
+  - SPRI type 0/1 renders referenced FILD sprite at (params[0], params[1]) position
+  - Falls back to direct FILD rendering when no BFOR commands present
+  - RED: Test BFOR-driven rendering, BFOR skip unreferenced objects, SPRI type 0 positioning
+  - GREEN: Implement ObjectEntry union, executeComposition, findFild/findSpri lookups
+  - Verified palette extraction still works, integration test produces non-black pixels
 
 - [ ] **17.6 Wire movie audio layers**
   - movie_music.zig, movie_voice.zig, movie_sfx.zig exist but are not connected
