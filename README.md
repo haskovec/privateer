@@ -49,8 +49,7 @@ privateer/
 │   │   ├── pal.zig                # PAL palette file parser (256-color VGA palettes)
 │   │   ├── voc.zig                # VOC audio loader (Creative Voice File, 8-bit PCM)
 │   │   ├── vpk.zig                # VPK/VPF voice pack decompressor (LZW-compressed VOC clips)
-│   │   ├── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
-│   │   └── movie.zig              # FORM:MOVI movie script parser (intro cinematic IFF sequences)
+│   │   └── music.zig              # Music format loaders (ADL/GEN XMIDI, Standard MIDI)
 │   │
 │   ├── render/                    # Rendering pipeline & display
 │   │   ├── framebuffer.zig        # Palette-based software renderer (320x200 indexed → RGBA → SDL texture)
@@ -75,6 +74,7 @@ privateer/
 │   │   └── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │
 │   ├── movie/                     # Intro movie/cinematic system
+│   │   ├── movie.zig              # FORM:MOVI movie script parser (intro cinematic IFF sequences)
 │   │   ├── opening.zig            # Opening sequence playlist parser (GFMIDGAM.IFF + OPENING.PAK scene list)
 │   │   ├── movie_text.zig         # Movie text overlay system (MIDTEXT.PAK string parser, centered text rendering)
 │   │   ├── movie_renderer.zig     # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)

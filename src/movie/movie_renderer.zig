@@ -14,7 +14,7 @@
 //! Resources 1+ are ScenePack sprite containers.
 
 const std = @import("std");
-const movie_mod = @import("../formats/movie.zig");
+const movie_mod = @import("movie.zig");
 const pak_mod = @import("../formats/pak.zig");
 const pal_mod = @import("../formats/pal.zig");
 const scene_renderer = @import("../render/scene_renderer.zig");

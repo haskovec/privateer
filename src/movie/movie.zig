@@ -14,7 +14,7 @@
 //!     BFOR — background/foreground layer ordering
 
 const std = @import("std");
-const iff = @import("iff.zig");
+const iff = @import("../formats/iff.zig");
 
 pub const MovieError = error{
     /// Not a FORM:MOVI container.

@@ -19,7 +19,6 @@ pub const pak = @import("formats/pak.zig");
 pub const voc = @import("formats/voc.zig");
 pub const vpk = @import("formats/vpk.zig");
 pub const music = @import("formats/music.zig");
-pub const movie = @import("formats/movie.zig");
 
 // Rendering pipeline
 pub const png = @import("render/png.zig");
@@ -38,6 +37,7 @@ pub const click_region = @import("game/click_region.zig");
 pub const game_state = @import("game/game_state.zig");
 pub const midgame = @import("game/midgame.zig");
 // Movie/cinematic system
+pub const movie = @import("movie/movie.zig");
 pub const opening = @import("movie/opening.zig");
 pub const movie_text = @import("movie/movie_text.zig");
 pub const movie_renderer = @import("movie/movie_renderer.zig");
