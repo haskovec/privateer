@@ -22,9 +22,9 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
 Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) complete.
-Phase 17 (MOVI Parser & Renderer Rewrite) complete (17.1-17.8) — reverse engineering revealed the FORM:MOVI
+Phase 17 (MOVI Parser & Renderer Rewrite) in progress (17.1-17.9 done) — reverse engineering revealed the FORM:MOVI
 format uses a scene-graph composition model with polymorphic file slots, BFOR-driven composition,
-and SPRI type handlers for text overlays, animated sprites, and combat scenes.
+opaque/transparent blit modes, and per-scene voice clip references.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout

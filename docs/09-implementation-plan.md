@@ -943,6 +943,19 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Wire SFX playback via SfxBank during multi-ACTS combat scenes
   - Fix voice clip interleaving (pirate/player alternation per dialogue scene)
 
+- [x] **17.9 Fix FILD resource index, opaque backgrounds, and render-once**
+  - CRITICAL: FILD param1 is a type indicator (2=bg, 3=overlay), NOT resource index.
+    Actual sprite resource = param3 + 1 (skip palette at resource 0).
+    This single fix changed pixel count from 2,359 to 230,623 across all scenes.
+  - Opaque background blit: backgrounds (param1=2) write ALL pixels including
+    palette index 0 (black), fixing cockpit bleed-through on scene transitions.
+  - Render-once optimization: each ACTS block renders once to framebuffer instead
+    of re-decoding sprites 60 times/second. Eliminates ~59 redundant PAK decodes/sec.
+  - Per-scene voice clips: voice system reads VOC filenames from each scene's FILE
+    slots instead of sequential indexing (mid1c1 plays pir1mg1-3, mid1c2 plays pc_1mg1-2, etc.)
+  - Self-ref SPRI type 4 skipped (animation keyframes need interpolation, static
+    rendering at wrong position overwrites background)
+
 ---
 
 ## Future Considerations (Not in Current Scope)
