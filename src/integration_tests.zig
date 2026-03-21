@@ -3031,3 +3031,52 @@ test "integration: scene click regions have proper bounds from sprite headers" {
     }
     try std.testing.expect(has_sized_region);
 }
+
+// --- Phase 15: Title screen integration tests ---
+
+test "integration: title screen uses OPTSHPS.PAK scene pack 0 with OPTPALS palette 0" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    // Load OPTSHPS.PAK and verify scene pack 0 has a valid 320x200 background
+    const shps_entry = tre_index.findEntry(room_assets.OPTSHPS_PAK) orelse
+        return error.FileNotFound;
+    const shps_data = try tre.extractFileData(loaded.tre_data, shps_entry.offset, shps_entry.size);
+    var shps_pak = try pak.parse(allocator, shps_data);
+    defer shps_pak.deinit();
+
+    const resource0 = try shps_pak.getResource(0);
+    var pack0 = try scene_renderer.parseScenePack(allocator, resource0);
+    defer pack0.deinit();
+
+    // Scene pack 0 sprite 0 should be the title screen starfield (320x200)
+    try std.testing.expect(pack0.spriteCount() > 0);
+    var title_bg = try pack0.decodeSprite(allocator, 0);
+    defer title_bg.deinit();
+    try std.testing.expectEqual(@as(u16, 320), title_bg.width);
+    try std.testing.expectEqual(@as(u16, 200), title_bg.height);
+
+    // Palette index 0 (background) should be black in a space scene
+    try std.testing.expectEqual(@as(u8, 0), title_bg.pixels[0]);
+
+    // Load OPTPALS.PAK and verify palette 0 exists and has black at index 0
+    const pals_entry = tre_index.findEntry(room_assets.OPTPALS_PAK) orelse
+        return error.FileNotFound;
+    const pals_data = try tre.extractFileData(loaded.tre_data, pals_entry.offset, pals_entry.size);
+    var pals_pak = try pak.parse(allocator, pals_data);
+    defer pals_pak.deinit();
+
+    try std.testing.expect(pals_pak.resourceCount() > 0);
+    const pal0_data = try pals_pak.getResource(0);
+    // Palette resource should be 772 bytes (4 header + 256*3 RGB)
+    try std.testing.expectEqual(@as(usize, pal.PAL_FILE_SIZE), pal0_data.len);
+    const title_pal = try pal.parse(pal0_data);
+    // Color 0 should be black (space background)
+    try std.testing.expectEqual(@as(u8, 0), title_pal.colors[0].r);
+    try std.testing.expectEqual(@as(u8, 0), title_pal.colors[0].g);
+    try std.testing.expectEqual(@as(u8, 0), title_pal.colors[0].b);
+}

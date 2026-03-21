@@ -83,6 +83,17 @@ fn windowToFb(win: *const privateer.window.Window, wx: f32, wy: f32, vp_mode: vi
     };
 }
 
+/// Load a specific palette from OPTPALS.PAK by resource index.
+fn loadOptpalsPalette(tre_data: []const u8, index: *const tre.TreIndex, pal_idx: usize) ?pal.Palette {
+    const entry = index.findEntry("OPTPALS.PAK") orelse return null;
+    const file_data = tre.extractFileData(tre_data, entry.offset, entry.size) catch return null;
+    var pak_file = pak.parse(std.heap.page_allocator, file_data) catch return null;
+    defer pak_file.deinit();
+    const pal_data = pak_file.getResource(pal_idx) catch return null;
+    if (pal_data.len != pal.PAL_FILE_SIZE) return null;
+    return pal.parse(pal_data) catch null;
+}
+
 /// Load a scene background sprite from a PAK file in the TRE.
 fn loadSceneBackground(allocator: std.mem.Allocator, tre_data: []const u8, index: *const tre.TreIndex, pak_name: []const u8, resource_idx: usize) !struct { sprite: sprite_mod.Sprite, palette: ?pal.Palette } {
     const entry = index.findEntry(pak_name) orelse return error.FileNotFound;
@@ -319,28 +330,24 @@ fn updateTitle(state: *GameState) void {
         const view = scene_renderer.SceneView{ .background = bg };
         scene_renderer.renderScene(&state.fb, view);
 
-        // Render scaled title menu text over the background
+        // Render title menu: NEW / LOAD / OPTIONS / QUIT at bottom of screen
         if (state.title_font) |font| {
             const active_pal = if (state.title_palette) |*tp| tp else &state.palette;
             const text_color = findBrightestColor(active_pal);
             const scale: u16 = 1;
 
-            const menu_items = [_][]const u8{
-                "PLAY PRIVATEER",
-                "LOAD A SAVED GAME",
-            };
-            const center_x: u16 = framebuffer_mod.WIDTH / 2;
-            const scaled_line_h = font.line_height * scale;
-            const line_spacing: u16 = scaled_line_h + 4;
-            const total_h: u16 = @intCast(menu_items.len * line_spacing);
-            const start_y: u16 = (framebuffer_mod.HEIGHT -| total_h) / 2 + 30;
+            const menu_items = [_][]const u8{ "NEW", "LOAD", "OPTIONS", "QUIT" };
+            const menu_y: u16 = framebuffer_mod.HEIGHT - font.line_height * scale - 6;
 
-            var y: u16 = start_y;
-            for (menu_items) |item| {
+            // Distribute items evenly across the screen width
+            const total_w: u16 = framebuffer_mod.WIDTH;
+            const spacing = total_w / @as(u16, menu_items.len);
+
+            for (menu_items, 0..) |item, i| {
                 const text_w = font.measureTextScaled(item, scale);
-                const x = center_x -| (text_w / 2);
-                _ = font.drawTextScaled(&state.fb, x, y, item, text_color, scale);
-                y += line_spacing;
+                const region_center = spacing / 2 + spacing * @as(u16, @intCast(i));
+                const x = region_center -| (text_w / 2);
+                _ = font.drawTextScaled(&state.fb, x, menu_y, item, text_color, scale);
             }
         }
 
@@ -362,24 +369,59 @@ fn updateTitle(state: *GameState) void {
         state.viewport_mode,
     );
 
-    // Mouse click or Enter/Space/Escape transitions to the game (title → loading → landed)
-    // Ignore modifier keys (Cmd/Shift/etc.) so screenshot shortcuts don't advance the title
+    // Title menu input handling
+    // Keyboard shortcuts: N=New, L=Load, O=Options, Q=Quit, Enter/Space=New
     const key = state.window.key_pressed;
-    const is_action_key = (key == privateer.sdl.raw.SDLK_RETURN or
-        key == privateer.sdl.raw.SDLK_SPACE or
-        key == privateer.sdl.raw.SDLK_ESCAPE or
-        key == privateer.sdl.raw.SDLK_KP_ENTER);
-    if (state.window.mouse_clicked or is_action_key) {
-        state.state_machine.transition(.loading) catch return;
-        state.state_machine.transition(.landed) catch return;
+    var action: enum { none, new_game, load_game, options, quit } = .none;
 
-        // Load the first room/scene from gameflow as the initial landing
-        if (state.gameflow.rooms.len > 0) {
-            const room = state.gameflow.rooms[0];
-            if (room.scenes.len > 0) {
-                loadLandingScene(state, room.info, room.scenes[0].info);
+    if (key == privateer.sdl.raw.SDLK_N or key == privateer.sdl.raw.SDLK_RETURN or
+        key == privateer.sdl.raw.SDLK_SPACE or key == privateer.sdl.raw.SDLK_KP_ENTER)
+    {
+        action = .new_game;
+    } else if (key == privateer.sdl.raw.SDLK_L) {
+        action = .load_game;
+    } else if (key == privateer.sdl.raw.SDLK_O) {
+        action = .options;
+    } else if (key == privateer.sdl.raw.SDLK_Q or key == privateer.sdl.raw.SDLK_ESCAPE) {
+        action = .quit;
+    } else if (state.window.mouse_clicked) {
+        // Click in the bottom menu region: detect which item was hit
+        const fb_pos = windowToFb(state.window, state.window.mouse_x, state.window.mouse_y, state.viewport_mode);
+        if (fb_pos.y >= framebuffer_mod.HEIGHT - 20) {
+            const quarter = framebuffer_mod.WIDTH / 4;
+            if (fb_pos.x < quarter) {
+                action = .new_game;
+            } else if (fb_pos.x < quarter * 2) {
+                action = .load_game;
+            } else if (fb_pos.x < quarter * 3) {
+                action = .options;
+            } else {
+                action = .quit;
             }
+        } else {
+            // Click anywhere else starts a new game (legacy behavior)
+            action = .new_game;
         }
+    }
+
+    switch (action) {
+        .new_game, .load_game => {
+            state.state_machine.transition(.loading) catch return;
+            state.state_machine.transition(.landed) catch return;
+            if (state.gameflow.rooms.len > 0) {
+                const room = state.gameflow.rooms[0];
+                if (room.scenes.len > 0) {
+                    loadLandingScene(state, room.info, room.scenes[0].info);
+                }
+            }
+        },
+        .options => {
+            state.state_machine.transition(.options) catch return;
+        },
+        .quit => {
+            state.window.quit_requested = true;
+        },
+        .none => {},
     }
 }
 
@@ -565,14 +607,20 @@ fn initGameState(
     var fb = framebuffer_mod.Framebuffer.create();
     try fb.createTexture(win.renderer);
 
-    // Try to load a title screen from OPTSHPS.PAK
+    // Load title screen from OPTSHPS.PAK scene pack 0 (starfield + overlays)
+    // with OPTPALS.PAK palette 0 (the correct title screen palette).
     var title_bg: ?sprite_mod.Sprite = null;
     var title_palette: ?pal.Palette = null;
-    const title_result = loadSceneBackground(allocator, tre_data, &tre_index, "OPTSHPS.PAK", 1) catch null;
+    const title_result = loadSceneBackground(allocator, tre_data, &tre_index, "OPTSHPS.PAK", 0) catch null;
     if (title_result) |result| {
         title_bg = result.sprite;
-        title_palette = result.palette;
-        std.debug.print("Title screen loaded from OPTSHPS.PAK\n", .{});
+        // Prefer OPTPALS.PAK palette 0 over the scene pack's embedded palette
+        if (loadOptpalsPalette(tre_data, &tre_index, 0)) |title_pal| {
+            title_palette = title_pal;
+        } else {
+            title_palette = result.palette;
+        }
+        std.debug.print("Title screen loaded from OPTSHPS.PAK scene pack 0\n", .{});
     } else {
         std.debug.print("Warning: Could not load title screen\n", .{});
     }
