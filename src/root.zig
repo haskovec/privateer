@@ -40,6 +40,7 @@ pub const midgame = @import("game/midgame.zig");
 pub const opening = @import("game/opening.zig");
 pub const movie_text = @import("game/movie_text.zig");
 pub const movie_renderer = @import("game/movie_renderer.zig");
+pub const movie_music = @import("game/movie_music.zig");
 pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");

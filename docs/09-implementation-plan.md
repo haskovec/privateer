@@ -813,7 +813,7 @@ shows this timeline:
   - RED: Test MID1.PAK resource 0 is a valid 772-byte palette
   - GREEN: Implement MovieRenderer that executes ACTS commands frame-by-frame
 
-- [ ] **16.5 Movie music playback**
+- [x] **16.5 Movie music playback**
   - Load OPENING.ADL or OPENING.GEN from TRE via existing `music.zig` parser
   - Decode XMIDI events and render to PCM using existing `MusicPlayer`
   - Start music when FILE chunk index 4 is referenced by the movie script

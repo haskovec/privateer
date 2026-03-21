@@ -33,6 +33,8 @@ const text = @import("render/text.zig");
 const opening = @import("game/opening.zig");
 const movie_text = @import("game/movie_text.zig");
 const movie_renderer = @import("game/movie_renderer.zig");
+const movie_music = @import("game/movie_music.zig");
+const music_player = @import("audio/music_player.zig");
 
 const app_config = @import("config.zig");
 
@@ -3294,4 +3296,72 @@ test "integration: MovieRenderer loads MID1.PAK and renders SPRI command from MI
         if (p != 0) non_black += 1;
     }
     std.debug.print("MovieRenderer: rendered {d} non-black pixels from MID1A.IFF first ACTS block\n", .{non_black});
+}
+
+test "integration: OPENING.GEN parses to valid XMIDI sequence with EVNT data" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Find OPENING.GEN in the TRE (DATA/SOUND/OPENING.GEN)
+    const gen_data = try findTreFileByPath(allocator, loaded.tre_data, "SOUND", "OPENING.GEN") orelse {
+        std.debug.print("OPENING.GEN not found in TRE, skipping\n", .{});
+        return;
+    };
+
+    // Should be recognized as XMIDI
+    try std.testing.expect(music.isXmidi(gen_data));
+
+    // Parse as music file
+    var music_file = try music.parse(allocator, gen_data);
+    defer music_file.deinit();
+
+    // Verify format and structure
+    try std.testing.expectEqual(music.MusicFormat.xmidi, music_file.format);
+    try std.testing.expect(music_file.sequence_count > 0);
+    try std.testing.expect(music_file.sequences.len > 0);
+
+    // First sequence should have EVNT data
+    const seq = music_file.sequences[0];
+    try std.testing.expect(seq.event_data.len > 0);
+
+    std.debug.print("OPENING.GEN: {d} sequences, first EVNT = {d} bytes, {d} timbres\n", .{
+        music_file.sequences.len,
+        seq.event_data.len,
+        seq.timbres.len,
+    });
+}
+
+test "integration: OPENING.GEN decodes to PCM audio via movie_music" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Find OPENING.GEN in the TRE
+    const gen_data = try findTreFileByPath(allocator, loaded.tre_data, "SOUND", "OPENING.GEN") orelse {
+        std.debug.print("OPENING.GEN not found in TRE, skipping\n", .{});
+        return;
+    };
+
+    // Load and render to PCM
+    const pcm = try movie_music.loadOpeningMusic(allocator, gen_data);
+    defer allocator.free(pcm);
+
+    // PCM should be non-empty
+    try std.testing.expect(pcm.len > 0);
+
+    // Should contain non-silence samples (actual music, not just 128/silence)
+    var non_silence: usize = 0;
+    for (pcm) |sample| {
+        if (sample != 128) non_silence += 1;
+    }
+    try std.testing.expect(non_silence > 0);
+
+    // Calculate duration at 22050 Hz
+    const duration_secs = @as(f64, @floatFromInt(pcm.len)) / @as(f64, @floatFromInt(music_player.MusicPlayer.SAMPLE_RATE));
+    std.debug.print("OPENING.GEN → PCM: {d} samples ({d:.1} seconds), {d} non-silence\n", .{
+        pcm.len,
+        duration_secs,
+        non_silence,
+    });
 }

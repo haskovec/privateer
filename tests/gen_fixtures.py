@@ -823,6 +823,34 @@ def gen_xmidi_file():
 
     write("test_xmidi_no_timb.bin", root3)
 
+    # --- Fixture 5: XMIDI with actual note events (for PCM rendering tests) ---
+    # EVNT data: two notes with delays, then end-of-track
+    # Note On ch0: note 60 (C4), vel 100, dur 48
+    # Delay 48 ticks
+    # Note On ch0: note 64 (E4), vel 80, dur 48
+    # End of track
+    evnt5_data = bytes([
+        0x90, 60, 100, 48,   # Note On C4, velocity 100, duration 48
+        48,                    # Delay 48 ticks
+        0x90, 64, 80, 48,    # Note On E4, velocity 80, duration 48
+        0xFF, 0x2F, 0x00,    # End of track
+    ])
+    evnt5_chunk = make_iff_chunk(b"EVNT", evnt5_data)
+
+    # TIMB: 1 timbre (GM piano, patch 0, bank 0)
+    timb5_data = struct.pack('<H', 1) + bytes([0, 0])
+    timb5_chunk = make_iff_chunk(b"TIMB", timb5_data)
+
+    xmid5_content = b"XMID" + timb5_chunk + evnt5_chunk
+    xmid5_form = b"FORM" + struct.pack('>I', len(xmid5_content)) + xmid5_content
+    cat5_content = b"XMID" + xmid5_form
+    cat5 = b"CAT " + struct.pack('>I', len(cat5_content)) + cat5_content
+    info5_chunk = make_iff_chunk(b"INFO", struct.pack('<H', 1))
+    xdir5_content = b"XDIR" + info5_chunk + cat5
+    root5 = b"FORM" + struct.pack('>I', len(xdir5_content)) + xdir5_content
+
+    write("test_xmidi_notes.bin", root5)
+
     # --- Fixture 4: Standard MIDI file ---
     # MThd: format=1, tracks=1, division=120 ticks/quarter-note
     mthd_data = struct.pack('>HHH', 1, 1, 120)

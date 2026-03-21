@@ -21,7 +21,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 ## Project Status
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
-Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.4 done).
+Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.5 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -61,7 +61,7 @@ privateer/
 │   │   ├── render.zig             # Sprite rendering pipeline (palette-indexed → RGBA → PNG)
 │   │   ├── scene_renderer.zig     # Scene renderer (PAK sprite backgrounds, compositing pipeline)
 │   │   ├── png.zig                # Minimal PNG encoder (RGBA → PNG, uncompressed deflate)
-│   │   └── kitty_graphics.zig    # Kitty graphics protocol encoder (raw RGBA f=32, cell sizing, Ghostty/Kitty/WezTerm/Konsole)
+│   │   └── kitty_graphics.zig     # Kitty graphics protocol encoder (raw RGBA f=32, cell sizing, Ghostty/Kitty/WezTerm/Konsole)
 │   │
 │   ├── game/                      # World data & game flow
 │   │   ├── universe.zig           # Universe data loader (QUADRANT.IFF: quadrants, systems, coordinates, names)
@@ -75,7 +75,8 @@ privateer/
 │   │   ├── midgame.zig            # Midgame animation sequences (landing/launch/jump/death from PAK data)
 │   │   ├── opening.zig            # Opening sequence playlist parser (GFMIDGAM.IFF + OPENING.PAK scene list)
 │   │   ├── movie_text.zig         # Movie text overlay system (MIDTEXT.PAK string parser, centered text rendering)
-│   │   └── movie_renderer.zig    # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)
+│   │   ├── movie_renderer.zig     # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)
+│   │   └── movie_music.zig        # Movie music system (OPENING.GEN XMIDI loader, PCM rendering for intro cinematic music)
 │   │
 │   ├── persistence/               # Save/load & serialization
 │   │   ├── save_game.zig          # Save game serialization (binary format, round-trip encode/decode)
@@ -154,9 +155,9 @@ privateer/
 │       ├── palette_viewer.zig     # Palette viewer (256-color grid → PNG swatch images)
 │       └── macos_bundle.zig       # macOS .app bundle validator (structure checks, Info.plist validation)
 │
-├── macos/                            # macOS .app bundle support
-│   ├── Info.plist                    # Application metadata (CFBundle keys, version, icon)
-│   └── bundle.sh                     # Bundle creation script (native or universal binary)
+├── macos/                         # macOS .app bundle support
+│   ├── Info.plist                 # Application metadata (CFBundle keys, version, icon)
+│   └── bundle.sh                  # Bundle creation script (native or universal binary)
 ├── tests/
 │   ├── gen_fixtures.py            # Python script to generate binary test fixtures
 │   └── fixtures/                  # Binary test data (ISO, TRE, IFF samples)
