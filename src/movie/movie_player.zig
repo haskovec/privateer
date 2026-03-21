@@ -230,6 +230,7 @@ pub const MoviePlayer = struct {
     script: ?movie_mod.MovieScript,
     renderer: ?movie_renderer_mod.MovieRenderer,
     current_acts_idx: usize,
+    acts_rendered: bool,
 
     // Timing: integer ratio accumulator for DOS tick → game frame conversion.
     // Each game frame adds DOS_TICK_HZ to tick_accum.
@@ -272,6 +273,7 @@ pub const MoviePlayer = struct {
             .script = null,
             .renderer = null,
             .current_acts_idx = 0,
+            .acts_rendered = false,
             .tick_accum = 0,
             .tick_threshold = 0,
             .tre_data = tre_data,
@@ -357,11 +359,14 @@ pub const MoviePlayer = struct {
             return;
         });
 
-        // Execute current ACTS block (render sprites to framebuffer)
-        if (self.current_acts_idx < script.acts_blocks.len) {
+        // Render current ACTS block ONCE (sprites are decoded from PAK each time,
+        // so re-rendering every frame is very expensive). The framebuffer persists
+        // between frames, so we only need to render when the ACTS block changes.
+        if (!self.acts_rendered and self.current_acts_idx < script.acts_blocks.len) {
             renderer.executeActsBlock(script.acts_blocks[self.current_acts_idx]) catch |err| {
                 std.debug.print("  ACTS[{d}] render error: {}\n", .{ self.current_acts_idx, err });
             };
+            self.acts_rendered = true;
         }
 
         // Advance timing
@@ -369,6 +374,7 @@ pub const MoviePlayer = struct {
         if (self.tick_threshold > 0 and self.tick_accum >= self.tick_threshold) {
             self.tick_accum -= self.tick_threshold;
             self.current_acts_idx += 1;
+            self.acts_rendered = false; // Next ACTS block needs rendering
 
             // Trigger SFX when ACTS block advances in combat scenes
             if (self.audio) |*a| {
@@ -406,6 +412,7 @@ pub const MoviePlayer = struct {
 
         self.current_scene_idx += 1;
         self.current_acts_idx = 0;
+        self.acts_rendered = false;
         self.tick_accum = 0;
 
         if (self.current_scene_idx >= self.sequence.sceneCount()) {
