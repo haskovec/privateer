@@ -2410,6 +2410,102 @@ def gen_midtext():
     write("test_midtext.bin", bytes(data))
 
 
+def gen_soundfx_pak():
+    """Generate test fixture for SOUNDFX.PAK (nested PAK with VOC sound resources).
+
+    SOUNDFX.PAK is a nested PAK structure:
+        Outer PAK: file_size + 1 E0 entry pointing to offset 8
+        Inner PAK: file_size + N E0 entries, each containing a VOC file
+
+    Test fixture has 3 VOC sound resources in the inner PAK.
+    """
+    def make_voc(samples):
+        """Build a minimal VOC file from PCM samples."""
+        voc_data = bytearray()
+        voc_data += b"Creative Voice File\x1a"       # 20 bytes
+        voc_data += struct.pack('<H', 26)             # data offset
+        voc_data += struct.pack('<H', 0x010A)         # version 1.10
+        voc_data += struct.pack('<H', (~0x010A + 0x1234) & 0xFFFF)
+        # Sound data block (type 1)
+        block_size = 2 + len(samples)
+        voc_data += bytes([0x01])
+        voc_data += struct.pack('<I', block_size)[:3]
+        freq_divisor = 256 - (1000000 // 11025)       # ~165 = 11025 Hz
+        voc_data += bytes([freq_divisor, 0x00])        # freq + codec
+        voc_data += samples
+        voc_data += bytes([0x00])                      # terminator
+        return bytes(voc_data)
+
+    voc0 = make_voc(bytes([128, 160, 192, 224, 255, 224, 192, 160]))  # 8 samples
+    voc1 = make_voc(bytes([128, 96, 64, 32, 0, 32, 64, 96]))          # 8 samples
+    voc2 = make_voc(bytes([100, 120, 140, 160]))                       # 4 samples
+
+    # Build inner PAK: [file_size(4)] [3 entries(12)] [terminator(4)] [voc0] [voc1] [voc2]
+    inner_header = 4 + 3 * 4 + 4  # 20 bytes
+    inner_off0 = inner_header
+    inner_off1 = inner_off0 + len(voc0)
+    inner_off2 = inner_off1 + len(voc1)
+    inner_total = inner_off2 + len(voc2)
+
+    inner = bytearray()
+    inner += struct.pack('<I', inner_total)
+    inner += bytes([inner_off0 & 0xFF, (inner_off0 >> 8) & 0xFF, (inner_off0 >> 16) & 0xFF, 0xE0])
+    inner += bytes([inner_off1 & 0xFF, (inner_off1 >> 8) & 0xFF, (inner_off1 >> 16) & 0xFF, 0xE0])
+    inner += bytes([inner_off2 & 0xFF, (inner_off2 >> 8) & 0xFF, (inner_off2 >> 16) & 0xFF, 0xE0])
+    inner += bytes([0, 0, 0, 0])
+    inner += voc0
+    inner += voc1
+    inner += voc2
+    assert len(inner) == inner_total, f"Inner PAK size mismatch: {len(inner)} != {inner_total}"
+
+    # Build outer PAK: [file_size(4)] [1 entry(4)] [inner PAK data]
+    outer_header = 4 + 4  # 8 bytes (no terminator needed - implicit end)
+    outer_total = outer_header + len(inner)
+
+    outer = bytearray()
+    outer += struct.pack('<I', outer_total)
+    outer += bytes([outer_header & 0xFF, (outer_header >> 8) & 0xFF, (outer_header >> 16) & 0xFF, 0xE0])
+    outer += inner
+    assert len(outer) == outer_total, f"Outer PAK size mismatch: {len(outer)} != {outer_total}"
+
+    write("test_soundfx.bin", bytes(outer))
+
+
+def gen_combat_dat():
+    """Generate test fixture for COMBAT.DAT (combat event to SFX index mapping).
+
+    COMBAT.DAT is a PAK-wrapped data file:
+        Outer PAK: file_size + 1 E0 entry at offset 8
+        Data: byte groups separated by 0xFF markers
+            Each group maps a category of combat events to SOUNDFX.PAK indices
+
+    Test fixture has 3 event groups:
+        Group 0 (weapons): [0, 1, 2]        → SFX indices for 3 weapon types
+        Group 1 (impacts): [1, 2]            → SFX indices for 2 impact types
+        Group 2 (explosions): [0, 2]         → SFX indices for 2 explosion types
+    """
+    # Build data portion: groups separated by 0xFF
+    mapping = bytearray()
+    mapping += bytes([0, 1, 2])    # group 0: weapons → SFX 0, 1, 2
+    mapping += bytes([0xFF])
+    mapping += bytes([1, 2])       # group 1: impacts → SFX 1, 2
+    mapping += bytes([0xFF])
+    mapping += bytes([0, 2])       # group 2: explosions → SFX 0, 2
+    mapping += bytes([0xFF])
+
+    # Wrap in PAK: [file_size(4)] [entry(4)] [data]
+    pak_header = 4 + 4  # 8 bytes
+    total = pak_header + len(mapping)
+
+    data = bytearray()
+    data += struct.pack('<I', total)
+    data += bytes([pak_header & 0xFF, (pak_header >> 8) & 0xFF, (pak_header >> 16) & 0xFF, 0xE0])
+    data += mapping
+    assert len(data) == total, f"COMBAT.DAT size mismatch: {len(data)} != {total}"
+
+    write("test_combat_dat.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -2454,4 +2550,6 @@ if __name__ == "__main__":
     gen_opening_playlist()
     gen_gfmidgam()
     gen_midtext()
+    gen_soundfx_pak()
+    gen_combat_dat()
     print("Done.")

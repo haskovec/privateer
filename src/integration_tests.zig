@@ -35,6 +35,7 @@ const movie_text = @import("movie/movie_text.zig");
 const movie_renderer = @import("movie/movie_renderer.zig");
 const movie_music = @import("movie/movie_music.zig");
 const movie_voice = @import("movie/movie_voice.zig");
+const movie_sfx = @import("movie/movie_sfx.zig");
 const music_player = @import("audio/music_player.zig");
 
 const app_config = @import("config.zig");
@@ -3430,4 +3431,71 @@ test "integration: OPENING.GEN decodes to PCM audio via movie_music" {
         duration_secs,
         non_silence,
     });
+}
+
+test "integration: SOUNDFX.PAK can be opened and contains indexed sound resources" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const sfx_data = try findTreFileByPath(allocator, loaded.tre_data, "SOUND", "SOUNDFX.PAK") orelse {
+        std.debug.print("SOUNDFX.PAK not found in TRE, skipping\n", .{});
+        return;
+    };
+
+    var bank = movie_sfx.SfxBank.init(allocator);
+    defer bank.deinit();
+
+    try bank.loadFromPak(sfx_data);
+
+    // SOUNDFX.PAK contains 43 VOC sound resources
+    try std.testing.expect(bank.totalSlots() >= 40);
+    try std.testing.expect(bank.loadedCount() >= 40);
+
+    // Each loaded sample should have valid PCM data
+    for (0..bank.totalSlots()) |i| {
+        if (bank.getSample(i)) |sample| {
+            try std.testing.expect(sample.samples.len > 0);
+            try std.testing.expect(sample.sample_rate >= 8000);
+            try std.testing.expect(sample.sample_rate <= 22100);
+        }
+    }
+
+    std.debug.print("SOUNDFX.PAK: {d} slots, {d} loaded VOC samples\n", .{
+        bank.totalSlots(),
+        bank.loadedCount(),
+    });
+}
+
+test "integration: COMBAT.DAT maps events to valid SOUNDFX indices" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const combat_data = try findTreFileByPath(allocator, loaded.tre_data, "SOUND", "COMBAT.DAT") orelse {
+        std.debug.print("COMBAT.DAT not found in TRE, skipping\n", .{});
+        return;
+    };
+
+    var map = movie_sfx.CombatSfxMap.init(allocator);
+    defer map.deinit();
+
+    try map.loadFromData(combat_data);
+
+    // COMBAT.DAT should have multiple event groups
+    try std.testing.expect(map.groupCount() >= 1);
+
+    // At least one group should map to a valid SFX index
+    var found_valid = false;
+    for (0..map.groupCount()) |gi| {
+        if (map.getGroup(gi)) |group| {
+            if (group.len > 0) {
+                found_valid = true;
+                break;
+            }
+        }
+    }
+    try std.testing.expect(found_valid);
+
+    std.debug.print("COMBAT.DAT: {d} event groups\n", .{map.groupCount()});
 }

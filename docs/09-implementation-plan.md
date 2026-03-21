@@ -835,7 +835,7 @@ shows this timeline:
   - GREEN: Implement VOC loader for SPEECH/MID01/ files, wire into movie
     script executor to play voice at ACTS-specified trigger points
 
-- [ ] **16.7 Movie sound effects**
+- [x] **16.7 Movie sound effects**
   - Parse SOUNDFX.PAK from DATA/SOUND/ to extract indexed sound effect samples
   - Parse COMBAT.DAT (1,896 bytes) to map event types to SOUNDFX.PAK indices
   - Play sound effects (engine hum, weapon fire, explosions) during flight

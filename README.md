@@ -21,7 +21,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 ## Project Status
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
-Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.6 done).
+Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.7 done).
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
@@ -79,7 +79,8 @@ privateer/
 │   │   ├── movie_text.zig         # Movie text overlay system (MIDTEXT.PAK string parser, centered text rendering)
 │   │   ├── movie_renderer.zig     # Movie sprite renderer (ACTS command executor, PAK sprite compositing, delta framebuffer)
 │   │   ├── movie_music.zig        # Movie music system (OPENING.GEN XMIDI loader, PCM rendering for intro cinematic music)
-│   │   └── movie_voice.zig       # Movie voice dialog (SPEECH/MID01 VOC loader, player/pirate voice clips for pirate encounter)
+│   │   ├── movie_voice.zig       # Movie voice dialog (SPEECH/MID01 VOC loader, player/pirate voice clips for pirate encounter)
+│   │   └── movie_sfx.zig        # Movie sound effects (SOUNDFX.PAK nested VOC loader, COMBAT.DAT event mapping, SoundMixer playback)
 │   │
 │   ├── persistence/               # Save/load & serialization
 │   │   ├── save_game.zig          # Save game serialization (binary format, round-trip encode/decode)
@@ -234,3 +235,6 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_commodities.py` | Deep analysis of commodity data files (COMODTYP.IFF, LANDFEE.IFF, LIMITS.IFF) |
 | `analyze_missions.py` | Deep analysis of plot mission IFF files (SCRP/PROG/FLAG/CAST/PART/SCEN chunks) |
 | `analyze_conversations.py` | Deep analysis of conversation IFF files (RUMR/INFO tables, PFC scripts, COMPTEXT) |
+| `analyze_combat_dat.py` | Analyze COMBAT.DAT event mapping and DATA/SOUND/ file catalog |
+| `analyze_soundfx.py` | Deep analysis of SOUNDFX.PAK nested PAK structure and VOC sound resources |
+| `analyze_soundfx2.py` | Inner PAK structure analysis showing 43 VOC sound clips |
