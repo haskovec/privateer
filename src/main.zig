@@ -725,6 +725,9 @@ fn initGameState(
             &fb,
         );
 
+        // Load and start movie audio (music, voice, SFX)
+        movie_player.?.initAudio();
+
         // Start in intro_movie state
         initial_state = .{ .state = .intro_movie, .current_room = null, .current_scene = null };
     }

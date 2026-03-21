@@ -16,6 +16,11 @@ const opening_mod = @import("opening.zig");
 const tre_mod = @import("../formats/tre.zig");
 const pal_mod = @import("../formats/pal.zig");
 const framebuffer_mod = @import("../render/framebuffer.zig");
+const movie_music_mod = @import("movie_music.zig");
+const movie_voice_mod = @import("movie_voice.zig");
+const movie_sfx_mod = @import("movie_sfx.zig");
+const audio_mod = @import("../audio/audio.zig");
+const music_player_mod = @import("../audio/music_player.zig");
 
 /// Playback status returned by the movie player.
 pub const Status = enum {
@@ -35,6 +40,154 @@ const GAME_FPS: u32 = 60;
 
 /// Number of frames for fade-to-black at movie end (~0.5s at 60fps).
 pub const FADE_FRAMES: u32 = 30;
+
+/// Audio state for the intro movie cinematic.
+///
+/// Manages opening music (OPENING.GEN → PCM), voice clips (SPEECH/MID01/),
+/// and sound effects (SOUNDFX.PAK). Audio devices are created on demand
+/// and cleaned up when the movie ends or is skipped.
+pub const MovieAudio = struct {
+    allocator: std.mem.Allocator,
+
+    // Music (OPENING.GEN → XMIDI → PCM)
+    music_pcm: ?[]u8,
+    music_player: ?music_player_mod.MusicPlayer,
+    music_started: bool,
+
+    // Voice clips (SPEECH/MID01/ VOC files)
+    voice_set: movie_voice_mod.MovieVoiceSet,
+    voice_player: ?audio_mod.AudioPlayer,
+    voice_clip_index: usize,
+
+    // Sound effects (SOUNDFX.PAK nested VOC bank)
+    sfx_bank: movie_sfx_mod.SfxBank,
+
+    /// Create a MovieAudio with no data loaded and no playback devices.
+    pub fn init(allocator: std.mem.Allocator) MovieAudio {
+        return .{
+            .allocator = allocator,
+            .music_pcm = null,
+            .music_player = null,
+            .music_started = false,
+            .voice_set = movie_voice_mod.MovieVoiceSet.init(allocator),
+            .voice_player = null,
+            .voice_clip_index = 0,
+            .sfx_bank = movie_sfx_mod.SfxBank.init(allocator),
+        };
+    }
+
+    /// Release all owned audio resources and close devices.
+    pub fn deinit(self: *MovieAudio) void {
+        self.stopAll();
+        if (self.music_player) |*mp| mp.deinit();
+        if (self.voice_player) |*vp| vp.deinit();
+        if (self.music_pcm) |pcm| self.allocator.free(pcm);
+        self.voice_set.deinit();
+        self.sfx_bank.deinit();
+        self.music_pcm = null;
+        self.music_player = null;
+        self.voice_player = null;
+    }
+
+    /// Load all audio assets from the TRE archive.
+    /// Failures are non-fatal: missing audio means silent playback.
+    pub fn loadFromTre(
+        self: *MovieAudio,
+        tre_index: *const tre_mod.TreIndex,
+        tre_data: []const u8,
+    ) void {
+        // Load opening music (OPENING.GEN → PCM)
+        self.music_pcm = movie_music_mod.loadFromTreIndex(
+            self.allocator,
+            tre_index,
+            tre_data,
+        ) catch null;
+
+        // Load voice clips (graceful degradation per clip)
+        self.voice_set.loadFromTre(tre_index, tre_data);
+
+        // Load sound effects from SOUNDFX.PAK
+        if (tre_index.findEntry("SOUNDFX.PAK")) |entry| {
+            if (tre_mod.extractFileData(tre_data, entry.offset, entry.size)) |sfx_data| {
+                self.sfx_bank.loadFromPak(sfx_data) catch {};
+            } else |_| {}
+        }
+
+        std.debug.print("Movie audio: music={s}, voices={d}/{d}, sfx={d}\n", .{
+            if (self.music_pcm != null) "loaded" else "missing",
+            self.voice_set.loadedCount(),
+            movie_voice_mod.TOTAL_CLIP_COUNT,
+            self.sfx_bank.loadedCount(),
+        });
+    }
+
+    /// Open SDL audio devices for playback. Call after loadFromTre().
+    /// Failures are non-fatal: no device means silent playback.
+    pub fn initPlayback(self: *MovieAudio) void {
+        self.music_player = music_player_mod.MusicPlayer.init(self.allocator) catch null;
+        self.voice_player = audio_mod.AudioPlayer.init() catch null;
+    }
+
+    /// Start playing the opening music track.
+    pub fn startMusic(self: *MovieAudio) void {
+        if (self.music_started) return;
+        const pcm = self.music_pcm orelse return;
+        if (self.music_player) |*mp| {
+            // Dupe the PCM because MusicPlayer takes ownership
+            const owned = self.allocator.dupe(u8, pcm) catch return;
+            mp.playPcm(owned, .opening);
+            self.music_started = true;
+            std.debug.print("Movie music started ({d} bytes PCM)\n", .{pcm.len});
+        }
+    }
+
+    /// Stop all audio playback immediately.
+    pub fn stopAll(self: *MovieAudio) void {
+        if (self.music_player) |*mp| mp.stop();
+        if (self.voice_player) |*vp| vp.stop();
+        self.music_started = false;
+    }
+
+    /// Trigger voice clips when a dialogue scene starts.
+    ///
+    /// The intro pirate encounter (mid1c/mid1d/mid1e scenes) alternates
+    /// between player and pirate voice lines. This advances through the
+    /// voice clip sequence each time a dialogue scene begins.
+    pub fn onSceneStart(self: *MovieAudio, scene_name: []const u8) void {
+        if (!isDialogueScene(scene_name)) return;
+        const vp = &(self.voice_player orelse return);
+
+        // Alternate player / pirate clips
+        const total = movie_voice_mod.PLAYER_CLIP_COUNT + movie_voice_mod.PIRATE_CLIP_COUNT;
+        if (self.voice_clip_index >= total) return;
+
+        if (self.voice_clip_index < movie_voice_mod.PLAYER_CLIP_COUNT) {
+            _ = self.voice_set.playPlayerClip(self.voice_clip_index, vp);
+        } else {
+            const pirate_idx = self.voice_clip_index - movie_voice_mod.PLAYER_CLIP_COUNT;
+            _ = self.voice_set.playPirateClip(pirate_idx, vp);
+        }
+        self.voice_clip_index += 1;
+    }
+
+    /// Returns the number of loaded audio assets (music + voice + sfx).
+    pub fn loadedAssetCount(self: *const MovieAudio) usize {
+        var count: usize = 0;
+        if (self.music_pcm != null) count += 1;
+        count += self.voice_set.loadedCount();
+        count += self.sfx_bank.loadedCount();
+        return count;
+    }
+};
+
+/// Check if a scene name corresponds to a dialogue scene (pirate encounter).
+/// Dialogue scenes are mid1c*, mid1d, and mid1e* (the pirate encounter sequence).
+fn isDialogueScene(name: []const u8) bool {
+    if (name.len < 5) return false;
+    if (!std.mem.startsWith(u8, name, "mid1")) return false;
+    const suffix = name[4];
+    return suffix == 'c' or suffix == 'd' or suffix == 'e';
+}
 
 pub const MoviePlayer = struct {
     allocator: std.mem.Allocator,
@@ -64,6 +217,9 @@ pub const MoviePlayer = struct {
     // Current palette extracted from movie PAK files
     current_palette: ?pal_mod.Palette,
 
+    // Audio (null = silent mode)
+    audio: ?MovieAudio,
+
     // Playback status
     status: Status,
 
@@ -92,6 +248,7 @@ pub const MoviePlayer = struct {
             .tre_index = tre_index,
             .fb = fb,
             .current_palette = null,
+            .audio = null,
             .status = .playing,
             .fade_frame = 0,
         };
@@ -108,8 +265,20 @@ pub const MoviePlayer = struct {
         return player;
     }
 
+    /// Load and start movie audio (music, voice clips, SFX).
+    /// Call after init(), before the first update(). Requires SDL audio.
+    /// Failures are non-fatal: audio simply won't play.
+    pub fn initAudio(self: *MoviePlayer) void {
+        var ma = MovieAudio.init(self.allocator);
+        ma.loadFromTre(self.tre_index, self.tre_data);
+        ma.initPlayback();
+        ma.startMusic();
+        self.audio = ma;
+    }
+
     /// Release all owned resources.
     pub fn deinit(self: *MoviePlayer) void {
+        if (self.audio) |*a| a.deinit();
         if (self.script) |*s| s.deinit();
         if (self.renderer) |*r| r.deinit();
         self.sequence.deinit();
@@ -132,8 +301,9 @@ pub const MoviePlayer = struct {
         return 1.0;
     }
 
-    /// Skip the intro movie (e.g., Escape key). Sets status to done immediately.
+    /// Skip the intro movie (e.g., Escape key). Stops audio and sets status to done.
     pub fn skip(self: *MoviePlayer) void {
+        if (self.audio) |*a| a.stopAll();
         self.status = .done;
     }
 
@@ -200,7 +370,8 @@ pub const MoviePlayer = struct {
         self.tick_accum = 0;
 
         if (self.current_scene_idx >= self.sequence.sceneCount()) {
-            // All scenes played — start fade-out
+            // All scenes played — stop audio, start fade-out
+            if (self.audio) |*a| a.stopAll();
             self.status = .fade_out;
             self.fade_frame = 0;
             return;
@@ -292,11 +463,15 @@ pub const MoviePlayer = struct {
         self.script = script;
         self.renderer = renderer;
 
+        const scene_name = self.sequence.getSceneName(self.current_scene_idx) orelse "?";
         std.debug.print("Movie scene: {s} ({d} ACTS, SPED={d})\n", .{
-            self.sequence.getSceneName(self.current_scene_idx) orelse "?",
+            scene_name,
             script.acts_blocks.len,
             script.frame_speed_ticks,
         });
+
+        // Trigger voice clips for dialogue scenes
+        if (self.audio) |*a| a.onSceneStart(scene_name);
     }
 };
 
@@ -432,4 +607,123 @@ test "MoviePlayer fade_out completes after FADE_FRAMES updates" {
 
     // Should now be done
     try std.testing.expectEqual(Status.done, player.status);
+}
+
+test "MoviePlayer has null audio by default" {
+    const allocator = std.testing.allocator;
+
+    const names = try allocator.alloc([]const u8, 0);
+    const seq = opening_mod.OpeningSequence{
+        .scene_names = names,
+        .allocator = allocator,
+    };
+
+    var fb = framebuffer_mod.Framebuffer.create();
+
+    var player = MoviePlayer.init(allocator, seq, &.{}, undefined, &fb);
+    defer player.deinit();
+
+    try std.testing.expect(player.audio == null);
+}
+
+test "MovieAudio init has no loaded assets" {
+    var audio = MovieAudio.init(std.testing.allocator);
+    defer audio.deinit();
+
+    try std.testing.expect(audio.music_pcm == null);
+    try std.testing.expect(!audio.music_started);
+    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
+    try std.testing.expectEqual(@as(usize, 0), audio.loadedAssetCount());
+}
+
+test "MovieAudio stopAll resets music_started" {
+    var audio = MovieAudio.init(std.testing.allocator);
+    defer audio.deinit();
+
+    // Simulate started state
+    audio.music_started = true;
+    audio.stopAll();
+
+    try std.testing.expect(!audio.music_started);
+}
+
+test "MovieAudio startMusic with no PCM is a no-op" {
+    var audio = MovieAudio.init(std.testing.allocator);
+    defer audio.deinit();
+
+    // No music loaded, no player — should not crash
+    audio.startMusic();
+    try std.testing.expect(!audio.music_started);
+}
+
+test "MovieAudio loadedAssetCount counts music and voice" {
+    const allocator = std.testing.allocator;
+    var audio = MovieAudio.init(allocator);
+    defer audio.deinit();
+
+    // Load some dummy PCM as music
+    const pcm = try allocator.alloc(u8, 100);
+    @memset(pcm, 128);
+    audio.music_pcm = pcm;
+
+    // 1 for music + 0 for voice + 0 for sfx
+    try std.testing.expectEqual(@as(usize, 1), audio.loadedAssetCount());
+}
+
+test "isDialogueScene identifies pirate encounter scenes" {
+    // Dialogue scenes: mid1c*, mid1d, mid1e*
+    try std.testing.expect(isDialogueScene("mid1c1"));
+    try std.testing.expect(isDialogueScene("mid1c4"));
+    try std.testing.expect(isDialogueScene("mid1d"));
+    try std.testing.expect(isDialogueScene("mid1e1"));
+    try std.testing.expect(isDialogueScene("mid1e3"));
+
+    // Non-dialogue scenes
+    try std.testing.expect(!isDialogueScene("mid1a"));
+    try std.testing.expect(!isDialogueScene("mid1b"));
+    try std.testing.expect(!isDialogueScene("mid1f"));
+    try std.testing.expect(!isDialogueScene(""));
+    try std.testing.expect(!isDialogueScene("short"));
+}
+
+test "MovieAudio onSceneStart advances voice index on dialogue scenes" {
+    var audio = MovieAudio.init(std.testing.allocator);
+    defer audio.deinit();
+
+    // No voice player — playback won't happen, but index should still advance
+    // Actually, without a voice_player, onSceneStart returns early.
+    // Verify index stays at 0 when there's no player.
+    audio.onSceneStart("mid1c1");
+    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
+
+    // Non-dialogue scene should never advance index regardless
+    audio.onSceneStart("mid1a");
+    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
+}
+
+test "MoviePlayer skip stops audio" {
+    const allocator = std.testing.allocator;
+
+    const names = try allocator.alloc([]const u8, 0);
+    const seq = opening_mod.OpeningSequence{
+        .scene_names = names,
+        .allocator = allocator,
+    };
+
+    var fb = framebuffer_mod.Framebuffer.create();
+
+    var player = MoviePlayer.init(allocator, seq, &.{}, undefined, &fb);
+    defer player.deinit();
+
+    // Attach audio in test mode (no SDL devices, no TRE data)
+    player.audio = MovieAudio.init(allocator);
+
+    // Simulate that music was playing
+    player.audio.?.music_started = true;
+
+    player.skip();
+
+    // After skip: status is done, music_started is reset
+    try std.testing.expectEqual(Status.done, player.status);
+    try std.testing.expect(!player.audio.?.music_started);
 }

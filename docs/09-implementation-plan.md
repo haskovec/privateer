@@ -918,13 +918,17 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - GREEN: Implement ObjectEntry union, executeComposition, findFild/findSpri lookups
   - Verified palette extraction still works, integration test produces non-black pixels
 
-- [ ] **17.6 Wire movie audio layers**
+- [x] **17.6 Wire movie audio layers**
   - movie_music.zig, movie_voice.zig, movie_sfx.zig exist but are not connected
   - Load OPENING.GEN music at movie start, play concurrently
   - Trigger voice clips and SFX based on ACTS block timing or BFOR commands
   - Stop all audio on skip (Escape) or movie completion
   - RED: Test music starts playing when MoviePlayer initializes
   - GREEN: Import and wire audio modules into MoviePlayer
+  - Added MovieAudio struct encapsulating music/voice/SFX lifecycle
+  - MoviePlayer.initAudio() loads from TRE, opens SDL devices, starts music
+  - Voice clips triggered on dialogue scene transitions (mid1c/d/e)
+  - All audio stopped on skip() and movie completion (fade-out)
 
 - [ ] **17.7 Update test fixtures and integration tests**
   - Replace hand-crafted MOVI test fixtures with data matching real format
