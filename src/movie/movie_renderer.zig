@@ -144,7 +144,9 @@ pub const MovieRenderer = struct {
     pub fn loadFont(self: *MovieRenderer, file_ref: usize, shp_data: []const u8) MovieRendererError!void {
         if (file_ref >= self.loaded_files.len) return MovieRendererError.InvalidFileRef;
 
-        var font = text_mod.Font.load(self.allocator, shp_data, 32) catch return MovieRendererError.InvalidSpriteResource;
+        // Movie fonts (DEMOFONT.SHP, CONVFONT.SHP) use first_char=0:
+        // glyph indices map directly to ASCII codes (index 50='2', 65='A', etc.)
+        var font = text_mod.Font.load(self.allocator, shp_data, 0) catch return MovieRendererError.InvalidSpriteResource;
         errdefer font.deinit();
 
         self.loaded_files[file_ref] = .{ .font = font };
@@ -341,7 +343,6 @@ pub const MovieRenderer = struct {
         const text = resource[0..str_end];
 
         // Compute Y position — y_param is relative to the bottom text region
-        // In the original, text appears at the bottom of the viewport (y ≈ 155-175)
         const screen_height: u16 = 200;
         const render_y: u16 = if (y_param < 0)
             screen_height -| @as(u16, @intCast(-@as(i32, y_param)))
