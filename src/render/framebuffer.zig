@@ -95,6 +95,20 @@ pub const Framebuffer = struct {
         }
     }
 
+    /// Convert the indexed framebuffer to RGBA with a fade multiplier.
+    /// fade=0.0 produces all-black, fade=1.0 produces full palette colors.
+    /// Values above 1.0 are clamped. Used for title screen fade-in effect.
+    pub fn applyPaletteWithFade(self: *Framebuffer, palette: *const pal.Palette, fade: f32) void {
+        const f = @min(@max(fade, 0.0), 1.0);
+        for (0..PIXEL_COUNT) |i| {
+            const color = palette.colors[self.pixels[i]];
+            self.rgba[i * 4 + 0] = @intFromFloat(@as(f32, @floatFromInt(color.r)) * f);
+            self.rgba[i * 4 + 1] = @intFromFloat(@as(f32, @floatFromInt(color.g)) * f);
+            self.rgba[i * 4 + 2] = @intFromFloat(@as(f32, @floatFromInt(color.b)) * f);
+            self.rgba[i * 4 + 3] = 255;
+        }
+    }
+
     /// Blit a decoded sprite onto the framebuffer at the given center position.
     /// The position (center_x, center_y) is where the sprite's origin goes;
     /// the sprite header extents determine the offset from that point.
@@ -663,6 +677,106 @@ test "presentWithMode renders in fit_4_3 mode without crashing" {
 
     // fit_4_3 on 16:9 → pillarboxed at 1440x1080 centered
     fb.presentWithMode(win.renderer, 1920, 1080, .fit_4_3);
+}
+
+// --- Palette fade tests (Phase 15.3) ---
+
+test "applyPaletteWithFade at 0.0 produces all-black RGBA" {
+    var fb = Framebuffer.create();
+    fb.clear(1); // fill with non-zero palette index
+
+    var palette: pal.Palette = undefined;
+    palette.colors[0] = .{ .r = 0, .g = 0, .b = 0 };
+    palette.colors[1] = .{ .r = 200, .g = 100, .b = 50 };
+
+    fb.applyPaletteWithFade(&palette, 0.0);
+
+    // Every pixel should be black (0,0,0,255) regardless of palette color
+    for (0..PIXEL_COUNT) |i| {
+        try std.testing.expectEqual(@as(u8, 0), fb.rgba[i * 4 + 0]);
+        try std.testing.expectEqual(@as(u8, 0), fb.rgba[i * 4 + 1]);
+        try std.testing.expectEqual(@as(u8, 0), fb.rgba[i * 4 + 2]);
+        try std.testing.expectEqual(@as(u8, 255), fb.rgba[i * 4 + 3]);
+    }
+}
+
+test "applyPaletteWithFade at 1.0 produces full palette colors" {
+    var fb = Framebuffer.create();
+    fb.setPixel(0, 0, 1);
+    fb.setPixel(1, 0, 2);
+
+    var palette: pal.Palette = undefined;
+    palette.colors[0] = .{ .r = 0, .g = 0, .b = 0 };
+    palette.colors[1] = .{ .r = 255, .g = 128, .b = 64 };
+    palette.colors[2] = .{ .r = 100, .g = 200, .b = 50 };
+
+    fb.applyPaletteWithFade(&palette, 1.0);
+
+    // Pixel (0,0) = index 1 → (255, 128, 64)
+    try std.testing.expectEqual(@as(u8, 255), fb.rgba[0]);
+    try std.testing.expectEqual(@as(u8, 128), fb.rgba[1]);
+    try std.testing.expectEqual(@as(u8, 64), fb.rgba[2]);
+    try std.testing.expectEqual(@as(u8, 255), fb.rgba[3]);
+
+    // Pixel (1,0) = index 2 → (100, 200, 50)
+    try std.testing.expectEqual(@as(u8, 100), fb.rgba[4]);
+    try std.testing.expectEqual(@as(u8, 200), fb.rgba[5]);
+    try std.testing.expectEqual(@as(u8, 50), fb.rgba[6]);
+    try std.testing.expectEqual(@as(u8, 255), fb.rgba[7]);
+}
+
+test "applyPaletteWithFade at 0.5 produces half-brightness colors" {
+    var fb = Framebuffer.create();
+    fb.setPixel(0, 0, 1);
+
+    var palette: pal.Palette = undefined;
+    palette.colors[0] = .{ .r = 0, .g = 0, .b = 0 };
+    palette.colors[1] = .{ .r = 200, .g = 100, .b = 50 };
+
+    fb.applyPaletteWithFade(&palette, 0.5);
+
+    // 200 * 0.5 = 100, 100 * 0.5 = 50, 50 * 0.5 = 25
+    try std.testing.expectEqual(@as(u8, 100), fb.rgba[0]);
+    try std.testing.expectEqual(@as(u8, 50), fb.rgba[1]);
+    try std.testing.expectEqual(@as(u8, 25), fb.rgba[2]);
+    try std.testing.expectEqual(@as(u8, 255), fb.rgba[3]);
+}
+
+test "applyPaletteWithFade generates intermediate palettes between black and target" {
+    var fb = Framebuffer.create();
+    fb.setPixel(0, 0, 1);
+
+    var palette: pal.Palette = undefined;
+    palette.colors[0] = .{ .r = 0, .g = 0, .b = 0 };
+    palette.colors[1] = .{ .r = 255, .g = 255, .b = 255 };
+
+    // Test several fade steps produce monotonically increasing brightness
+    var prev_r: u8 = 0;
+    const steps = [_]f32{ 0.0, 0.25, 0.5, 0.75, 1.0 };
+    for (steps) |fade| {
+        fb.applyPaletteWithFade(&palette, fade);
+        const r = fb.rgba[0];
+        try std.testing.expect(r >= prev_r);
+        prev_r = r;
+    }
+    // At full fade, should be 255
+    try std.testing.expectEqual(@as(u8, 255), prev_r);
+}
+
+test "applyPaletteWithFade clamps fade above 1.0" {
+    var fb = Framebuffer.create();
+    fb.setPixel(0, 0, 1);
+
+    var palette: pal.Palette = undefined;
+    palette.colors[0] = .{ .r = 0, .g = 0, .b = 0 };
+    palette.colors[1] = .{ .r = 200, .g = 100, .b = 50 };
+
+    fb.applyPaletteWithFade(&palette, 1.5);
+
+    // Should clamp to 1.0 — same as full palette
+    try std.testing.expectEqual(@as(u8, 200), fb.rgba[0]);
+    try std.testing.expectEqual(@as(u8, 100), fb.rgba[1]);
+    try std.testing.expectEqual(@as(u8, 50), fb.rgba[2]);
 }
 
 test "presentViewport without texture is no-op" {

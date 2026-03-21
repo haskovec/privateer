@@ -48,8 +48,13 @@ const GameState = struct {
     title_bg: ?sprite_mod.Sprite,
     title_palette: ?pal.Palette,
     title_font: ?text_mod.Font,
+    /// Fade-in progress for title screen (0 = start of fade, TITLE_FADE_FRAMES = done).
+    title_fade_frame: u32,
 
     frame_count: u64,
+
+    /// Number of frames for the title screen fade-in (~1 second at 60fps).
+    const TITLE_FADE_FRAMES: u32 = 60;
 
     fn deinit(self: *GameState) void {
         if (self.current_bg) |*bg| {
@@ -333,10 +338,15 @@ fn updateTitle(state: *GameState) void {
         // Menu text (NEW/LOAD/OPTIONS/QUIT) is already part of the pre-rendered
         // title screen image in scene pack 181. No font overlay needed.
 
-        if (state.title_palette) |tp| {
-            state.fb.applyPalette(&tp);
+        // Fade-in from black over TITLE_FADE_FRAMES (~1 second at 60fps)
+        const pal_ptr = if (state.title_palette) |*tp| tp else &state.palette;
+        if (state.title_fade_frame < GameState.TITLE_FADE_FRAMES) {
+            const fade: f32 = @as(f32, @floatFromInt(state.title_fade_frame)) /
+                @as(f32, @floatFromInt(GameState.TITLE_FADE_FRAMES));
+            state.fb.applyPaletteWithFade(pal_ptr, fade);
+            state.title_fade_frame += 1;
         } else {
-            state.fb.applyPalette(&state.palette);
+            state.fb.applyPalette(pal_ptr);
         }
     } else {
         // No title background loaded — render a basic screen
@@ -642,6 +652,7 @@ fn initGameState(
         .title_bg = title_bg,
         .title_palette = title_palette,
         .title_font = title_font,
+        .title_fade_frame = 0,
         .frame_count = 0,
     };
 

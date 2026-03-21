@@ -713,7 +713,7 @@ for matching byte sequences across all game data files.
   - RED: Test that the title state accepts 4 input actions
   - GREEN: Update `updateTitle()` input handling with click regions and hotkeys
 
-- [ ] **15.3 Title screen fade-in**
+- [x] **15.3 Title screen fade-in**
   - Implement palette fade-in effect (ramp palette from black to full over ~1s)
   - The original fades the title screen in from black after the intro movie
   - RED: Test fade generates intermediate palettes between black and target
