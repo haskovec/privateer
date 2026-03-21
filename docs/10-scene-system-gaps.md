@@ -20,6 +20,9 @@ a single file: `..\..\DATA\OPTIONS\OPTSHPS.PAK`.
 OPTSHPS.PAK contains 226 L1 entries:
 - **Entries 0-61**: Scene backgrounds (indexed by scene ID from GAMEFLOW)
 - **Entries 62-225**: UI elements, overlays, fonts, and animation frames
+- **Entry 181**: Title screen (pre-rendered 320x200 image with planet, ship,
+  "PRIVATEER" text, metallic frame, and NEW/LOAD/OPTIONS/QUIT menu bar).
+  Uses OPTPALS.PAK palette 39 (dark purple, color 0 = VGA6 4,0,4).
 
 Each scene pack entry contains:
 - `[0..4]`: Declared resource size (LE uint32)

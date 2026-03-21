@@ -688,32 +688,30 @@ No phase should start until its dependencies are complete and tested green.
 ## Phase 15: Title Screen & Main Menu
 *Match the original game's title screen: correct background, palette, and 4-option menu.*
 
-The original title screen (visible after the intro movie or on Escape) renders
-OPTSHPS.PAK scene pack 0 (a starfield + composited overlays) with OPTPALS.PAK
-palette 0, and displays four menu items: NEW, LOAD, OPTIONS, QUIT.
+The original title screen is a single pre-rendered 320x200 sprite stored in
+OPTSHPS.PAK scene pack 181 (L1 entry 181, 38KB). It contains the complete
+composited scene: planet, Galaxy-class ship with projectiles, "PRIVATEER"
+metallic title text, metallic frame/border, purple nebula background, and the
+bottom menu bar (NEW / LOAD / OPTIONS / QUIT).
 
-Our current implementation loads the wrong resource (scene pack 1, a base scene)
-with incorrect palette, and shows only two menu items ("PLAY PRIVATEER" /
-"LOAD A SAVED GAME").
+The correct palette is OPTPALS.PAK index 39, which has a distinctive dark purple
+color 0 (VGA 6-bit 4,0,4 → RGB 16,0,16) rather than black. This was identified
+by extracting pixel indices from a DOSBox reference screenshot and binary-searching
+for matching byte sequences across all game data files.
 
 - [x] **15.1 Fix title screen background**
-  - Load OPTSHPS.PAK scene pack 0 (not 1) as the title background
-  - Composite all sprites in scene pack 0 (starfield base + overlay sprites)
-  - Apply OPTPALS.PAK palette 0 with VGA 6-bit→8-bit conversion
-  - RED: Test that scene pack 0 sprite 0 decodes to 320x200 with palette index 0 = black
-  - GREEN: Change `loadSceneBackground` call from resource index 1 to 0
-  - Golden test: Compare rendered title screen against DOSBox reference frame
+  - Load OPTSHPS.PAK scene pack 181 as the title background
+  - Apply OPTPALS.PAK palette 39 (dark purple title palette)
+  - RED: Test that scene pack 181 sprite 0 decodes to 320x200, and palette 39
+    has dark purple color 0 (R=16, G=0, B=16)
+  - GREEN: Change `loadSceneBackground` call to resource index 181, load palette 39
 
 - [x] **15.2 Fix title menu to match original**
-  - Change menu items from ["PLAY PRIVATEER", "LOAD A SAVED GAME"] to
-    ["NEW", "LOAD", "OPTIONS", "QUIT"]
-  - Position menu items at the bottom of the screen (matching original layout)
-  - Wire NEW → start new game (loading → landed at first base)
-  - Wire LOAD → load game screen (future: save slot selection)
-  - Wire OPTIONS → options menu (existing options_menu.zig)
-  - Wire QUIT → exit the application
-  - RED: Test that the title state accepts 4 menu regions with correct labels
-  - GREEN: Update `updateTitle()` menu rendering and input handling
+  - Menu text (NEW/LOAD/OPTIONS/QUIT) is pre-rendered in the title screen image
+  - Wire keyboard shortcuts: N=New, L=Load, O=Options, Q/Escape=Quit
+  - Wire mouse click regions in bottom strip for all 4 menu items
+  - RED: Test that the title state accepts 4 input actions
+  - GREEN: Update `updateTitle()` input handling with click regions and hotkeys
 
 - [ ] **15.3 Title screen fade-in**
   - Implement palette fade-in effect (ramp palette from black to full over ~1s)
