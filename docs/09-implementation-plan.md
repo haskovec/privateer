@@ -930,7 +930,7 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Voice clips triggered on dialogue scene transitions (mid1c/d/e)
   - All audio stopped on skip() and movie completion (fade-out)
 
-- [ ] **17.7 Update test fixtures and integration tests**
+- [x] **17.7 Update test fixtures and integration tests**
   - Replace hand-crafted MOVI test fixtures with data matching real format
   - Update all existing movie unit tests to work with new parser
   - Add integration test that renders MID1A.IFF and verifies non-black pixels

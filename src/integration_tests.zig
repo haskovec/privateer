@@ -3363,6 +3363,8 @@ test "integration: MovieRenderer loads MID1.PAK and renders SPRI command from MI
         if (p != 0) non_black += 1;
     }
     std.debug.print("MovieRenderer: rendered {d} non-black pixels from MID1A.IFF first ACTS block\n", .{non_black});
+    // At least some pixels should be non-black after rendering the first ACTS block
+    try std.testing.expect(non_black > 0);
 }
 
 test "integration: MoviePlayer full loading path for MID1A.IFF" {
@@ -3497,6 +3499,90 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
             std.debug.print("\n", .{});
         }
     }
+}
+
+test "integration: full opening sequence loads and renders all scenes without errors" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    var tre_index = try tre.TreIndex.build(allocator, loaded.tre_data);
+    defer tre_index.deinit();
+
+    // Load OPENING.PAK scene playlist
+    const opening_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "OPENING.PAK") orelse return;
+    var seq = opening.parsePlaylist(allocator, opening_data) catch return;
+    defer seq.deinit();
+
+    const scene_count = seq.sceneCount();
+    try std.testing.expect(scene_count >= 6); // At least 6 scenes in the opening
+
+    var scenes_parsed: usize = 0;
+    var scenes_rendered: usize = 0;
+    var total_non_black: usize = 0;
+
+    for (0..scene_count) |i| {
+        const scene_name = seq.getSceneName(i) orelse continue;
+
+        // Map scene name to TRE path and load
+        const tre_path = (try seq.getSceneTrePath(allocator, i)) orelse continue;
+        defer allocator.free(tre_path);
+        const basename = std.fs.path.basename(tre_path);
+
+        const scene_data = findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", basename) catch continue orelse continue;
+        if (!movie.isMovi(scene_data)) continue;
+
+        // Parse the MOVI script
+        var script = movie.parse(allocator, scene_data) catch |err| {
+            std.debug.print("Scene {s}: parse error: {}\n", .{ scene_name, err });
+            continue;
+        };
+        defer script.deinit();
+
+        try std.testing.expect(script.frame_speed_ticks > 0);
+        try std.testing.expect(script.acts_blocks.len > 0);
+        scenes_parsed += 1;
+
+        // Create renderer and load PAKs for this scene
+        var fb = framebuffer_mod.Framebuffer.create();
+        var renderer = movie_renderer.MovieRenderer.init(allocator, &fb, script.fileSlotCount()) catch continue;
+        defer renderer.deinit();
+
+        for (script.file_references) |slot| {
+            const ref_basename = std.fs.path.basename(slot.path);
+            if (tre_index.findEntry(ref_basename)) |ref_entry| {
+                const pak_data = tre.extractFileData(loaded.tre_data, ref_entry.offset, ref_entry.size) catch continue;
+                renderer.loadPak(@as(usize, slot.slot_id), pak_data) catch continue;
+            }
+        }
+
+        // Render all ACTS blocks
+        var scene_rendered = false;
+        for (script.acts_blocks) |block| {
+            renderer.executeActsBlock(block) catch continue;
+            scene_rendered = true;
+        }
+        if (scene_rendered) scenes_rendered += 1;
+
+        // Count non-black pixels
+        for (fb.pixels) |p| {
+            if (p != 0) total_non_black += 1;
+        }
+    }
+
+    std.debug.print("Opening sequence: {d}/{d} scenes parsed, {d} rendered, {d} total non-black pixels\n", .{
+        scenes_parsed,
+        scene_count,
+        scenes_rendered,
+        total_non_black,
+    });
+
+    // All scenes should parse successfully
+    try std.testing.expectEqual(scene_count, scenes_parsed);
+    // All parsed scenes should render
+    try std.testing.expectEqual(scenes_parsed, scenes_rendered);
+    // At least some pixels should be non-black across the entire sequence
+    try std.testing.expect(total_non_black > 0);
 }
 
 test "integration: OPENING.GEN parses to valid XMIDI sequence with EVNT data" {
