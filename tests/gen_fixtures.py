@@ -2264,8 +2264,15 @@ def gen_movie_file():
     spri_data = struct.pack('<HHHHhhh', 35, 23, 0x8000, 1, 0, 25, 0)
     spri = make_iff_chunk(b"SPRI", spri_data)
 
-    # BFOR: 2 bytes — layer ordering value (big-endian u16)
-    bfor = make_iff_chunk(b"BFOR", struct.pack('>H', 1))
+    # BFOR: packed 24-byte composition records
+    # [object_id: u16 LE][flags: u16 LE][params: 10 × u16 LE]
+    # Record 0: object_id=7, flags=0x7FFF (layer cmd), params all zero
+    # Record 1: object_id=9, flags=23 (object ref to FILD object 23), params all zero
+    bfor_data = (
+        struct.pack('<HH', 7, 0x7FFF) + b'\x00' * 20
+        + struct.pack('<HH', 9, 23) + b'\x00' * 20
+    )
+    bfor = make_iff_chunk(b"BFOR", bfor_data)
 
     acts = make_iff_form(b"ACTS", fild + spri + bfor)
 

@@ -85,10 +85,27 @@ pub fn spriteTypeParamCount(sprite_type: u16) ?u8 {
     };
 }
 
-/// A BFOR command: background/foreground layer ordering.
-pub const LayerOrder = struct {
-    /// Layer ordering value.
-    value: u16,
+/// A BFOR command: packed 24-byte composition/render-order record.
+/// Real format: [object_id: u16 LE][flags: u16 LE][params: 10 × u16 LE]
+/// BFOR drives the scene-graph rendering — FILD/SPRI define objects, BFOR composites them.
+pub const BforRecord = struct {
+    /// Object ID or command type (LE u16).
+    object_id: u16,
+    /// Flags — 0x7FFF = layer command, otherwise a FILD/SPRI object reference.
+    flags: u16,
+    /// Parameters (coordinates, clip regions, render flags) — 10 u16 LE values.
+    params: [10]u16,
+
+    /// Sentinel value indicating a layer command (no object reference).
+    pub const LAYER_FLAG: u16 = 0x7FFF;
+
+    /// Record size in bytes (24 bytes per record).
+    pub const RECORD_SIZE: usize = 24;
+
+    /// Check if this is a layer command (flags == 0x7FFF).
+    pub fn isLayerCommand(self: BforRecord) bool {
+        return self.flags == LAYER_FLAG;
+    }
 };
 
 /// A single FORM:ACTS animation action block.
@@ -97,8 +114,8 @@ pub const ActsBlock = struct {
     field_commands: []const FieldCommand,
     /// SPRI commands in this block.
     sprite_commands: []const SpriteCommand,
-    /// BFOR layer orderings in this block.
-    layer_orders: []const LayerOrder,
+    /// BFOR composition/render-order commands in this block.
+    composition_cmds: []const BforRecord,
 };
 
 /// A parsed FORM:MOVI movie script.
@@ -138,7 +155,7 @@ pub const MovieScript = struct {
         for (self.acts_blocks) |block| {
             if (block.field_commands.len > 0) self.allocator.free(block.field_commands);
             if (block.sprite_commands.len > 0) self.allocator.free(block.sprite_commands);
-            if (block.layer_orders.len > 0) self.allocator.free(block.layer_orders);
+            if (block.composition_cmds.len > 0) self.allocator.free(block.composition_cmds);
         }
         if (self.acts_blocks.len > 0) self.allocator.free(self.acts_blocks);
         if (self.file_references.len > 0) self.allocator.free(self.file_references);
@@ -197,7 +214,7 @@ pub fn parse(allocator: std.mem.Allocator, data: []const u8) (MovieError || iff.
         for (acts_blocks.items) |block| {
             if (block.field_commands.len > 0) allocator.free(block.field_commands);
             if (block.sprite_commands.len > 0) allocator.free(block.sprite_commands);
-            if (block.layer_orders.len > 0) allocator.free(block.layer_orders);
+            if (block.composition_cmds.len > 0) allocator.free(block.composition_cmds);
         }
         acts_blocks.deinit(allocator);
     }
@@ -311,24 +328,33 @@ fn parseActsBlock(allocator: std.mem.Allocator, acts_form: *const iff.Chunk) Mov
         }
     }
 
-    // Collect BFOR commands
+    // Collect BFOR commands — packed 24-byte composition records
     const bfor_chunks = acts_form.findChildren(allocator, "BFOR".*) catch return MovieError.OutOfMemory;
     defer allocator.free(bfor_chunks);
 
-    var layer_cmds: std.ArrayListUnmanaged(LayerOrder) = .empty;
-    errdefer layer_cmds.deinit(allocator);
+    var comp_cmds: std.ArrayListUnmanaged(BforRecord) = .empty;
+    errdefer comp_cmds.deinit(allocator);
     for (bfor_chunks) |bfor| {
-        if (bfor.data.len >= 2) {
-            layer_cmds.append(allocator, .{
-                .value = std.mem.readInt(u16, bfor.data[0..2], .big),
-            }) catch return MovieError.OutOfMemory;
+        var pos: usize = 0;
+        while (pos + BforRecord.RECORD_SIZE <= bfor.data.len) {
+            var rec = BforRecord{
+                .object_id = std.mem.readInt(u16, bfor.data[pos..][0..2], .little),
+                .flags = std.mem.readInt(u16, bfor.data[pos + 2 ..][0..2], .little),
+                .params = [_]u16{0} ** 10,
+            };
+            for (0..10) |i| {
+                const offset = pos + 4 + i * 2;
+                rec.params[i] = std.mem.readInt(u16, bfor.data[offset..][0..2], .little);
+            }
+            comp_cmds.append(allocator, rec) catch return MovieError.OutOfMemory;
+            pos += BforRecord.RECORD_SIZE;
         }
     }
 
     return .{
         .field_commands = field_cmds.toOwnedSlice(allocator) catch return MovieError.OutOfMemory,
         .sprite_commands = sprite_cmds.toOwnedSlice(allocator) catch return MovieError.OutOfMemory,
-        .layer_orders = layer_cmds.toOwnedSlice(allocator) catch return MovieError.OutOfMemory,
+        .composition_cmds = comp_cmds.toOwnedSlice(allocator) catch return MovieError.OutOfMemory,
     };
 }
 
@@ -435,9 +461,17 @@ test "parse FORM:MOVI from fixture" {
     try std.testing.expectEqual(@as(u16, 25), acts.sprite_commands[0].params[1]);
     try std.testing.expectEqual(@as(u16, 0), acts.sprite_commands[0].params[2]);
 
-    // BFOR: value=1
-    try std.testing.expectEqual(@as(usize, 1), acts.layer_orders.len);
-    try std.testing.expectEqual(@as(u16, 1), acts.layer_orders[0].value);
+    // BFOR: 2 packed 24-byte records
+    try std.testing.expectEqual(@as(usize, 2), acts.composition_cmds.len);
+    // Record 0: object_id=7, flags=0x7FFF (layer command), params all zero
+    try std.testing.expectEqual(@as(u16, 7), acts.composition_cmds[0].object_id);
+    try std.testing.expectEqual(@as(u16, BforRecord.LAYER_FLAG), acts.composition_cmds[0].flags);
+    try std.testing.expect(acts.composition_cmds[0].isLayerCommand());
+    try std.testing.expectEqual(@as(u16, 0), acts.composition_cmds[0].params[0]);
+    // Record 1: object_id=9, flags=23 (object reference to FILD object 23), params all zero
+    try std.testing.expectEqual(@as(u16, 9), acts.composition_cmds[1].object_id);
+    try std.testing.expectEqual(@as(u16, 23), acts.composition_cmds[1].flags);
+    try std.testing.expect(!acts.composition_cmds[1].isLayerCommand());
 }
 
 test "parse FORM:MOVI with multiple ACTS blocks" {
@@ -465,7 +499,7 @@ test "parse FORM:MOVI with multiple ACTS blocks" {
     // First ACTS block (same as fixture 1 — 2 FILD records)
     try std.testing.expectEqual(@as(usize, 2), script.acts_blocks[0].field_commands.len);
     try std.testing.expectEqual(@as(usize, 1), script.acts_blocks[0].sprite_commands.len);
-    try std.testing.expectEqual(@as(usize, 1), script.acts_blocks[0].layer_orders.len);
+    try std.testing.expectEqual(@as(usize, 2), script.acts_blocks[0].composition_cmds.len);
 
     // Second ACTS block
     const acts2 = script.acts_blocks[1];
@@ -478,7 +512,7 @@ test "parse FORM:MOVI with multiple ACTS blocks" {
     try std.testing.expectEqual(@as(u16, 30), acts2.sprite_commands[0].ref);
     try std.testing.expectEqual(@as(u16, 1), acts2.sprite_commands[0].sprite_type);
     // No BFOR in second block
-    try std.testing.expectEqual(@as(usize, 0), acts2.layer_orders.len);
+    try std.testing.expectEqual(@as(usize, 0), acts2.composition_cmds.len);
 }
 
 test "normalizeFilePath strips prefix and converts separators" {

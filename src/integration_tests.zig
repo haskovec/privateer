@@ -3421,7 +3421,7 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
     // Try rendering first ACTS block
     if (script.acts_blocks.len > 0) {
         const block = script.acts_blocks[0];
-        std.debug.print("DIAG: ACTS[0] has {d} FILD, {d} SPRI commands\n", .{ block.field_commands.len, block.sprite_commands.len });
+        std.debug.print("DIAG: ACTS[0] has {d} FILD, {d} SPRI, {d} BFOR commands\n", .{ block.field_commands.len, block.sprite_commands.len, block.composition_cmds.len });
 
         // Check what file_refs are used
         for (block.field_commands) |cmd| {
@@ -3442,6 +3442,26 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
                 cmd.param_count,
             });
         }
+        for (block.composition_cmds) |cmd| {
+            std.debug.print("DIAG:   BFOR object_id={d} flags=0x{x:0>4} params=[{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}]\n", .{
+                cmd.object_id,
+                cmd.flags,
+                cmd.params[0],
+                cmd.params[1],
+                cmd.params[2],
+                cmd.params[3],
+                cmd.params[4],
+                cmd.params[5],
+                cmd.params[6],
+                cmd.params[7],
+                cmd.params[8],
+                cmd.params[9],
+            });
+        }
+        // MID1A.IFF ACTS[0] should have 8 BFOR records (192 bytes / 24 bytes per record)
+        try std.testing.expectEqual(@as(usize, 8), block.composition_cmds.len);
+        // First record is a layer command (flags=0x7FFF)
+        try std.testing.expect(block.composition_cmds[0].isLayerCommand());
 
         renderer.executeActsBlock(block) catch |err| {
             std.debug.print("DIAG: ACTS[0] render error: {}\n", .{err});

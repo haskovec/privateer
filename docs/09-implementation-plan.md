@@ -895,12 +895,15 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Updated SpriteCommand struct to use u16 LE fields with object_id, ref, sprite_type, params[9], param_count
   - Verified against all 26 SPRI chunks across 22 MOVI files (intro + victory + misc)
 
-- [ ] **17.4 Parse BFOR chunk (packed 24-byte composition commands)**
+- [x] **17.4 Parse BFOR chunk (packed 24-byte composition commands)**
   - Current parser extracts only a u16 value from BFOR (wrong)
   - Real format: packed 24-byte records defining composition/render order
   - BFOR references object IDs from FILD/SPRI to drive actual rendering
   - RED: Test BFOR parser with real MID1A.IFF data: expect 8 records from 192-byte chunk
   - GREEN: Implement BFOR record parser with object_id, flags, and parameter fields
+  - Replaced LayerOrder (2-byte) with BforRecord (24-byte) struct
+  - Renamed layer_orders → composition_cmds throughout codebase
+  - Verified against real MID1A.IFF: 8 records, flags=0x7FFF for layers, object refs for FILD links
 
 - [ ] **17.5 Rewrite MovieRenderer for scene-graph composition**
   - Current renderer directly blits from FILD/SPRI commands (wrong model)

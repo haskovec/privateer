@@ -341,7 +341,7 @@ test "MovieRenderer.executeActsBlock renders SPRI command to framebuffer" {
     const block = movie_mod.ActsBlock{
         .field_commands = &.{},
         .sprite_commands = &sprite_cmds,
-        .layer_orders = &.{},
+        .composition_cmds = &.{},
     };
 
     try renderer.executeActsBlock(block);
@@ -369,7 +369,7 @@ test "MovieRenderer delta compositing preserves prior frame content" {
     try renderer.executeActsBlock(.{
         .field_commands = &.{},
         .sprite_commands = &cmds1,
-        .layer_orders = &.{},
+        .composition_cmds = &.{},
     });
 
     // Frame 2: sprite at (20, 20) — should NOT erase the one at (10, 10)
@@ -379,7 +379,7 @@ test "MovieRenderer delta compositing preserves prior frame content" {
     try renderer.executeActsBlock(.{
         .field_commands = &.{},
         .sprite_commands = &cmds2,
-        .layer_orders = &.{},
+        .composition_cmds = &.{},
     });
 
     // SPRI rendering is currently a no-op (deferred to Phase 17.5),
@@ -405,7 +405,7 @@ test "MovieRenderer CLRC clears between scenes" {
     try renderer.executeActsBlock(.{
         .field_commands = &.{},
         .sprite_commands = &cmds,
-        .layer_orders = &.{},
+        .composition_cmds = &.{},
     });
 
     // Fill pixel manually to test CLRC
@@ -438,7 +438,7 @@ test "MovieRenderer.executeScript processes clear_screen flag and ACTS blocks" {
         .{
             .field_commands = &.{},
             .sprite_commands = &sprite_cmds,
-            .layer_orders = &.{},
+            .composition_cmds = &.{},
         },
     };
     // We construct a MovieScript-like structure for executeScript
@@ -476,7 +476,7 @@ test "MovieRenderer.executeActsBlock renders FILD command" {
     try renderer.executeActsBlock(.{
         .field_commands = &fild_cmds,
         .sprite_commands = &.{},
-        .layer_orders = &.{},
+        .composition_cmds = &.{},
     });
 
     // FILD blits at origin (0, 0) — sprite has 2x2 pixels
