@@ -151,23 +151,36 @@ pub const MovieAudio = struct {
     /// Trigger voice clips when a dialogue scene starts.
     ///
     /// The intro pirate encounter (mid1c/mid1d/mid1e scenes) alternates
-    /// between player and pirate voice lines. This advances through the
-    /// voice clip sequence each time a dialogue scene begins.
+    /// between pirate and player voice lines. Pirates speak first in the
+    /// encounter, so odd dialogue scenes play pirate clips and even ones
+    /// play player clips.
     pub fn onSceneStart(self: *MovieAudio, scene_name: []const u8) void {
         if (!isDialogueScene(scene_name)) return;
         const vp = &(self.voice_player orelse return);
 
-        // Alternate player / pirate clips
-        const total = movie_voice_mod.PLAYER_CLIP_COUNT + movie_voice_mod.PIRATE_CLIP_COUNT;
-        if (self.voice_clip_index >= total) return;
-
-        if (self.voice_clip_index < movie_voice_mod.PLAYER_CLIP_COUNT) {
-            _ = self.voice_set.playPlayerClip(self.voice_clip_index, vp);
+        // Alternate pirate / player clips (pirates speak first)
+        if (self.voice_clip_index % 2 == 0) {
+            // Pirate's turn
+            const pirate_idx = self.voice_clip_index / 2;
+            if (pirate_idx < movie_voice_mod.PIRATE_CLIP_COUNT) {
+                _ = self.voice_set.playPirateClip(pirate_idx, vp);
+            }
         } else {
-            const pirate_idx = self.voice_clip_index - movie_voice_mod.PLAYER_CLIP_COUNT;
-            _ = self.voice_set.playPirateClip(pirate_idx, vp);
+            // Player's turn
+            const player_idx = self.voice_clip_index / 2;
+            if (player_idx < movie_voice_mod.PLAYER_CLIP_COUNT) {
+                _ = self.voice_set.playPlayerClip(player_idx, vp);
+            }
         }
         self.voice_clip_index += 1;
+    }
+
+    /// Play a sound effect by SFX bank index.
+    /// Uses the voice audio player (shared device) for SFX playback.
+    pub fn playSfx(self: *MovieAudio, sfx_index: usize) void {
+        const vp = &(self.voice_player orelse return);
+        const sample = self.sfx_bank.getSample(sfx_index) orelse return;
+        vp.play(sample.samples, sample.sample_rate) catch {};
     }
 
     /// Returns the number of loaded audio assets (music + voice + sfx).
@@ -179,6 +192,20 @@ pub const MovieAudio = struct {
         return count;
     }
 };
+
+/// Recognized file extensions for MOVI FILE slot references.
+const FileExt = enum { pak, shp, voc, none };
+
+/// Detect file extension from a basename (case-insensitive).
+fn extensionLower(basename: []const u8) FileExt {
+    if (std.mem.lastIndexOfScalar(u8, basename, '.')) |dot| {
+        const ext = basename[dot..];
+        if (std.ascii.eqlIgnoreCase(ext, ".pak")) return .pak;
+        if (std.ascii.eqlIgnoreCase(ext, ".shp")) return .shp;
+        if (std.ascii.eqlIgnoreCase(ext, ".voc")) return .voc;
+    }
+    return .none;
+}
 
 /// Check if a scene name corresponds to a dialogue scene (pirate encounter).
 /// Dialogue scenes are mid1c*, mid1d, and mid1e* (the pirate encounter sequence).
@@ -340,6 +367,15 @@ pub const MoviePlayer = struct {
             self.tick_accum -= self.tick_threshold;
             self.current_acts_idx += 1;
 
+            // Trigger SFX when ACTS block advances in combat scenes
+            if (self.audio) |*a| {
+                if (script.acts_blocks.len > 2) {
+                    // Multi-ACTS scenes have combat — cycle through SFX bank
+                    const sfx_idx = self.current_acts_idx % (a.sfx_bank.loadedCount() + 1);
+                    if (sfx_idx > 0) a.playSfx(sfx_idx - 1);
+                }
+            }
+
             // Check if current scene is complete
             if (self.current_acts_idx >= script.acts_blocks.len) {
                 self.advanceScene();
@@ -429,35 +465,55 @@ pub const MoviePlayer = struct {
             renderer.clearScreen();
         }
 
-        // Load PAK files referenced by the script (use basename for TRE lookup)
-        var paks_loaded: usize = 0;
+        // Load files referenced by the script (use basename for TRE lookup).
+        // FILE slots can reference different file types: PAK, SHP (fonts),
+        // VOC (audio), or directory names (sound dirs). Detect by extension.
+        var files_loaded: usize = 0;
         for (script.file_references) |slot| {
             const ref_basename = std.fs.path.basename(slot.path);
+            const ext = extensionLower(ref_basename);
+
+            // Skip sound directory references (no extension, e.g. "opening")
+            // and VOC audio files (handled by voice system, not renderer)
+            if (ext == .none or ext == .voc) continue;
+
             if (self.tre_index.findEntry(ref_basename)) |ref_entry| {
-                const pak_data = tre_mod.extractFileData(
+                const file_data = tre_mod.extractFileData(
                     self.tre_data,
                     ref_entry.offset,
                     ref_entry.size,
                 ) catch {
-                    std.debug.print("  PAK[{d}] {s}: extract failed\n", .{ slot.slot_id, ref_basename });
+                    std.debug.print("  FILE[{d}] {s}: extract failed\n", .{ slot.slot_id, ref_basename });
                     continue;
                 };
-                renderer.loadPak(@as(usize, slot.slot_id), pak_data) catch {
-                    std.debug.print("  PAK[{d}] {s}: parse failed ({d} bytes)\n", .{ slot.slot_id, ref_basename, pak_data.len });
-                    continue;
-                };
-                paks_loaded += 1;
+
+                switch (ext) {
+                    .shp => {
+                        renderer.loadFont(@as(usize, slot.slot_id), file_data) catch {
+                            std.debug.print("  FILE[{d}] {s}: font parse failed ({d} bytes)\n", .{ slot.slot_id, ref_basename, file_data.len });
+                            continue;
+                        };
+                    },
+                    .pak => {
+                        renderer.loadPak(@as(usize, slot.slot_id), file_data) catch {
+                            std.debug.print("  FILE[{d}] {s}: PAK parse failed ({d} bytes)\n", .{ slot.slot_id, ref_basename, file_data.len });
+                            continue;
+                        };
+                    },
+                    else => continue,
+                }
+                files_loaded += 1;
             } else {
-                std.debug.print("  PAK[{d}] {s}: not found in TRE\n", .{ slot.slot_id, ref_basename });
+                std.debug.print("  FILE[{d}] {s}: not found in TRE\n", .{ slot.slot_id, ref_basename });
             }
         }
 
         // Extract palette from renderer (first loaded PAK with a palette)
         if (renderer.getPalette()) |pal_val| {
             self.current_palette = pal_val;
-            std.debug.print("  Palette loaded, {d}/{d} PAKs loaded\n", .{ paks_loaded, script.file_references.len });
+            std.debug.print("  Palette loaded, {d}/{d} files loaded\n", .{ files_loaded, script.file_references.len });
         } else {
-            std.debug.print("  WARNING: No palette found, {d}/{d} PAKs loaded\n", .{ paks_loaded, script.file_references.len });
+            std.debug.print("  WARNING: No palette found, {d}/{d} files loaded\n", .{ files_loaded, script.file_references.len });
         }
 
         self.script = script;

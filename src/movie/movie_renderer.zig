@@ -22,6 +22,7 @@ const pal_mod = @import("../formats/pal.zig");
 const scene_renderer = @import("../render/scene_renderer.zig");
 const sprite_mod = @import("../formats/sprite.zig");
 const framebuffer_mod = @import("../render/framebuffer.zig");
+const text_mod = @import("../render/text.zig");
 
 pub const MovieRendererError = error{
     /// A file reference index in a command is out of range.
@@ -46,11 +47,19 @@ pub const LoadedPak = struct {
     }
 };
 
-/// An object in the scene graph — either a FILD (background sprite) or
-/// a SPRI (sprite overlay), keyed by object_id.
-const ObjectEntry = union(enum) {
-    fild: movie_mod.FieldCommand,
-    spri: movie_mod.SpriteCommand,
+/// A loaded file slot — either a PAK (sprite container) or a Font (SHP glyphs).
+/// FILE chunk references can point to different file types; this union lets the
+/// renderer handle them polymorphically.
+pub const LoadedFile = union(enum) {
+    pak: LoadedPak,
+    font: text_mod.Font,
+
+    pub fn deinit(self: *LoadedFile) void {
+        switch (self.*) {
+            .pak => |*p| p.deinit(),
+            .font => |*f| f.deinit(),
+        }
+    }
 };
 
 /// Movie renderer that executes ACTS commands against a persistent framebuffer.
@@ -64,8 +73,9 @@ const ObjectEntry = union(enum) {
 /// framebuffer content rather than clearing it. Use `clearScreen()` (triggered
 /// by CLRC) to reset between scenes.
 pub const MovieRenderer = struct {
-    /// Loaded PAK files indexed by file_ref from the MOVI script.
-    loaded_paks: []?LoadedPak,
+    /// Loaded files indexed by file_ref from the MOVI script.
+    /// Each slot is either a PAK (sprite container) or a Font (SHP glyphs).
+    loaded_files: []?LoadedFile,
     /// The persistent framebuffer (delta compositing).
     fb: *framebuffer_mod.Framebuffer,
     /// Current palette (from the first loaded PAK with a palette).
@@ -76,30 +86,30 @@ pub const MovieRenderer = struct {
     /// file references. The caller provides a framebuffer that persists across
     /// frames for delta compositing.
     pub fn init(allocator: std.mem.Allocator, fb: *framebuffer_mod.Framebuffer, num_file_refs: usize) MovieRendererError!MovieRenderer {
-        const paks = allocator.alloc(?LoadedPak, num_file_refs) catch return MovieRendererError.OutOfMemory;
-        @memset(paks, null);
+        const files = allocator.alloc(?LoadedFile, num_file_refs) catch return MovieRendererError.OutOfMemory;
+        @memset(files, null);
         return .{
-            .loaded_paks = paks,
+            .loaded_files = files,
             .fb = fb,
             .current_palette = null,
             .allocator = allocator,
         };
     }
 
-    /// Release all loaded PAK files and internal allocations.
+    /// Release all loaded files and internal allocations.
     pub fn deinit(self: *MovieRenderer) void {
-        for (self.loaded_paks) |*slot| {
+        for (self.loaded_files) |*slot| {
             if (slot.*) |*loaded| {
                 loaded.deinit();
             }
         }
-        self.allocator.free(self.loaded_paks);
+        self.allocator.free(self.loaded_files);
     }
 
     /// Load a PAK file for the given file reference index.
     /// Resource 0 is treated as a palette if it is exactly 772 bytes.
     pub fn loadPak(self: *MovieRenderer, file_ref: usize, pak_data: []const u8) MovieRendererError!void {
-        if (file_ref >= self.loaded_paks.len) return MovieRendererError.InvalidFileRef;
+        if (file_ref >= self.loaded_files.len) return MovieRendererError.InvalidFileRef;
 
         var pak_file = pak_mod.parse(self.allocator, pak_data) catch return MovieRendererError.InvalidSpriteResource;
         errdefer pak_file.deinit();
@@ -119,11 +129,22 @@ pub const MovieRenderer = struct {
             self.current_palette = palette;
         }
 
-        self.loaded_paks[file_ref] = .{
+        self.loaded_files[file_ref] = .{ .pak = .{
             .pak = pak_file,
             .palette = palette,
             .allocator = self.allocator,
-        };
+        } };
+    }
+
+    /// Load a SHP font file for the given file reference index.
+    /// Used for DEMOFONT.SHP and CONVFONT.SHP referenced by MOVI FILE chunks.
+    pub fn loadFont(self: *MovieRenderer, file_ref: usize, shp_data: []const u8) MovieRendererError!void {
+        if (file_ref >= self.loaded_files.len) return MovieRendererError.InvalidFileRef;
+
+        var font = text_mod.Font.load(self.allocator, shp_data, 32) catch return MovieRendererError.InvalidSpriteResource;
+        errdefer font.deinit();
+
+        self.loaded_files[file_ref] = .{ .font = font };
     }
 
     /// Clear the framebuffer (triggered by CLRC command).
@@ -153,7 +174,12 @@ pub const MovieRenderer = struct {
     }
 
     /// Build an object table from FILD+SPRI definitions and render via BFOR.
+    /// After BFOR composition, render any SPRI objects not referenced by BFOR
+    /// (many SPRI objects define animations/text that are not in the BFOR chain).
     fn executeComposition(self: *MovieRenderer, block: movie_mod.ActsBlock) MovieRendererError!void {
+        // Track which SPRI objects are rendered via BFOR (by index in sprite_commands)
+        var rendered_via_bfor: [256]bool = [_]bool{false} ** 256;
+
         // Process BFOR commands in order
         for (block.composition_cmds) |bfor| {
             if (bfor.isLayerCommand()) {
@@ -171,12 +197,21 @@ pub const MovieRenderer = struct {
             }
 
             // Look up in SPRI table
-            if (findSpri(block.sprite_commands, ref_id)) |spri| {
-                self.renderSpriteObject(spri, block.field_commands) catch {};
+            if (findSpriIndex(block.sprite_commands, ref_id)) |idx| {
+                if (idx < 256) rendered_via_bfor[idx] = true;
+                self.renderSpriteObject(block.sprite_commands[idx], block.field_commands) catch {};
                 continue;
             }
 
             // Object not found — skip silently (may be audio/control object)
+        }
+
+        // Render SPRI objects not referenced by any BFOR entry.
+        // This covers type 4 animations, type 12 text overlays, etc. that
+        // are defined in the ACTS block but not in the BFOR composition chain.
+        for (block.sprite_commands, 0..) |spri, i| {
+            if (i < 256 and rendered_via_bfor[i]) continue;
+            self.renderSpriteObject(spri, block.field_commands) catch {};
         }
     }
 
@@ -187,26 +222,138 @@ pub const MovieRenderer = struct {
         switch (spri.sprite_type) {
             // Type 0, 1: simple positioned sprite — params[0]=x, params[1]=y
             0, 1 => {
-                if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
-                    // References a FILD object — get PAK file/resource from it
-                    if (findFild(fild_table, spri.ref)) |fild| {
-                        const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
-                        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
-                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
-                    }
+                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
+                    spri.ref
+                else if (spri.param_count >= 2)
+                    spri.params[1] // Self-ref type 0/1: params[1] may be FILD ref
+                else
+                    return;
+                if (findFild(fild_table, fild_ref)) |fild| {
+                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                    const y: i32 = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
+                        @as(i32, @as(i16, @bitCast(spri.params[1])))
+                    else
+                        0;
+                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
                 }
             },
-            // Types 3, 4, 11, 12, 18, 19, 20: complex animation/text — deferred
+
+            // Type 3, 11: extended positioned sprite — treat like type 0/1
+            3, 11 => {
+                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
+                    spri.ref
+                else if (spri.param_count >= 2)
+                    spri.params[1]
+                else
+                    return;
+                if (findFild(fild_table, fild_ref)) |fild| {
+                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                    const y: i32 = 0;
+                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                }
+            },
+
+            // Type 4, 19, 20: animated sprite sequence — render at initial position
+            // params[1] is a FILD object_id for the sprite source
+            4, 19, 20 => {
+                // For self-ref: params[1] is the FILD reference
+                // For FILD-ref: spri.ref is the FILD reference
+                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
+                    spri.ref
+                else if (spri.param_count >= 2)
+                    spri.params[1]
+                else
+                    return;
+                if (findFild(fild_table, fild_ref)) |fild| {
+                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                    const y: i32 = if (spri.param_count >= 3) @as(i32, @as(i16, @bitCast(spri.params[2]))) else 0;
+                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                }
+            },
+
+            // Type 12: text rendering — params[3]=text FILD ref, params[4]=font FILD ref, params[5]=color
+            12 => {
+                self.renderTextSprite(spri, fild_table);
+            },
+
+            // Type 18: extended animation — treat like type 4
+            18 => {
+                const fild_ref = if (spri.ref != movie_mod.SpriteCommand.SELF_REF)
+                    spri.ref
+                else if (spri.param_count >= 2)
+                    spri.params[1]
+                else
+                    return;
+                if (findFild(fild_table, fild_ref)) |fild| {
+                    const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
+                    const y: i32 = 0;
+                    self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                }
+            },
+
             else => {},
         }
     }
 
+    /// Render a type 12 text sprite: look up font and text from FILD references,
+    /// then draw centered text at the specified position and color.
+    fn renderTextSprite(self: *MovieRenderer, spri: movie_mod.SpriteCommand, fild_table: []const movie_mod.FieldCommand) void {
+        if (spri.param_count < 6) return;
+
+        const text_fild_id = spri.params[3];
+        const font_fild_id = spri.params[4];
+        const color: u8 = @truncate(spri.params[5]);
+        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
+
+        // Look up font FILD → must point to a LoadedFile.font slot
+        const font_fild = findFild(fild_table, font_fild_id) orelse return;
+        if (font_fild.file_ref >= self.loaded_files.len) return;
+        const font_file = self.loaded_files[font_fild.file_ref] orelse return;
+        const font = switch (font_file) {
+            .font => |*f| f,
+            .pak => return, // Not a font
+        };
+
+        // Look up text FILD → must point to a LoadedFile.pak slot (MIDTEXT.PAK)
+        const text_fild = findFild(fild_table, text_fild_id) orelse return;
+        if (text_fild.file_ref >= self.loaded_files.len) return;
+        const text_file = self.loaded_files[text_fild.file_ref] orelse return;
+        const text_pak = switch (text_file) {
+            .pak => |p| p,
+            .font => return, // Not a PAK
+        };
+
+        // Extract text string from PAK resource (text_fild.param2 = resource index)
+        const resource = text_pak.pak.getResource(text_fild.param2) catch return;
+        // Extract null-terminated string
+        var str_end: usize = resource.len;
+        for (resource, 0..) |byte, i| {
+            if (byte == 0) {
+                str_end = i;
+                break;
+            }
+        }
+        if (str_end == 0) return;
+        const text = resource[0..str_end];
+
+        // Render text centered horizontally at the specified Y position
+        const text_width = font.measureText(text);
+        const screen_width: u16 = 320;
+        const x: u16 = if (text_width >= screen_width) 0 else (screen_width - text_width) / 2;
+        const render_y: u16 = if (y < 0) 0 else @min(@as(u16, @intCast(y)), 199);
+        _ = font.drawTextColored(self.fb, x, render_y, text, if (color == 0) null else color);
+    }
+
     /// Render a sprite from a loaded PAK file at a given position.
-    /// file_ref indexes into the loaded PAK table, resource_idx is the
+    /// file_ref indexes into the loaded file table, resource_idx is the
     /// resource index within the PAK (ScenePack with RLE sprites).
     fn renderFieldSprite(self: *MovieRenderer, file_ref: u16, resource_idx: u16, x: i32, y: i32) MovieRendererError!void {
-        if (file_ref >= self.loaded_paks.len) return MovieRendererError.InvalidFileRef;
-        const loaded = self.loaded_paks[file_ref] orelse return MovieRendererError.InvalidFileRef;
+        if (file_ref >= self.loaded_files.len) return MovieRendererError.InvalidFileRef;
+        const loaded_file = self.loaded_files[file_ref] orelse return MovieRendererError.InvalidFileRef;
+        const loaded = switch (loaded_file) {
+            .pak => |p| p,
+            .font => return, // Fonts are not sprite PAKs — skip silently
+        };
 
         var spr = self.decodeSpriteFromPak(loaded, resource_idx) catch return MovieRendererError.SpriteDecodeFailed;
         defer spr.deinit();
@@ -226,6 +373,14 @@ pub const MovieRenderer = struct {
     fn findSpri(spri_table: []const movie_mod.SpriteCommand, object_id: u16) ?movie_mod.SpriteCommand {
         for (spri_table) |cmd| {
             if (cmd.object_id == object_id) return cmd;
+        }
+        return null;
+    }
+
+    /// Find the index of a SPRI command by object_id.
+    fn findSpriIndex(spri_table: []const movie_mod.SpriteCommand, object_id: u16) ?usize {
+        for (spri_table, 0..) |cmd, i| {
+            if (cmd.object_id == object_id) return i;
         }
         return null;
     }
@@ -338,7 +493,7 @@ test "MovieRenderer.init creates renderer with correct number of slots" {
     var renderer = try MovieRenderer.init(allocator, &fb, 3);
     defer renderer.deinit();
 
-    try std.testing.expectEqual(@as(usize, 3), renderer.loaded_paks.len);
+    try std.testing.expectEqual(@as(usize, 3), renderer.loaded_files.len);
     try std.testing.expect(renderer.current_palette == null);
 }
 

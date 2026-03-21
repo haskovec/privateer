@@ -936,6 +936,13 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Add integration test that renders MID1A.IFF and verifies non-black pixels
   - Verify full 6-scene playback sequence loads and renders without errors
 
+- [x] **17.8 Fix movie rendering, text, and audio**
+  - Polymorphic file slot loading (PAK/SHP/VOC detection by extension)
+  - Implement SPRI types 3/4/11/12/18/19/20 rendering (text overlays, animated sprites)
+  - Render unreferenced SPRI objects not in BFOR composition chain
+  - Wire SFX playback via SfxBank during multi-ACTS combat scenes
+  - Fix voice clip interleaving (pirate/player alternation per dialogue scene)
+
 ---
 
 ## Future Considerations (Not in Current Scope)

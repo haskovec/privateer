@@ -3433,7 +3433,7 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
                 cmd.param1,
                 cmd.param2,
                 cmd.param3,
-                if (cmd.file_ref < renderer.loaded_paks.len and renderer.loaded_paks[cmd.file_ref] != null) "loaded" else "EMPTY",
+                if (cmd.file_ref < renderer.loaded_files.len and renderer.loaded_files[cmd.file_ref] != null) "loaded" else "EMPTY",
             });
         }
         for (block.sprite_commands) |cmd| {
