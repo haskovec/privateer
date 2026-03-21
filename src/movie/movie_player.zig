@@ -57,7 +57,6 @@ pub const MovieAudio = struct {
     // Voice clips (SPEECH/MID01/ VOC files)
     voice_set: movie_voice_mod.MovieVoiceSet,
     voice_player: ?audio_mod.AudioPlayer,
-    voice_clip_index: usize,
 
     // Sound effects (SOUNDFX.PAK nested VOC bank)
     sfx_bank: movie_sfx_mod.SfxBank,
@@ -71,7 +70,6 @@ pub const MovieAudio = struct {
             .music_started = false,
             .voice_set = movie_voice_mod.MovieVoiceSet.init(allocator),
             .voice_player = null,
-            .voice_clip_index = 0,
             .sfx_bank = movie_sfx_mod.SfxBank.init(allocator),
         };
     }
@@ -150,29 +148,34 @@ pub const MovieAudio = struct {
 
     /// Trigger voice clips when a dialogue scene starts.
     ///
-    /// The intro pirate encounter (mid1c/mid1d/mid1e scenes) alternates
-    /// between pirate and player voice lines. Pirates speak first in the
-    /// encounter, so odd dialogue scenes play pirate clips and even ones
-    /// play player clips.
-    pub fn onSceneStart(self: *MovieAudio, scene_name: []const u8) void {
-        if (!isDialogueScene(scene_name)) return;
+    /// Each scene's FILE chunk contains VOC references that specify exactly
+    /// which voice clips to play. Extract the VOC filenames, match them
+    /// against loaded clips, and play the first matching clip.
+    pub fn onSceneStart(self: *MovieAudio, scene_name: []const u8, file_refs: []const movie_mod.FileSlot) void {
+        _ = scene_name;
         const vp = &(self.voice_player orelse return);
 
-        // Alternate pirate / player clips (pirates speak first)
-        if (self.voice_clip_index % 2 == 0) {
-            // Pirate's turn
-            const pirate_idx = self.voice_clip_index / 2;
-            if (pirate_idx < movie_voice_mod.PIRATE_CLIP_COUNT) {
-                _ = self.voice_set.playPirateClip(pirate_idx, vp);
+        // Find VOC file references in this scene's FILE slots and play them
+        for (file_refs) |slot| {
+            const basename = std.fs.path.basename(slot.path);
+            const ext = extensionLower(basename);
+            if (ext != .voc) continue;
+
+            // Match against player clips
+            for (movie_voice_mod.PLAYER_FILENAMES, 0..) |fname, i| {
+                if (std.ascii.eqlIgnoreCase(basename, fname)) {
+                    _ = self.voice_set.playPlayerClip(i, vp);
+                    return; // Play first clip, rest will play on subsequent scene loads
+                }
             }
-        } else {
-            // Player's turn
-            const player_idx = self.voice_clip_index / 2;
-            if (player_idx < movie_voice_mod.PLAYER_CLIP_COUNT) {
-                _ = self.voice_set.playPlayerClip(player_idx, vp);
+            // Match against pirate clips
+            for (movie_voice_mod.PIRATE_FILENAMES, 0..) |fname, i| {
+                if (std.ascii.eqlIgnoreCase(basename, fname)) {
+                    _ = self.voice_set.playPirateClip(i, vp);
+                    return;
+                }
             }
         }
-        self.voice_clip_index += 1;
     }
 
     /// Play a sound effect by SFX bank index.
@@ -526,8 +529,8 @@ pub const MoviePlayer = struct {
             script.frame_speed_ticks,
         });
 
-        // Trigger voice clips for dialogue scenes
-        if (self.audio) |*a| a.onSceneStart(scene_name);
+        // Trigger voice clips for dialogue scenes (uses FILE slot VOC references)
+        if (self.audio) |*a| a.onSceneStart(scene_name, script.file_references);
     }
 };
 
@@ -688,7 +691,6 @@ test "MovieAudio init has no loaded assets" {
 
     try std.testing.expect(audio.music_pcm == null);
     try std.testing.expect(!audio.music_started);
-    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
     try std.testing.expectEqual(@as(usize, 0), audio.loadedAssetCount());
 }
 
@@ -742,19 +744,14 @@ test "isDialogueScene identifies pirate encounter scenes" {
     try std.testing.expect(!isDialogueScene("short"));
 }
 
-test "MovieAudio onSceneStart advances voice index on dialogue scenes" {
-    var audio = MovieAudio.init(std.testing.allocator);
-    defer audio.deinit();
+test "MovieAudio onSceneStart with no voice player is a no-op" {
+    var audio_state = MovieAudio.init(std.testing.allocator);
+    defer audio_state.deinit();
 
-    // No voice player — playback won't happen, but index should still advance
-    // Actually, without a voice_player, onSceneStart returns early.
-    // Verify index stays at 0 when there's no player.
-    audio.onSceneStart("mid1c1");
-    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
-
-    // Non-dialogue scene should never advance index regardless
-    audio.onSceneStart("mid1a");
-    try std.testing.expectEqual(@as(usize, 0), audio.voice_clip_index);
+    // No voice player — onSceneStart returns early without crashing
+    const empty_refs: []const movie_mod.FileSlot = &.{};
+    audio_state.onSceneStart("mid1c1", empty_refs);
+    audio_state.onSceneStart("mid1a", empty_refs);
 }
 
 test "MoviePlayer skip stops audio" {

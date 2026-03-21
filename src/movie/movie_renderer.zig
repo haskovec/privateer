@@ -168,7 +168,7 @@ pub const MovieRenderer = struct {
         } else {
             // No BFOR: fall back to rendering FILD commands directly
             for (block.field_commands) |cmd| {
-                self.renderFieldSprite(cmd.file_ref, cmd.param1, 0, 0) catch {};
+                self.renderFieldSprite(cmd.file_ref, cmd.param3 + 1, 0, 0) catch {};
             }
         }
     }
@@ -194,7 +194,7 @@ pub const MovieRenderer = struct {
 
             // Look up in FILD table first
             if (findFild(block.field_commands, ref_id)) |fild| {
-                self.renderFieldSprite(fild.file_ref, fild.param1, 0, 0) catch {};
+                self.renderFieldSprite(fild.file_ref, fild.param3 + 1, 0, 0) catch {};
                 continue;
             }
 
@@ -240,7 +240,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
-                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
                     }
                 }
             },
@@ -251,7 +251,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
-                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
                     }
                 }
             },
@@ -265,7 +265,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = if (spri.param_count >= 3) @as(i32, @as(i16, @bitCast(spri.params[2]))) else 0;
-                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
                     }
                 }
             },
@@ -281,7 +281,7 @@ pub const MovieRenderer = struct {
                     if (findFild(fild_table, spri.ref)) |fild| {
                         const x: i32 = @as(i32, @as(i16, @bitCast(spri.params[0])));
                         const y: i32 = 0;
-                        self.renderFieldSprite(fild.file_ref, fild.param1, x, y) catch {};
+                        self.renderFieldSprite(fild.file_ref, fild.param3 + 1, x, y) catch {};
                     }
                 }
             },
