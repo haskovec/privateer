@@ -31,6 +31,7 @@ const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
 const text = @import("render/text.zig");
 const opening = @import("game/opening.zig");
+const movie_text = @import("game/movie_text.zig");
 
 const app_config = @import("config.zig");
 
@@ -3219,4 +3220,35 @@ test "integration: OPENING.PAK scene names map to valid MOVI files in TRE" {
     // At least some scenes should resolve to valid MOVI files
     try std.testing.expect(found_count > 0);
     std.debug.print("Resolved {d}/{d} scenes to FORM:MOVI files\n", .{ found_count, seq.sceneCount() });
+}
+
+// --- Movie text overlay integration tests ---
+
+test "integration: MIDTEXT.PAK parses as movie text with expected first entry" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "MIDTEXT.PAK") orelse return;
+
+    var mt = movie_text.parse(allocator, file_data) catch |err| {
+        std.debug.print("Failed to parse MIDTEXT.PAK: {}\n", .{err});
+        return err;
+    };
+    defer mt.deinit();
+
+    // Should have at least one text entry
+    try std.testing.expect(mt.count() > 0);
+
+    // First entry should start with "2669" (the opening crawl text)
+    const first = mt.getText(0).?;
+    try std.testing.expect(std.mem.startsWith(u8, first, "2669"));
+
+    // Print all entries for diagnostic purposes
+    std.debug.print("MIDTEXT.PAK entries ({d}):\n", .{mt.count()});
+    for (0..mt.count()) |i| {
+        if (mt.getText(i)) |entry| {
+            std.debug.print("  [{d}] \"{s}\"\n", .{ i, entry });
+        }
+    }
 }

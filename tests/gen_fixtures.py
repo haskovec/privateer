@@ -2344,6 +2344,44 @@ def gen_gfmidgam():
     write("test_gfmidgam.bin", root)
 
 
+def gen_midtext():
+    """Generate test fixture for MIDTEXT.PAK (movie text overlay strings).
+
+    MIDTEXT.PAK is a standard PAK file where each resource is a null-terminated
+    text string used for movie text overlays during the intro cinematic.
+
+    Test fixture has 3 text entries:
+        Entry 0: "2669, GEMINI SECTOR, TROY SYSTEM..."
+        Entry 1: "THE STORY SO FAR..."
+        Entry 2: "YOU ARE A PRIVATEER."
+    """
+    text_entries = [
+        b"2669, GEMINI SECTOR, TROY SYSTEM...\x00",
+        b"THE STORY SO FAR...\x00",
+        b"YOU ARE A PRIVATEER.\x00",
+    ]
+
+    # PAK: [file_size(4)] [N entries(4 each)] [terminator(4)] [resources...]
+    header_size = 4 + len(text_entries) * 4 + 4
+    offsets = []
+    off = header_size
+    for entry in text_entries:
+        offsets.append(off)
+        off += len(entry)
+    total = off
+
+    data = bytearray()
+    data += struct.pack('<I', total)
+    for o in offsets:
+        data += bytes([o & 0xFF, (o >> 8) & 0xFF, (o >> 16) & 0xFF, 0xE0])
+    data += bytes([0, 0, 0, 0])  # terminator
+    for entry in text_entries:
+        data += entry
+
+    assert len(data) == total, f"MIDTEXT PAK size mismatch: {len(data)} != {total}"
+    write("test_midtext.bin", bytes(data))
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -2387,4 +2425,5 @@ if __name__ == "__main__":
     gen_movie_file()
     gen_opening_playlist()
     gen_gfmidgam()
+    gen_midtext()
     print("Done.")

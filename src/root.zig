@@ -38,6 +38,7 @@ pub const click_region = @import("game/click_region.zig");
 pub const game_state = @import("game/game_state.zig");
 pub const midgame = @import("game/midgame.zig");
 pub const opening = @import("game/opening.zig");
+pub const movie_text = @import("game/movie_text.zig");
 pub const universe = @import("game/universe.zig");
 pub const bases = @import("game/bases.zig");
 pub const nav_graph = @import("game/nav_graph.zig");

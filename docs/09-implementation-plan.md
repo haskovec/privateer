@@ -797,7 +797,7 @@ shows this timeline:
   - RED: Test OPENING.PAK produces scene list ["mid1a", "mid1b", "mid1c1", ...]
   - GREEN: Implement OpeningSequence loader
 
-- [ ] **16.3 Movie text overlay system**
+- [x] **16.3 Movie text overlay system**
   - Parse MIDTEXT.PAK as a string-list PAK (same format as OPENING.PAK)
   - Render text strings centered on screen using DEMOFONT.SHP
   - Support timed display (text appears and disappears per ACTS commands)
