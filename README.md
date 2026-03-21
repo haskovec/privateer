@@ -243,3 +243,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_soundfx.py` | Deep analysis of SOUNDFX.PAK nested PAK structure and VOC sound resources |
 | `analyze_soundfx2.py` | Inner PAK structure analysis showing 43 VOC sound clips |
 | `analyze_movi.py` | Deep analysis of FORM:MOVI intro cinematic IFF files (FILE/FILD/SPRI/BFOR chunk formats) |
+| `dump_movi.py` | Complete MOVI scene graph dump: all FILE slots, FILD records, SPRI records with types/params, BFOR composition commands for all 12 intro scenes |
