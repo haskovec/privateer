@@ -685,6 +685,131 @@ No phase should start until its dependencies are complete and tested green.
 
 ---
 
+## Phase 15: Title Screen & Main Menu
+*Match the original game's title screen: correct background, palette, and 4-option menu.*
+
+The original title screen (visible after the intro movie or on Escape) renders
+OPTSHPS.PAK scene pack 0 (a starfield + composited overlays) with OPTPALS.PAK
+palette 0, and displays four menu items: NEW, LOAD, OPTIONS, QUIT.
+
+Our current implementation loads the wrong resource (scene pack 1, a base scene)
+with incorrect palette, and shows only two menu items ("PLAY PRIVATEER" /
+"LOAD A SAVED GAME").
+
+- [ ] **15.1 Fix title screen background**
+  - Load OPTSHPS.PAK scene pack 0 (not 1) as the title background
+  - Composite all sprites in scene pack 0 (starfield base + overlay sprites)
+  - Apply OPTPALS.PAK palette 0 with VGA 6-bit→8-bit conversion
+  - RED: Test that scene pack 0 sprite 0 decodes to 320x200 with palette index 0 = black
+  - GREEN: Change `loadSceneBackground` call from resource index 1 to 0
+  - Golden test: Compare rendered title screen against DOSBox reference frame
+
+- [ ] **15.2 Fix title menu to match original**
+  - Change menu items from ["PLAY PRIVATEER", "LOAD A SAVED GAME"] to
+    ["NEW", "LOAD", "OPTIONS", "QUIT"]
+  - Position menu items at the bottom of the screen (matching original layout)
+  - Wire NEW → start new game (loading → landed at first base)
+  - Wire LOAD → load game screen (future: save slot selection)
+  - Wire OPTIONS → options menu (existing options_menu.zig)
+  - Wire QUIT → exit the application
+  - RED: Test that the title state accepts 4 menu regions with correct labels
+  - GREEN: Update `updateTitle()` menu rendering and input handling
+
+- [ ] **15.3 Title screen fade-in**
+  - Implement palette fade-in effect (ramp palette from black to full over ~1s)
+  - The original fades the title screen in from black after the intro movie
+  - RED: Test fade generates intermediate palettes between black and target
+  - GREEN: Implement palette interpolation in updateTitle()
+
+---
+
+## Phase 16: Intro Movie System (FORM:MOVI)
+*Play the opening cinematic before the title screen, matching the original game.*
+
+The original game plays a ~2-minute cinematic on startup: a text crawl over a
+planet scene, then a scripted sequence of cockpit views, character encounters,
+and asteroid fields. The data lives in MIDGAMES/ and uses a FORM:MOVI IFF
+scripting format to control frame-by-frame animation with sprite overlays.
+
+### Data Architecture (reverse-engineered)
+- `GFMIDGAM.IFF`: FORM:MIDG with TABL+FNAM entries mapping type indices to
+  control files (index 2 = OPENING.PAK = the intro sequence)
+- `OPENING.PAK`: PAK file whose string resources list the scene sequence:
+  mid1a → mid1b → mid1c1-c4 → mid1d → mid1e1-e4 → mid1f
+- `MID1A.IFF` through `MID1F.IFF`: FORM:MOVI scripts, each containing:
+  - `CLRC` (2 bytes) — clear screen flag
+  - `SPED` (2 bytes) — frame speed/timing (ticks per frame)
+  - `FILE` (variable) — indexed file references:
+    - File 0: `..\..\data\midgames\mid1.pak` (sprite frames)
+    - File 1: `..\..\data\midgames\midtext.pak` (text strings)
+    - File 2: `..\..\data\fonts\demofont.shp` (font for text rendering)
+    - File 4: `..\..\data\sound\opening` (music track)
+  - `FORM:ACTS` blocks containing:
+    - `FILD` — field/frame display commands (sprite index, file ref, position)
+    - `SPRI` — sprite positioning/animation commands (index, coords, timing)
+    - `BFOR` — background/foreground layer ordering
+- `MID1.PAK`: 80 resources with 1501 sprite frames (resource 0 = palette,
+  resources 1-79 = scene packs with delta-encoded sprites)
+- `MIDTEXT.PAK`: PAK with null-terminated text strings:
+  - "2669, GEMINI SECTOR, TROY SYSTEM..."
+  - "THE TERRAN FRONTIER..."
+  - "BETWEEN THE KILRATHI EMPIRE..."
+  - "...AND THE UNKNOWN."
+  - Plus dialogue lines for the pirate encounter
+- `OPENING.ADL` / `OPENING.GEN`: Music tracks for the intro
+
+- [ ] **16.1 FORM:MOVI IFF parser**
+  - Parse FORM:MOVI container with CLRC, SPED, FILE, FORM:ACTS chunks
+  - Parse ACTS sub-chunks: FILD (field commands), SPRI (sprite commands),
+    BFOR (layer ordering)
+  - Resolve FILE chunk paths to TRE entries (strip `..\..\data\` prefix,
+    normalize backslashes)
+  - RED: Test parsing MID1A.IFF produces correct FILE references, SPED value,
+    and ACTS command counts
+  - GREEN: Implement MovieScript struct and IFF parser in `src/formats/movie.zig`
+  - Integration test: Parse all 12 MID1*.IFF files without errors
+
+- [ ] **16.2 Opening sequence playlist parser**
+  - Parse OPENING.PAK as a string-list PAK (null-terminated scene names)
+  - Map scene names to MID1*.IFF files in the TRE (e.g., "mid1a" → "MIDGAMES/MID1A.IFF")
+  - Parse GFMIDGAM.IFF FORM:MIDG to identify the opening sequence file
+  - RED: Test OPENING.PAK produces scene list ["mid1a", "mid1b", "mid1c1", ...]
+  - GREEN: Implement OpeningSequence loader
+
+- [ ] **16.3 Movie text overlay system**
+  - Parse MIDTEXT.PAK as a string-list PAK (same format as OPENING.PAK)
+  - Render text strings centered on screen using DEMOFONT.SHP
+  - Support timed display (text appears and disappears per ACTS commands)
+  - RED: Test MIDTEXT.PAK entry 0 = "2669, GEMINI SECTOR, TROY SYSTEM..."
+  - GREEN: Implement text extraction and overlay rendering
+
+- [ ] **16.4 Movie sprite renderer**
+  - Load MID1.PAK sprite frames with embedded palette (resource 0)
+  - Render sprites at positions specified by SPRI commands
+  - Support delta/incremental frame compositing (each frame updates a
+    persistent 320x200 framebuffer, not full redraws)
+  - CLRC command clears the framebuffer between scenes
+  - RED: Test MID1.PAK resource 0 is a valid 772-byte palette
+  - GREEN: Implement MovieRenderer that executes ACTS commands frame-by-frame
+
+- [ ] **16.5 Movie player integration**
+  - Add `State.intro_movie` to the game state machine
+  - On startup: transition to intro_movie state, play OPENING sequence
+  - Execute scenes in order (mid1a → mid1f), advancing per SPED timing
+  - Play OPENING music track during the intro
+  - Escape key skips the intro and transitions to title screen
+  - On completion: fade to black, transition to title state with fade-in
+  - RED: Test state machine supports intro_movie → title transition
+  - GREEN: Wire movie player into main.zig startup flow
+
+- [ ] **16.6 Scene variant selection**
+  - OPENING.PAK lists variant groups (mid1c1-c4, mid1e1-e4)
+  - Select one variant randomly per playthrough (matching original behavior)
+  - RED: Test variant selection always picks one from each group
+  - GREEN: Implement random variant picker using Zig's PRNG
+
+---
+
 ## Future Considerations (Not in Current Scope)
 
 ### Righteous Fire Expansion
