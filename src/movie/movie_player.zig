@@ -242,11 +242,11 @@ pub const MoviePlayer = struct {
         self.tick_accum = 0;
         self.current_acts_idx = 0;
 
-        // Create renderer for this scene's file references
+        // Create renderer for this scene's file slot count (max slot_id + 1)
         var renderer = movie_renderer_mod.MovieRenderer.init(
             self.allocator,
             self.fb,
-            script.file_references.len,
+            script.fileSlotCount(),
         ) catch {
             script.deinit();
             self.advanceScene();
@@ -260,24 +260,24 @@ pub const MoviePlayer = struct {
 
         // Load PAK files referenced by the script (use basename for TRE lookup)
         var paks_loaded: usize = 0;
-        for (script.file_references, 0..) |ref_path, i| {
-            const ref_basename = std.fs.path.basename(ref_path);
+        for (script.file_references) |slot| {
+            const ref_basename = std.fs.path.basename(slot.path);
             if (self.tre_index.findEntry(ref_basename)) |ref_entry| {
                 const pak_data = tre_mod.extractFileData(
                     self.tre_data,
                     ref_entry.offset,
                     ref_entry.size,
                 ) catch {
-                    std.debug.print("  PAK[{d}] {s}: extract failed\n", .{ i, ref_basename });
+                    std.debug.print("  PAK[{d}] {s}: extract failed\n", .{ slot.slot_id, ref_basename });
                     continue;
                 };
-                renderer.loadPak(i, pak_data) catch {
-                    std.debug.print("  PAK[{d}] {s}: parse failed ({d} bytes)\n", .{ i, ref_basename, pak_data.len });
+                renderer.loadPak(@as(usize, slot.slot_id), pak_data) catch {
+                    std.debug.print("  PAK[{d}] {s}: parse failed ({d} bytes)\n", .{ slot.slot_id, ref_basename, pak_data.len });
                     continue;
                 };
                 paks_loaded += 1;
             } else {
-                std.debug.print("  PAK[{d}] {s}: not found in TRE\n", .{ i, ref_basename });
+                std.debug.print("  PAK[{d}] {s}: not found in TRE\n", .{ slot.slot_id, ref_basename });
             }
         }
 

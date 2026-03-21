@@ -870,7 +870,7 @@ shows this timeline:
 of real game data (via analyze_movi.py) revealed a scene-graph composition architecture.
 The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was implemented.*
 
-- [ ] **17.1 Fix FILE chunk parser (slot-indexed references)**
+- [x] **17.1 Fix FILE chunk parser (slot-indexed references)**
   - Current parser splits on null bytes (wrong) — real format is `[slot_id: u16 LE][path\0]` pairs
   - Slot IDs can be sparse (e.g., 0, 1, 2, 4 — slot 3 skipped)
   - RED: Test FILE parser with real MID1A.IFF data: expect slot 0=mid1.pak, 1=midtext.pak, 2=demofont.shp, 4=opening

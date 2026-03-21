@@ -3342,10 +3342,10 @@ test "integration: MovieRenderer loads MID1.PAK and renders SPRI command from MI
 
     // Create renderer with framebuffer
     var fb = framebuffer_mod.Framebuffer.create();
-    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.file_references.len);
+    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.fileSlotCount());
     defer renderer.deinit();
 
-    // Load MID1.PAK at file_ref 0 (the first FILE reference should point to it)
+    // Load MID1.PAK at slot 0 (the first FILE reference should point to it)
     try renderer.loadPak(0, mid1_data);
 
     // Verify palette was extracted
@@ -3385,13 +3385,13 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
     var script = try movie.parse(allocator, mid1a_data);
     defer script.deinit();
 
-    std.debug.print("DIAG: MID1A.IFF file_references ({d}):\n", .{script.file_references.len});
-    for (script.file_references, 0..) |ref, i| {
-        const basename = std.fs.path.basename(ref);
+    std.debug.print("DIAG: MID1A.IFF file_references ({d} slots, max {d}):\n", .{ script.file_references.len, script.fileSlotCount() });
+    for (script.file_references) |slot| {
+        const basename = std.fs.path.basename(slot.path);
         const found = tre_index.findEntry(basename);
-        std.debug.print("  [{d}] \"{s}\" → basename \"{s}\" → {s}\n", .{
-            i,
-            ref,
+        std.debug.print("  [slot {d}] \"{s}\" → basename \"{s}\" → {s}\n", .{
+            slot.slot_id,
+            slot.path,
             basename,
             if (found != null) "FOUND" else "NOT FOUND",
         });
@@ -3399,18 +3399,18 @@ test "integration: MoviePlayer full loading path for MID1A.IFF" {
 
     // Create renderer and load PAKs (like MoviePlayer)
     var fb = framebuffer_mod.Framebuffer.create();
-    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.file_references.len);
+    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.fileSlotCount());
     defer renderer.deinit();
 
-    for (script.file_references, 0..) |ref_path, i| {
-        const ref_basename = std.fs.path.basename(ref_path);
+    for (script.file_references) |slot| {
+        const ref_basename = std.fs.path.basename(slot.path);
         if (tre_index.findEntry(ref_basename)) |ref_entry| {
             const pak_data = tre.extractFileData(loaded.tre_data, ref_entry.offset, ref_entry.size) catch {
-                std.debug.print("DIAG: PAK[{d}] extract failed\n", .{i});
+                std.debug.print("DIAG: PAK[{d}] extract failed\n", .{slot.slot_id});
                 continue;
             };
-            renderer.loadPak(i, pak_data) catch |err| {
-                std.debug.print("DIAG: PAK[{d}] loadPak failed: {}\n", .{ i, err });
+            renderer.loadPak(@as(usize, slot.slot_id), pak_data) catch |err| {
+                std.debug.print("DIAG: PAK[{d}] loadPak failed: {}\n", .{ slot.slot_id, err });
                 continue;
             };
         }

@@ -2239,11 +2239,13 @@ def gen_movie_file():
     # SPED: frame speed = 10 ticks (big-endian u16)
     sped = make_iff_chunk(b"SPED", struct.pack('>H', 10))
 
-    # FILE: indexed file paths, null-terminated strings
+    # FILE: slot-indexed file paths — [slot_id: u16 LE][null-terminated path] pairs
+    # Slot IDs are sparse: 0, 1, 2, 4 (slot 3 skipped, matching real MID1A.IFF)
     file_paths = (
-        b"..\\..\\data\\midgames\\mid1.pak\x00"
-        b"..\\..\\data\\midgames\\midtext.pak\x00"
-        b"..\\..\\data\\fonts\\demofont.shp\x00"
+        struct.pack('<H', 0) + b"..\\..\\data\\midgames\\mid1.pak\x00"
+        + struct.pack('<H', 1) + b"..\\..\\data\\midgames\\midtext.pak\x00"
+        + struct.pack('<H', 2) + b"..\\..\\data\\fonts\\demofont.shp\x00"
+        + struct.pack('<H', 4) + b"..\\..\\data\\sound\\opening\x00"
     )
     file_chunk = make_iff_chunk(b"FILE", file_paths)
 

@@ -28,6 +28,14 @@ pub const MovieError = error{
     OutOfMemory,
 };
 
+/// A slot-indexed file reference from the FILE chunk.
+/// Real format: [slot_id: u16 LE][null-terminated path] pairs.
+/// Slot IDs can be sparse (e.g., 0, 1, 2, 4 — slot 3 skipped).
+pub const FileSlot = struct {
+    slot_id: u16,
+    path: []const u8,
+};
+
 /// A FILD command: display a sprite frame at a position.
 pub const FieldCommand = struct {
     /// Index into the FILE reference list (which PAK to read from).
@@ -78,12 +86,32 @@ pub const MovieScript = struct {
     clear_screen: bool,
     /// Frame speed in ticks per frame.
     frame_speed_ticks: u16,
-    /// Indexed file path references (null-terminated strings from FILE chunk).
-    file_references: []const []const u8,
+    /// Slot-indexed file path references from the FILE chunk.
+    /// Each entry has a slot_id and path. Slot IDs may be sparse.
+    file_references: []const FileSlot,
     /// Animation action blocks.
     acts_blocks: []const ActsBlock,
 
     allocator: std.mem.Allocator,
+
+    /// Return the number of slots needed (max slot_id + 1).
+    /// Used to size arrays indexed by slot_id (e.g., loaded PAKs).
+    pub fn fileSlotCount(self: *const MovieScript) usize {
+        var max_id: usize = 0;
+        for (self.file_references) |slot| {
+            const id = @as(usize, slot.slot_id) + 1;
+            if (id > max_id) max_id = id;
+        }
+        return max_id;
+    }
+
+    /// Look up a file path by slot ID.
+    pub fn getFilePath(self: *const MovieScript, slot_id: u16) ?[]const u8 {
+        for (self.file_references) |slot| {
+            if (slot.slot_id == slot_id) return slot.path;
+        }
+        return null;
+    }
 
     pub fn deinit(self: *MovieScript) void {
         for (self.acts_blocks) |block| {
@@ -167,23 +195,36 @@ pub fn parse(allocator: std.mem.Allocator, data: []const u8) (MovieError || iff.
     };
 }
 
-/// Parse null-terminated file path strings from a FILE chunk.
-fn parseFileReferences(allocator: std.mem.Allocator, data: []const u8) MovieError![]const []const u8 {
-    var refs: std.ArrayListUnmanaged([]const u8) = .empty;
+/// Parse slot-indexed file references from a FILE chunk.
+/// Real format: repeated [slot_id: u16 LE][null-terminated path] pairs.
+/// Slot IDs can be sparse (e.g., 0, 1, 2, 4 — slot 3 skipped).
+fn parseFileReferences(allocator: std.mem.Allocator, data: []const u8) MovieError![]const FileSlot {
+    var refs: std.ArrayListUnmanaged(FileSlot) = .empty;
     errdefer refs.deinit(allocator);
 
-    var start: usize = 0;
-    for (data, 0..) |byte, i| {
-        if (byte == 0) {
-            if (i > start) {
-                refs.append(allocator, data[start..i]) catch return MovieError.OutOfMemory;
-            }
-            start = i + 1;
+    var pos: usize = 0;
+    while (pos + 2 < data.len) {
+        // Read u16 LE slot ID
+        const slot_id = std.mem.readInt(u16, data[pos..][0..2], .little);
+        pos += 2;
+
+        // Find null terminator for the path string
+        const path_start = pos;
+        while (pos < data.len and data[pos] != 0) {
+            pos += 1;
         }
-    }
-    // Handle trailing string without null terminator
-    if (start < data.len) {
-        refs.append(allocator, data[start..]) catch return MovieError.OutOfMemory;
+        if (pos <= path_start) break; // empty path = done
+        const path = data[path_start..pos];
+
+        // Skip past the null terminator
+        if (pos < data.len and data[pos] == 0) {
+            pos += 1;
+        }
+
+        refs.append(allocator, .{
+            .slot_id = slot_id,
+            .path = path,
+        }) catch return MovieError.OutOfMemory;
     }
 
     return refs.toOwnedSlice(allocator) catch return MovieError.OutOfMemory;
@@ -301,11 +342,26 @@ test "parse FORM:MOVI from fixture" {
     // SPED = 10
     try std.testing.expectEqual(@as(u16, 10), script.frame_speed_ticks);
 
-    // FILE: 3 file references
-    try std.testing.expectEqual(@as(usize, 3), script.file_references.len);
-    try std.testing.expectEqualStrings("..\\..\\data\\midgames\\mid1.pak", script.file_references[0]);
-    try std.testing.expectEqualStrings("..\\..\\data\\midgames\\midtext.pak", script.file_references[1]);
-    try std.testing.expectEqualStrings("..\\..\\data\\fonts\\demofont.shp", script.file_references[2]);
+    // FILE: 4 slot-indexed file references (slots 0, 1, 2, 4 — slot 3 skipped)
+    try std.testing.expectEqual(@as(usize, 4), script.file_references.len);
+
+    // Verify slot IDs
+    try std.testing.expectEqual(@as(u16, 0), script.file_references[0].slot_id);
+    try std.testing.expectEqual(@as(u16, 1), script.file_references[1].slot_id);
+    try std.testing.expectEqual(@as(u16, 2), script.file_references[2].slot_id);
+    try std.testing.expectEqual(@as(u16, 4), script.file_references[3].slot_id);
+
+    // Verify paths
+    try std.testing.expectEqualStrings("..\\..\\data\\midgames\\mid1.pak", script.file_references[0].path);
+    try std.testing.expectEqualStrings("..\\..\\data\\midgames\\midtext.pak", script.file_references[1].path);
+    try std.testing.expectEqualStrings("..\\..\\data\\fonts\\demofont.shp", script.file_references[2].path);
+    try std.testing.expectEqualStrings("..\\..\\data\\sound\\opening", script.file_references[3].path);
+
+    // Verify helper methods
+    try std.testing.expectEqual(@as(usize, 5), script.fileSlotCount()); // max slot_id=4, so count=5
+    try std.testing.expectEqualStrings("..\\..\\data\\midgames\\mid1.pak", script.getFilePath(0).?);
+    try std.testing.expectEqualStrings("..\\..\\data\\sound\\opening", script.getFilePath(4).?);
+    try std.testing.expect(script.getFilePath(3) == null); // sparse — slot 3 not present
 
     // 1 ACTS block
     try std.testing.expectEqual(@as(usize, 1), script.acts_blocks.len);
@@ -344,6 +400,11 @@ test "parse FORM:MOVI with multiple ACTS blocks" {
 
     // SPED = 5
     try std.testing.expectEqual(@as(u16, 5), script.frame_speed_ticks);
+
+    // FILE: same 4 slot-indexed references as fixture 1
+    try std.testing.expectEqual(@as(usize, 4), script.file_references.len);
+    try std.testing.expectEqual(@as(u16, 0), script.file_references[0].slot_id);
+    try std.testing.expectEqual(@as(u16, 4), script.file_references[3].slot_id);
 
     // 2 ACTS blocks
     try std.testing.expectEqual(@as(usize, 2), script.acts_blocks.len);
