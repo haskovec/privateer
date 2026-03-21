@@ -509,6 +509,10 @@ pub const MoviePlayer = struct {
                             std.debug.print("  FILE[{d}] {s}: PAK parse failed ({d} bytes)\n", .{ slot.slot_id, ref_basename, file_data.len });
                             continue;
                         };
+                        // Track the text PAK slot (MIDTEXT.PAK)
+                        if (std.ascii.eqlIgnoreCase(ref_basename, "midtext.pak")) {
+                            renderer.text_pak_slot = @as(usize, slot.slot_id);
+                        }
                     },
                     else => continue,
                 }

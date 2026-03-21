@@ -80,6 +80,8 @@ pub const MovieRenderer = struct {
     fb: *framebuffer_mod.Framebuffer,
     /// Current palette (from the first loaded PAK with a palette).
     current_palette: ?pal_mod.Palette,
+    /// FILE slot containing the text PAK (MIDTEXT.PAK), or null if not loaded.
+    text_pak_slot: ?usize,
     allocator: std.mem.Allocator,
 
     /// Initialize a MovieRenderer for a MOVI script with the given number of
@@ -92,6 +94,7 @@ pub const MovieRenderer = struct {
             .loaded_files = files,
             .fb = fb,
             .current_palette = null,
+            .text_pak_slot = null,
             .allocator = allocator,
         };
     }
@@ -290,15 +293,17 @@ pub const MovieRenderer = struct {
         }
     }
 
-    /// Render a type 12 text sprite: look up font and text from FILD references,
-    /// then draw centered text at the specified position and color.
+    /// Render a type 12 text sprite.
+    ///
+    /// Text string index is computed as: params[3] - font_fild.param3
+    /// This indexes into MIDTEXT.PAK (the text PAK at text_pak_slot).
+    /// The font is looked up via params[4] → FILD object_id → LoadedFile.font.
     fn renderTextSprite(self: *MovieRenderer, spri: movie_mod.SpriteCommand, fild_table: []const movie_mod.FieldCommand) void {
         if (spri.param_count < 6) return;
 
-        const text_fild_id = spri.params[3];
         const font_fild_id = spri.params[4];
         const color: u8 = @truncate(spri.params[5]);
-        const y: i32 = @as(i32, @as(i16, @bitCast(spri.params[1])));
+        const y_param: i16 = @bitCast(spri.params[1]);
 
         // Look up font FILD → must point to a LoadedFile.font slot
         const font_fild = findFild(fild_table, font_fild_id) orelse return;
@@ -306,21 +311,25 @@ pub const MovieRenderer = struct {
         const font_file = self.loaded_files[font_fild.file_ref] orelse return;
         const font = switch (font_file) {
             .font => |*f| f,
-            .pak => return, // Not a font
+            .pak => return,
         };
 
-        // Look up text FILD → must point to a LoadedFile.pak slot (MIDTEXT.PAK)
-        const text_fild = findFild(fild_table, text_fild_id) orelse return;
-        if (text_fild.file_ref >= self.loaded_files.len) return;
-        const text_file = self.loaded_files[text_fild.file_ref] orelse return;
+        // Compute text string index: params[3] - font_fild.param3
+        const text_idx_raw = @as(i32, spri.params[3]) - @as(i32, font_fild.param3);
+        if (text_idx_raw < 0) return;
+        const text_idx: usize = @intCast(text_idx_raw);
+
+        // Get text PAK (MIDTEXT.PAK)
+        const pak_slot = self.text_pak_slot orelse return;
+        if (pak_slot >= self.loaded_files.len) return;
+        const text_file = self.loaded_files[pak_slot] orelse return;
         const text_pak = switch (text_file) {
             .pak => |p| p,
-            .font => return, // Not a PAK
+            .font => return,
         };
 
-        // Extract text string from PAK resource (text_fild.param2 = resource index)
-        const resource = text_pak.pak.getResource(text_fild.param2) catch return;
-        // Extract null-terminated string
+        // Extract text string from PAK resource at the computed index
+        const resource = text_pak.pak.getResource(text_idx) catch return;
         var str_end: usize = resource.len;
         for (resource, 0..) |byte, i| {
             if (byte == 0) {
@@ -331,11 +340,18 @@ pub const MovieRenderer = struct {
         if (str_end == 0) return;
         const text = resource[0..str_end];
 
-        // Render text centered horizontally at the specified Y position
+        // Compute Y position — y_param is relative to the bottom text region
+        // In the original, text appears at the bottom of the viewport (y ≈ 155-175)
+        const screen_height: u16 = 200;
+        const render_y: u16 = if (y_param < 0)
+            screen_height -| @as(u16, @intCast(-@as(i32, y_param)))
+        else
+            @min(@as(u16, @intCast(y_param)), 199);
+
+        // Render text centered horizontally
         const text_width = font.measureText(text);
         const screen_width: u16 = 320;
         const x: u16 = if (text_width >= screen_width) 0 else (screen_width - text_width) / 2;
-        const render_y: u16 = if (y < 0) 0 else @min(@as(u16, @intCast(y)), 199);
         _ = font.drawTextColored(self.fb, x, render_y, text, if (color == 0) null else color);
     }
 

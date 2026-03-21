@@ -956,6 +956,13 @@ The FILE, FILD, SPRI, and BFOR chunk formats are all different from what was imp
   - Self-ref SPRI type 4 skipped (animation keyframes need interpolation, static
     rendering at wrong position overwrites background)
 
+- [x] **17.10 Fix text overlays and render-once optimization**
+  - Text string index formula: `params[3] - font_fild.param3` indexes into MIDTEXT.PAK
+    (verified: MID1A params[3]=31 - font p3=31 = entry 0 = "2669, GEMINI SECTOR...",
+    MID1E1 params[3]=176 - font p3=163 = entry 13 = "What is it, that flies so good?")
+  - Track text_pak_slot in MovieRenderer, set from MIDTEXT.PAK FILE reference
+  - Render-once: each ACTS block renders to framebuffer once, not 60 times/sec
+
 ---
 
 ## Future Considerations (Not in Current Scope)
