@@ -30,6 +30,7 @@ const commodities = @import("economy/commodities.zig");
 const conversations = @import("conversations/conversations.zig");
 const conversation_audio = @import("conversations/conversation_audio.zig");
 const text = @import("render/text.zig");
+const opening = @import("game/opening.zig");
 
 const app_config = @import("config.zig");
 
@@ -3125,4 +3126,97 @@ test "integration: parse all MIDGAMES IFF files as FORM:MOVI" {
     // Should find multiple MOVI files (MID1A.IFF through MID1F.IFF = 12 files)
     try std.testing.expect(movi_count > 0);
     try std.testing.expectEqual(@as(usize, 0), movi_errors);
+}
+
+// --- Opening sequence playlist integration tests ---
+
+test "integration: GFMIDGAM.IFF parses as FORM:MIDG with entries" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "GFMIDGAM.IFF") orelse return;
+
+    var table = opening.parseMidgameTable(allocator, file_data) catch |err| {
+        std.debug.print("Failed to parse GFMIDGAM.IFF: {}\n", .{err});
+        return err;
+    };
+    defer table.deinit();
+
+    // Should have at least 3 entries (landing, takeoff, opening, ...)
+    try std.testing.expect(table.filenames.len >= 3);
+
+    // The opening sequence should be at index 2
+    const opening_file = table.getOpeningFilename();
+    try std.testing.expect(opening_file != null);
+    try std.testing.expectEqualStrings("OPENING.PAK", opening_file.?);
+
+    // Print all entries for diagnostic purposes
+    std.debug.print("GFMIDGAM entries ({d}):", .{table.filenames.len});
+    for (table.filenames) |name| {
+        std.debug.print(" {s}", .{name});
+    }
+    std.debug.print("\n", .{});
+}
+
+test "integration: OPENING.PAK parses as scene name playlist" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "OPENING.PAK") orelse return;
+
+    var seq = opening.parsePlaylist(allocator, file_data) catch |err| {
+        std.debug.print("Failed to parse OPENING.PAK: {}\n", .{err});
+        return err;
+    };
+    defer seq.deinit();
+
+    // Should have multiple scenes
+    try std.testing.expect(seq.sceneCount() > 0);
+
+    // First scene should be "mid1a" (or similar)
+    const first = seq.getSceneName(0);
+    try std.testing.expect(first != null);
+
+    // Print all scene names for diagnostic purposes
+    std.debug.print("OPENING.PAK scenes ({d}):", .{seq.sceneCount()});
+    for (0..seq.sceneCount()) |i| {
+        if (seq.getSceneName(i)) |name| {
+            std.debug.print(" {s}", .{name});
+        }
+    }
+    std.debug.print("\n", .{});
+}
+
+test "integration: OPENING.PAK scene names map to valid MOVI files in TRE" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    const file_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "OPENING.PAK") orelse return;
+
+    var seq = opening.parsePlaylist(allocator, file_data) catch return;
+    defer seq.deinit();
+
+    // Each scene name should map to a valid FORM:MOVI file in the TRE
+    var found_count: usize = 0;
+    for (0..seq.sceneCount()) |i| {
+        const tre_path = (try seq.getSceneTrePath(allocator, i)) orelse continue;
+        defer allocator.free(tre_path);
+
+        // Extract just the filename part for TRE lookup
+        const basename = std.fs.path.basename(tre_path);
+
+        const scene_data = findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", basename) catch continue orelse continue;
+
+        // Should be a FORM:MOVI file
+        if (movie.isMovi(scene_data)) {
+            found_count += 1;
+        }
+    }
+
+    // At least some scenes should resolve to valid MOVI files
+    try std.testing.expect(found_count > 0);
+    std.debug.print("Resolved {d}/{d} scenes to FORM:MOVI files\n", .{ found_count, seq.sceneCount() });
 }

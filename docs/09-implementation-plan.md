@@ -790,7 +790,7 @@ shows this timeline:
   - GREEN: Implement MovieScript struct and IFF parser in `src/formats/movie.zig`
   - Integration test: Parse all 12 MID1*.IFF files without errors
 
-- [ ] **16.2 Opening sequence playlist parser**
+- [x] **16.2 Opening sequence playlist parser**
   - Parse OPENING.PAK as a string-list PAK (null-terminated scene names)
   - Map scene names to MID1*.IFF files in the TRE (e.g., "mid1a" → "MIDGAMES/MID1A.IFF")
   - Parse GFMIDGAM.IFF FORM:MIDG to identify the opening sequence file

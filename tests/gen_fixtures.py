@@ -2252,6 +2252,98 @@ def gen_movie_file():
     write("test_movi_multi_acts.bin", root2)
 
 
+def gen_opening_playlist():
+    """Generate test fixtures for the opening sequence playlist parser.
+
+    Fixture 1: test_opening_pak.bin — Standard PAK with null-terminated scene name strings.
+        Each PAK resource is a null-terminated scene name like "mid1a\\0".
+        Scene list: mid1a, mid1b, mid1c1, mid1d
+
+    Fixture 2: test_opening_raw.bin — Raw string-list format.
+        4-byte LE file size header followed by concatenated null-terminated strings.
+        This is the alternate format where the PAK parser won't find valid markers.
+    """
+    # --- Fixture 1: Standard PAK with string resources ---
+    scene_names = [b"mid1a\x00", b"mid1b\x00", b"mid1c1\x00", b"mid1d\x00"]
+
+    # PAK: [file_size(4)] [N entries(4 each)] [terminator(4)] [resources...]
+    header_size = 4 + len(scene_names) * 4 + 4
+    offsets = []
+    off = header_size
+    for name in scene_names:
+        offsets.append(off)
+        off += len(name)
+    total = off
+
+    data = bytearray()
+    data += struct.pack('<I', total)
+    for o in offsets:
+        data += bytes([o & 0xFF, (o >> 8) & 0xFF, (o >> 16) & 0xFF, 0xE0])
+    data += bytes([0, 0, 0, 0])  # terminator
+    for name in scene_names:
+        data += name
+
+    assert len(data) == total, f"Opening PAK size mismatch: {len(data)} != {total}"
+    write("test_opening_pak.bin", bytes(data))
+
+    # --- Fixture 2: Raw string-list format (no offset table) ---
+    raw_strings = b"mid1a\x00mid1b\x00mid1c1\x00mid1d\x00"
+    raw_total = 4 + len(raw_strings)
+    raw_data = struct.pack('<I', raw_total) + raw_strings
+    write("test_opening_raw.bin", bytes(raw_data))
+
+
+def gen_gfmidgam():
+    """Generate test fixture for GFMIDGAM.IFF (FORM:MIDG).
+
+    Real GFMIDGAM.IFF structure (reverse-engineered from game data):
+        FORM:MIDG
+          TABL — N little-endian u32 offsets (relative to file start)
+          At each offset:
+            u32 LE: sub-block size (size of following FNAM IFF chunk)
+            FNAM IFF chunk: tag(4) + size(4 BE) + null-terminated filename
+
+    The test fixture has 3 entries:
+        Index 0: LANDINGS.IFF
+        Index 1: TAKEOFFS.IFF
+        Index 2: OPENING.PAK  (the opening intro sequence)
+    """
+    filenames = [b"LANDINGS.IFF\x00", b"TAKEOFFS.IFF\x00", b"OPENING.PAK\x00"]
+
+    # Build FNAM chunks with sub-block size prefix
+    fnam_entries = []
+    for name in filenames:
+        fnam_chunk = make_iff_chunk(b"FNAM", name)
+        # Sub-block size prefix (LE u32) = size of the FNAM chunk
+        entry = struct.pack('<I', len(fnam_chunk)) + fnam_chunk
+        fnam_entries.append(entry)
+
+    # TABL: 3 LE u32 offsets, each pointing to an entry
+    # File layout: FORM(4) + size(4) + MIDG(4) + TABL(8+12) + entries
+    # FORM header: 12 bytes
+    # TABL chunk: 8 (tag+size) + 12 (3 x 4-byte offsets) = 20 bytes
+    # Entries start at file offset 12 + 20 = 32
+    entries_start = 12 + 8 + len(filenames) * 4  # FORM header + TABL header + TABL data
+    offsets = []
+    cur = entries_start
+    for entry in fnam_entries:
+        offsets.append(cur)
+        cur += len(entry)
+
+    tabl_data = b""
+    for o in offsets:
+        tabl_data += struct.pack('<I', o)
+    tabl = make_iff_chunk(b"TABL", tabl_data)
+
+    # Combine: TABL + raw entries (not standard IFF children)
+    body = tabl
+    for entry in fnam_entries:
+        body += entry
+
+    root = make_iff_form(b"MIDG", body)
+    write("test_gfmidgam.bin", root)
+
+
 if __name__ == "__main__":
     print("Generating test fixtures...")
     gen_iso_pvd()
@@ -2293,4 +2385,6 @@ if __name__ == "__main__":
     gen_comptext_file()
     gen_commtxt_file()
     gen_movie_file()
+    gen_opening_playlist()
+    gen_gfmidgam()
     print("Done.")
