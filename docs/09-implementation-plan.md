@@ -857,7 +857,7 @@ shows this timeline:
   - RED: Test state machine supports intro_movie → title transition
   - GREEN: Wire movie player into main.zig startup flow with full audio
 
-- [ ] **16.9 Scene variant selection**
+- [x] **16.9 Scene variant selection**
   - OPENING.PAK lists variant groups (mid1c1-c4, mid1e1-e4)
   - Select one variant randomly per playthrough (matching original behavior)
   - RED: Test variant selection always picks one from each group

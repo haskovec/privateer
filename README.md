@@ -21,7 +21,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 ## Project Status
 
 Phase 0 through Phase 13 complete. Phase 14 (Polish & Release) in progress (14.1-14.4, 14.6-14.7 done).
-Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) in progress (16.1-16.8 done).
+Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) complete.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout

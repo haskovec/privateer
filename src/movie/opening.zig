@@ -242,6 +242,67 @@ pub fn sceneNameToTrePath(allocator: std.mem.Allocator, name: []const u8) ![]u8 
     return result;
 }
 
+/// Detect the base name for variant grouping.
+/// Strips a single trailing digit to find the group key.
+/// e.g., "mid1c1" → "mid1c", "mid1a" → "mid1a".
+fn variantBase(name: []const u8) []const u8 {
+    if (name.len > 0 and std.ascii.isDigit(name[name.len - 1])) {
+        // Only strip if the character before the digit is a letter,
+        // to avoid stripping the '1' from "mid1" (which is part of the base name).
+        if (name.len >= 2 and std.ascii.isAlphabetic(name[name.len - 2])) {
+            return name[0 .. name.len - 1];
+        }
+    }
+    return name;
+}
+
+/// Select one scene from each variant group, collapsing the playlist.
+///
+/// Variant groups are consecutive scenes sharing the same base name
+/// (name minus trailing digit). e.g., mid1c1/mid1c2/mid1c3/mid1c4 → pick one.
+/// Non-variant scenes pass through unchanged.
+pub fn selectVariants(
+    allocator: std.mem.Allocator,
+    sequence: *const OpeningSequence,
+    rand: std.Random,
+) !OpeningSequence {
+    var selected: std.ArrayListUnmanaged([]const u8) = .empty;
+    errdefer {
+        for (selected.items) |name| allocator.free(name);
+        selected.deinit(allocator);
+    }
+
+    var i: usize = 0;
+    while (i < sequence.scene_names.len) {
+        const base = variantBase(sequence.scene_names[i]);
+
+        // Find extent of this variant group (consecutive scenes with same base)
+        var group_end = i + 1;
+        while (group_end < sequence.scene_names.len) {
+            const next_base = variantBase(sequence.scene_names[group_end]);
+            if (!std.mem.eql(u8, base, next_base)) break;
+            group_end += 1;
+        }
+
+        const group_size = group_end - i;
+        if (group_size == 1) {
+            // Not a variant group — include as-is
+            try selected.append(allocator, try allocator.dupe(u8, sequence.scene_names[i]));
+        } else {
+            // Pick one randomly from the group
+            const pick = rand.uintLessThan(usize, group_size);
+            try selected.append(allocator, try allocator.dupe(u8, sequence.scene_names[i + pick]));
+        }
+
+        i = group_end;
+    }
+
+    return .{
+        .scene_names = try selected.toOwnedSlice(allocator),
+        .allocator = allocator,
+    };
+}
+
 /// Extract a null-terminated string from raw bytes.
 /// Returns the slice up to (but not including) the first null byte,
 /// or the entire slice if no null byte is found.
@@ -383,6 +444,123 @@ test "OpeningSequence getSceneTrePath out-of-bounds returns null" {
 
     const result = try seq.getSceneTrePath(allocator, 99);
     try std.testing.expect(result == null);
+}
+
+test "variantBase strips trailing digit" {
+    try std.testing.expectEqualStrings("mid1c", variantBase("mid1c1"));
+    try std.testing.expectEqualStrings("mid1c", variantBase("mid1c4"));
+    try std.testing.expectEqualStrings("mid1a", variantBase("mid1a"));
+    try std.testing.expectEqualStrings("mid1f", variantBase("mid1f"));
+    try std.testing.expectEqualStrings("", variantBase(""));
+}
+
+test "selectVariants collapses variant groups" {
+    const allocator = std.testing.allocator;
+
+    // Build a sequence with variant groups: mid1c1-c4, mid1e1-e4
+    const raw_names = [_][]const u8{
+        "mid1a", "mid1b", "mid1c1", "mid1c2", "mid1c3", "mid1c4",
+        "mid1d", "mid1e1", "mid1e2", "mid1e3", "mid1e4", "mid1f",
+    };
+
+    var owned_names = try allocator.alloc([]const u8, raw_names.len);
+    for (raw_names, 0..) |name, i| {
+        owned_names[i] = try allocator.dupe(u8, name);
+    }
+
+    var seq = OpeningSequence{
+        .scene_names = owned_names,
+        .allocator = allocator,
+    };
+    defer seq.deinit();
+
+    var prng = std.Random.DefaultPrng.init(42);
+    var result = try selectVariants(allocator, &seq, prng.random());
+    defer result.deinit();
+
+    // Should have 6 scenes: a, b, one of c1-c4, d, one of e1-e4, f
+    try std.testing.expectEqual(@as(usize, 6), result.sceneCount());
+    try std.testing.expectEqualStrings("mid1a", result.getSceneName(0).?);
+    try std.testing.expectEqualStrings("mid1b", result.getSceneName(1).?);
+    // Scene 2 should be one of c1-c4
+    const c_pick = result.getSceneName(2).?;
+    try std.testing.expect(std.mem.startsWith(u8, c_pick, "mid1c"));
+    try std.testing.expectEqualStrings("mid1d", result.getSceneName(3).?);
+    // Scene 4 should be one of e1-e4
+    const e_pick = result.getSceneName(4).?;
+    try std.testing.expect(std.mem.startsWith(u8, e_pick, "mid1e"));
+    try std.testing.expectEqualStrings("mid1f", result.getSceneName(5).?);
+}
+
+test "selectVariants with no variants returns same list" {
+    const allocator = std.testing.allocator;
+    const raw_names = [_][]const u8{ "mid1a", "mid1b", "mid1d" };
+
+    var owned_names = try allocator.alloc([]const u8, raw_names.len);
+    for (raw_names, 0..) |name, i| {
+        owned_names[i] = try allocator.dupe(u8, name);
+    }
+
+    var seq = OpeningSequence{
+        .scene_names = owned_names,
+        .allocator = allocator,
+    };
+    defer seq.deinit();
+
+    var prng = std.Random.DefaultPrng.init(0);
+    var result = try selectVariants(allocator, &seq, prng.random());
+    defer result.deinit();
+
+    try std.testing.expectEqual(@as(usize, 3), result.sceneCount());
+    try std.testing.expectEqualStrings("mid1a", result.getSceneName(0).?);
+    try std.testing.expectEqualStrings("mid1b", result.getSceneName(1).?);
+    try std.testing.expectEqualStrings("mid1d", result.getSceneName(2).?);
+}
+
+test "selectVariants always picks one from each group" {
+    const allocator = std.testing.allocator;
+
+    // Run multiple times with different seeds to verify invariant
+    for (0..20) |seed| {
+        const raw_names = [_][]const u8{ "mid1c1", "mid1c2", "mid1c3", "mid1c4" };
+
+        var owned_names = try allocator.alloc([]const u8, raw_names.len);
+        for (raw_names, 0..) |name, i| {
+            owned_names[i] = try allocator.dupe(u8, name);
+        }
+
+        var seq = OpeningSequence{
+            .scene_names = owned_names,
+            .allocator = allocator,
+        };
+        defer seq.deinit();
+
+        var prng = std.Random.DefaultPrng.init(seed);
+        var result = try selectVariants(allocator, &seq, prng.random());
+        defer result.deinit();
+
+        // Should always produce exactly one scene
+        try std.testing.expectEqual(@as(usize, 1), result.sceneCount());
+        // And it should be one of the variants
+        try std.testing.expect(std.mem.startsWith(u8, result.getSceneName(0).?, "mid1c"));
+    }
+}
+
+test "selectVariants with empty sequence returns empty" {
+    const allocator = std.testing.allocator;
+
+    const owned_names = try allocator.alloc([]const u8, 0);
+    var seq = OpeningSequence{
+        .scene_names = owned_names,
+        .allocator = allocator,
+    };
+    defer seq.deinit();
+
+    var prng = std.Random.DefaultPrng.init(0);
+    var result = try selectVariants(allocator, &seq, prng.random());
+    defer result.deinit();
+
+    try std.testing.expectEqual(@as(usize, 0), result.sceneCount());
 }
 
 test "MidgameTable getFilename out-of-bounds returns null" {
