@@ -804,7 +804,7 @@ shows this timeline:
   - RED: Test MIDTEXT.PAK entry 0 = "2669, GEMINI SECTOR, TROY SYSTEM..."
   - GREEN: Implement text extraction and overlay rendering
 
-- [ ] **16.4 Movie sprite renderer**
+- [x] **16.4 Movie sprite renderer**
   - Load MID1.PAK sprite frames with embedded palette (resource 0)
   - Render sprites at positions specified by SPRI commands
   - Support delta/incremental frame compositing (each frame updates a

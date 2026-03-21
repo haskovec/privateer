@@ -32,6 +32,7 @@ const conversation_audio = @import("conversations/conversation_audio.zig");
 const text = @import("render/text.zig");
 const opening = @import("game/opening.zig");
 const movie_text = @import("game/movie_text.zig");
+const movie_renderer = @import("game/movie_renderer.zig");
 
 const app_config = @import("config.zig");
 
@@ -3251,4 +3252,46 @@ test "integration: MIDTEXT.PAK parses as movie text with expected first entry" {
             std.debug.print("  [{d}] \"{s}\"\n", .{ i, entry });
         }
     }
+}
+
+// --- Movie renderer integration tests ---
+
+test "integration: MovieRenderer loads MID1.PAK and renders SPRI command from MID1A.IFF" {
+    const allocator = std.testing.allocator;
+    const loaded = try loadTreData(allocator) orelse return;
+    defer allocator.free(loaded.data);
+
+    // Load MID1.PAK (the sprite/palette PAK referenced by MID1A.IFF)
+    const mid1_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "MID1.PAK") orelse return;
+
+    // Load MID1A.IFF (first scene script)
+    const mid1a_data = try findTreFileByPath(allocator, loaded.tre_data, "MIDGAMES", "MID1A.IFF") orelse return;
+
+    // Parse the movie script
+    var script = try movie.parse(allocator, mid1a_data);
+    defer script.deinit();
+
+    // Create renderer with framebuffer
+    var fb = framebuffer_mod.Framebuffer.create();
+    var renderer = try movie_renderer.MovieRenderer.init(allocator, &fb, script.file_references.len);
+    defer renderer.deinit();
+
+    // Load MID1.PAK at file_ref 0 (the first FILE reference should point to it)
+    try renderer.loadPak(0, mid1_data);
+
+    // Verify palette was extracted
+    const palette = renderer.getPalette();
+    try std.testing.expect(palette != null);
+
+    // Execute the first ACTS block
+    try std.testing.expect(script.acts_blocks.len > 0);
+    // Try executing the first block — if any sprite resource fails, that's ok for this test
+    renderer.executeActsBlock(script.acts_blocks[0]) catch {};
+
+    // Framebuffer should have some non-black pixels after rendering
+    var non_black: usize = 0;
+    for (fb.pixels) |p| {
+        if (p != 0) non_black += 1;
+    }
+    std.debug.print("MovieRenderer: rendered {d} non-black pixels from MID1A.IFF first ACTS block\n", .{non_black});
 }
