@@ -595,6 +595,7 @@ fn initGameState(
     allocator: std.mem.Allocator,
     cfg: *const privateer.config.Config,
     win: *privateer.window.Window,
+    play_movie: bool,
 ) !*GameState {
     // Build path to GAME.DAT
     const dat_path = try std.fmt.allocPrint(allocator, "{s}" ++ std.fs.path.sep_str ++ "GAME.DAT", .{cfg.data_dir});
@@ -688,10 +689,11 @@ fn initGameState(
         std.debug.print("Warning: Could not load DEMOFONT.SHP\n", .{});
     }
 
-    // Load opening sequence for intro movie
+    // Load opening sequence for intro movie (only with --movie flag)
     var movie_player: ?movie_player_mod.MoviePlayer = null;
     var initial_state = game_state_mod.GameStateMachine.init();
     load_opening: {
+        if (!play_movie) break :load_opening;
         // Parse GFMIDGAM.IFF to find OPENING.PAK filename
         const gfmidgam_entry = tre_index.findEntry("GFMIDGAM.IFF") orelse break :load_opening;
         const gfmidgam_data = tre.extractFileData(tre_data, gfmidgam_entry.offset, gfmidgam_entry.size) catch break :load_opening;
@@ -787,8 +789,20 @@ pub fn main() !void {
     // Apply CLI arg overrides
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    if (args.len > 1) {
-        try privateer.config.applyArgs(&cfg, args[1..]);
+
+    // Check for --movie flag (plays intro movie before title screen)
+    var play_movie = false;
+    var config_args = std.ArrayList([]const u8).init(allocator);
+    defer config_args.deinit();
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--movie")) {
+            play_movie = true;
+        } else {
+            config_args.append(arg) catch {};
+        }
+    }
+    if (config_args.items.len > 0) {
+        try privateer.config.applyArgs(&cfg, config_args.items);
     }
 
     privateer.sdl.init() catch |err| {
@@ -806,7 +820,7 @@ pub fn main() !void {
     defer win.destroy();
 
     // Initialize game state (loads GAME.DAT, PRIV.TRE, palettes, scenes)
-    var state = initGameState(allocator, &cfg, &win) catch |err| {
+    var state = initGameState(allocator, &cfg, &win, play_movie) catch |err| {
         std.debug.print("Failed to load game data: {}\n", .{err});
         std.debug.print("Make sure GAME.DAT is in your data directory: {s}\n", .{cfg.data_dir});
         std.debug.print("Set PRIVATEER_DATA environment variable or edit privateer.json\n", .{});

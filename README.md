@@ -177,7 +177,8 @@ privateer/
 
 - `zig build` -- build the game executable and tools
 - `zig build test` -- run all unit and integration tests
-- `zig build run` -- build and run the game
+- `zig build run` -- build and run the game (starts at title screen)
+- `zig build run -- --movie` -- build and run with intro movie (work in progress)
 - `zig build extract -- --output <dir>` -- extract all game assets from GAME.DAT
 - `zig build repack -- --input <dir> --output <GAME.DAT>` -- repack extracted/modded assets into a new GAME.DAT
 - `zig build sprite -- list` -- list all sprite-containing files in GAME.DAT
@@ -202,6 +203,7 @@ All project documentation lives in the `docs/` directory:
 | [Design Decisions](docs/08-design-decisions.md) | Locked-in decisions: 4x upscaling, original audio, widescreen, moddability, single-player, Righteous Fire deferred |
 | [Implementation Plan](docs/09-implementation-plan.md) | 14-phase plan with checkboxes for progress tracking, ordered by priority, using red/green TDD methodology throughout |
 | [Scene System Analysis](docs/10-scene-system-gaps.md) | PRCD.EXE reverse engineering results: scene ID → OPTSHPS.PAK mapping, sprite INFO → global PAK index for click regions, palette inheritance |
+| [Movie Issues](docs/11-movie-issues.md) | Known issues with intro movie rendering, findings from reverse engineering, and remaining work items |
 
 ## Original Game Data
 
