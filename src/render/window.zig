@@ -36,6 +36,8 @@ pub const Window = struct {
     mouse_y: f32 = 0,
     mouse_clicked: bool = false,
     key_pressed: u32 = 0,
+    /// Key modifier state (SDL_KMOD_* flags) for the most recent key press.
+    key_mod: u16 = 0,
 
     pub const CreateError = error{
         WindowCreateFailed,
@@ -97,6 +99,7 @@ pub const Window = struct {
         self.keyboard.beginFrame();
         self.mouse_clicked = false;
         self.key_pressed = 0;
+        self.key_mod = 0;
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -115,6 +118,7 @@ pub const Window = struct {
                     // Track key press for game state
                     if (event.type == c.SDL_EVENT_KEY_DOWN and !key.repeat) {
                         self.key_pressed = key.key;
+                        self.key_mod = key.mod;
                     }
                     // Route all key events to keyboard handler
                     self.keyboard.handleEvent(&event);
