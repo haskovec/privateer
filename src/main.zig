@@ -61,6 +61,10 @@ const GameState = struct {
 
     // Quine 4000 registration terminal (null when not in registration)
     quine_terminal: ?quine_terminal_mod.QuineTerminal,
+    // Quine 4000 background sprite (loaded from CUBICLE.PAK resource 8)
+    quine_bg: ?sprite_mod.Sprite,
+    // Quine 4000 palette (OPTPALS palette 28)
+    quine_palette: ?pal.Palette,
 
     // Current save data (populated after registration or load)
     current_save: ?save_game_mod.SaveGameData,
@@ -77,6 +81,10 @@ const GameState = struct {
             s.deinit();
         }
         if (self.title_bg) |*bg| {
+            var s = bg.*;
+            s.deinit();
+        }
+        if (self.quine_bg) |*bg| {
             var s = bg.*;
             s.deinit();
         }
@@ -534,10 +542,11 @@ fn updateRegistration(state: *GameState) void {
         }
     }
 
-    // Render Quine terminal
+    // Render Quine terminal with CUBICLE.PAK background and palette
     const font_ptr: ?*const text_mod.Font = if (state.title_font) |*f| f else null;
-    qt.render(&state.fb, font_ptr);
-    state.fb.applyPalette(&state.palette);
+    qt.render(&state.fb, state.quine_bg, font_ptr);
+    const pal_ptr = if (state.quine_palette) |*qp| qp else &state.palette;
+    state.fb.applyPalette(pal_ptr);
     state.fb.presentWithMode(
         state.renderer,
         @intCast(state.window.width),
@@ -747,6 +756,20 @@ fn initGameState(
         std.debug.print("Warning: Could not load title screen\n", .{});
     }
 
+    // Load Quine 4000 background from CUBICLE.PAK resource 8 with OPTPALS palette 28
+    var quine_bg: ?sprite_mod.Sprite = null;
+    var quine_palette: ?pal.Palette = null;
+    const quine_result = loadSceneBackground(allocator, tre_data, &tre_index, quine_terminal_mod.CUBICLE_PAK, quine_terminal_mod.CUBICLE_BG_RESOURCE) catch null;
+    if (quine_result) |result| {
+        quine_bg = result.sprite;
+        if (loadOptpalsPalette(tre_data, &tre_index, quine_terminal_mod.CUBICLE_PALETTE_IDX)) |qpal| {
+            quine_palette = qpal;
+        }
+        std.debug.print("Quine 4000 background loaded from CUBICLE.PAK\n", .{});
+    } else {
+        std.debug.print("Warning: Could not load Quine 4000 background\n", .{});
+    }
+
     // Try to load DEMOFONT.SHP for title screen text
     var title_font: ?text_mod.Font = null;
     if (tre_index.findEntry("DEMOFONT.SHP")) |font_entry| {
@@ -830,6 +853,8 @@ fn initGameState(
         .title_fade_frame = 0,
         .movie_player = movie_player,
         .quine_terminal = null,
+        .quine_bg = quine_bg,
+        .quine_palette = quine_palette,
         .current_save = null,
         .frame_count = 0,
     };
