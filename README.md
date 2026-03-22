@@ -25,7 +25,7 @@ Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) comp
 Phase 17 (MOVI Parser & Renderer Rewrite) in progress (17.1-17.9 done) — reverse engineering revealed the FORM:MOVI
 format uses a scene-graph composition model with polymorphic file slots, BFOR-driven composition,
 opaque/transparent blit modes, and per-scene voice clip references.
-Phase 18 (Quine 4000 Computer Terminal) planned — adds the original game's new-game registration
+Phase 18 (Quine 4000 Computer Terminal) complete — adds the original game's new-game registration
 screen with name/callsign entry before gameplay begins.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
@@ -104,7 +104,8 @@ privateer/
 │   │   └── joystick.zig           # Joystick/gamepad support (SDL3 gamepad API, deadzone, axis mapping, button edge detection)
 │   │
 │   ├── ui/                        # UI screens
-│   │   └── options_menu.zig       # Options menu (resolution, fullscreen, viewport, volume controls)
+│   │   ├── options_menu.zig       # Options menu (resolution, fullscreen, viewport, volume controls)
+│   │   └── quine_terminal.zig     # Quine 4000 terminal (new-game name/callsign registration, procedural UI)
 │   │
 │   ├── missions/                  # Mission system
 │   │   ├── missions.zig           # Random mission generator (RNDM templates, base-type filtering, reward generation)
@@ -248,3 +249,4 @@ The `tools/` directory contains Python scripts used during the reverse engineeri
 | `analyze_soundfx2.py` | Inner PAK structure analysis showing 43 VOC sound clips |
 | `analyze_movi.py` | Deep analysis of FORM:MOVI intro cinematic IFF files (FILE/FILD/SPRI/BFOR chunk formats) |
 | `dump_movi.py` | Complete MOVI scene graph dump: all FILE slots, FILD records, SPRI records with types/params, BFOR composition commands for all 12 intro scenes |
+| `find_quine.py` | Scan OPTSHPS.PAK for Quine 4000 background sprite: RLE decoder, palette rendering, PNG export for candidate fullscreen entries |

@@ -981,7 +981,7 @@ The Quine 4000 screen features:
 - Keyboard text input for name and callsign
 - After registration: game starts at the first base (Troy system, New Detroit)
 
-- [ ] **18.1 Identify Quine 4000 background resource in OPTSHPS.PAK**
+- [x] **18.1 Identify Quine 4000 background resource in OPTSHPS.PAK**
   - OPTSHPS.PAK entries 0-61 are scene backgrounds, entry 181 is the title screen
   - The Quine 4000 background is in the UI range (entries 62-225) — exact index unknown
   - Use the sprite viewer CLI (`zig build sprite -- view --file OPTSHPS.PAK --index <N>`)
@@ -990,7 +990,7 @@ The Quine 4000 screen features:
   - Fallback: if not found as a pre-rendered sprite, draw procedurally using
     `fillRect`/`drawRect` + font rendering (following the `options_menu.zig` pattern)
 
-- [ ] **18.2 Add `registration` state to game state machine**
+- [x] **18.2 Add `registration` state to game state machine**
   - Add `registration` to the `State` enum in `src/game/game_state.zig` — append at end
     (after `options`, ordinal 10) to preserve existing save file ordinal values
   - Update `canTransition` to allow: `title → registration`, `registration → loading`,
@@ -1000,13 +1000,13 @@ The Quine 4000 screen features:
     registration→title, and invalid transitions rejected)
   - GREEN: Add enum variant and transition rules
 
-- [ ] **18.3 Expose key modifier state from Window**
+- [x] **18.3 Expose key modifier state from Window**
   - Add `key_mod: u16 = 0` field to Window struct in `src/render/window.zig`
   - Capture `key.mod` alongside `key_pressed` in the `SDL_EVENT_KEY_DOWN` handler
   - Reset to 0 in `pollEvents` alongside `key_pressed`
   - This lets the Quine terminal detect Shift for uppercase input
 
-- [ ] **18.4 Create Quine terminal UI module**
+- [x] **18.4 Create Quine terminal UI module**
   - New file: `src/ui/quine_terminal.zig` following the `options_menu.zig` pattern
   - `QuineTerminal` struct with phase (enter_name/enter_callsign/done),
     name/callsign buffers (max 16/12 chars), and cursor blink counter
@@ -1020,7 +1020,7 @@ The Quine 4000 screen features:
   - GREEN: Implement struct with init/handleKeyPress/render methods
   - Export from `src/root.zig`
 
-- [ ] **18.5 Add player name and callsign to save data**
+- [x] **18.5 Add player name and callsign to save data**
   - Add to `SaveGameData` in `src/persistence/save_game.zig`:
     `player_name: [16]u8`, `player_name_len: u8`,
     `player_callsign: [12]u8`, `player_callsign_len: u8`
@@ -1030,7 +1030,7 @@ The Quine 4000 screen features:
   - RED: Round-trip test with name/callsign, version 1 backward compat test
   - GREEN: Implement serialization and version detection
 
-- [ ] **18.6 Integrate into game loop**
+- [x] **18.6 Integrate into game loop**
   - Add `quine_terminal: ?QuineTerminal` to `GameState` struct in `src/main.zig` (init null)
   - Modify title screen "New Game" handler: `title → registration` + init QuineTerminal
     (instead of current `title → loading → landed`)
@@ -1039,7 +1039,7 @@ The Quine 4000 screen features:
   - Hook into update dispatcher (`switch state_machine.state { .registration => ... }`)
   - "Load Game" flow stays unchanged (bypasses registration)
 
-- [ ] **18.7 Initialize default new-game state**
+- [x] **18.7 Initialize default new-game state**
   - On registration completion, set up default save data: starting credits, Tarsus ship,
     Troy system, New Detroit base, copy name/callsign from QuineTerminal
   - Store in a `current_save` field on GameState for later save operations
