@@ -28,6 +28,8 @@ pub const State = enum {
     animation,
     /// Options/settings menu.
     options,
+    /// New-game registration (Quine 4000 terminal: enter name/callsign).
+    registration,
 };
 
 /// Error returned when an invalid state transition is attempted.
@@ -62,7 +64,7 @@ pub const GameStateMachine = struct {
     pub fn canTransition(self: *const GameStateMachine, target: State) bool {
         return switch (self.state) {
             .intro_movie => target == .title,
-            .title => target == .loading or target == .options,
+            .title => target == .loading or target == .options or target == .registration,
             .loading => target == .space_flight or target == .landed,
             .space_flight => target == .landed or target == .combat or target == .dead or target == .loading or target == .animation,
             .landed => target == .space_flight or target == .conversation or target == .loading or target == .animation or target == .options,
@@ -71,6 +73,7 @@ pub const GameStateMachine = struct {
             .dead => target == .title,
             .animation => target == .space_flight or target == .landed,
             .options => target == .title or target == .landed,
+            .registration => target == .loading or target == .title,
         };
     }
 
@@ -642,6 +645,49 @@ test "completeAnimation to invalid target returns error" {
 }
 
 // Full gameplay cycle
+
+// Registration state
+
+test "transition from title to registration succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    try std.testing.expectEqual(State.registration, sm.state);
+}
+
+test "transition from registration to loading succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    try sm.transition(.loading);
+    try std.testing.expectEqual(State.loading, sm.state);
+}
+
+test "transition from registration to title succeeds" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    try sm.transition(.title);
+    try std.testing.expectEqual(State.title, sm.state);
+}
+
+test "transition from registration to space_flight is rejected" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    try std.testing.expectError(error.InvalidTransition, sm.transition(.space_flight));
+    try std.testing.expectEqual(State.registration, sm.state);
+}
+
+test "transition from registration to landed is rejected" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    try std.testing.expectError(error.InvalidTransition, sm.transition(.landed));
+}
+
+test "registration is not a base state" {
+    var sm = GameStateMachine.init();
+    try sm.transition(.registration);
+    // Room/scene should be null (not a base state)
+    try std.testing.expect(sm.current_room == null);
+    try std.testing.expect(sm.current_scene == null);
+}
 
 test "full cycle: title -> loading -> landed -> conversation -> landed -> animation -> space_flight -> combat -> dead -> title" {
     var sm = GameStateMachine.init();
