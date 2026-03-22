@@ -571,6 +571,26 @@ pub const Pager = struct {
     /// - a single sprite index is targeted
     /// - no inline display capability
     /// - all sprites fit in one page
+    /// Range of sprite indices for a single page.
+    pub const PageRange = struct {
+        start: usize,
+        end: usize,
+    };
+
+    /// Returns the sprite index range for the given 0-based page number.
+    /// The end index is clamped to total_sprites.
+    pub fn pageRange(self: Pager, page_number: usize) PageRange {
+        const start = page_number * self.config.page_size;
+        const end = @min(start + self.config.page_size, self.config.total_sprites);
+        return .{ .start = start, .end = end };
+    }
+
+    /// Returns the total number of pages (ceiling division).
+    pub fn totalPages(self: Pager) usize {
+        if (self.config.total_sprites == 0) return 0;
+        return (self.config.total_sprites + self.config.page_size - 1) / self.config.page_size;
+    }
+
     pub fn isActive(self: Pager) bool {
         if (self.config.no_pager) return false;
         if (!self.config.is_tty) return false;
@@ -643,4 +663,36 @@ test "pager active when all conditions met" {
         .single_index = false,
     });
     try std.testing.expect(pager.isActive());
+}
+
+test "pageRange first page" {
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    const range = pager.pageRange(0);
+    try std.testing.expectEqual(@as(usize, 0), range.start);
+    try std.testing.expectEqual(@as(usize, 25), range.end);
+}
+
+test "pageRange last page clamped to total" {
+    const pager = Pager.init(.{ .total_sprites = 30, .page_size = 25 });
+    const range = pager.pageRange(1);
+    try std.testing.expectEqual(@as(usize, 25), range.start);
+    try std.testing.expectEqual(@as(usize, 30), range.end);
+}
+
+test "pageRange custom page_size" {
+    const pager = Pager.init(.{ .total_sprites = 50, .page_size = 10 });
+    const range = pager.pageRange(2);
+    try std.testing.expectEqual(@as(usize, 20), range.start);
+    try std.testing.expectEqual(@as(usize, 30), range.end);
+}
+
+test "totalPages rounds up" {
+    const pager = Pager.init(.{ .total_sprites = 26, .page_size = 25 });
+    try std.testing.expectEqual(@as(usize, 2), pager.totalPages());
+
+    const pager2 = Pager.init(.{ .total_sprites = 25, .page_size = 25 });
+    try std.testing.expectEqual(@as(usize, 1), pager2.totalPages());
+
+    const pager3 = Pager.init(.{ .total_sprites = 0, .page_size = 25 });
+    try std.testing.expectEqual(@as(usize, 0), pager3.totalPages());
 }

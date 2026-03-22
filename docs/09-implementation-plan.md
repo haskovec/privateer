@@ -1061,7 +1061,7 @@ line prompt, and single-keypress navigation.
   - RED: 6 tests — one per disable condition + one for the active case
   - GREEN: Implement `PagerConfig`, `Pager.init()`, `Pager.isActive()`
 
-- [ ] **19.2 Page range calculation**
+- [x] **19.2 Page range calculation**
   - `Pager.pageRange(page_number)` returns `PageRange{ start, end }` (0-based sprite indices)
   - `Pager.totalPages()` returns ceiling division of total_sprites / page_size
   - RED: 4 tests — first page, last page clamped to total, custom page_size, totalPages rounds up
