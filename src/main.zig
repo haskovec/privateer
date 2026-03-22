@@ -17,6 +17,8 @@ const text_mod = privateer.text;
 const movie_player_mod = privateer.movie_player;
 const opening_mod = privateer.opening;
 const movie_music_mod = privateer.movie_music;
+const quine_terminal_mod = privateer.quine_terminal;
+const save_game_mod = privateer.save_game;
 
 /// Holds all live game data and rendering state for the main loop.
 const GameState = struct {
@@ -56,6 +58,12 @@ const GameState = struct {
 
     // Intro movie player (null when not playing intro)
     movie_player: ?movie_player_mod.MoviePlayer,
+
+    // Quine 4000 registration terminal (null when not in registration)
+    quine_terminal: ?quine_terminal_mod.QuineTerminal,
+
+    // Current save data (populated after registration or load)
+    current_save: ?save_game_mod.SaveGameData,
 
     frame_count: u64,
 
@@ -331,6 +339,7 @@ fn update(state_ptr: *anyopaque) void {
     switch (state.state_machine.state) {
         .intro_movie => updateIntroMovie(state),
         .title => updateTitle(state),
+        .registration => updateRegistration(state),
         .landed => updateLanded(state),
         .conversation => updateConversation(state),
         else => updateDefault(state),
@@ -453,7 +462,11 @@ fn updateTitle(state: *GameState) void {
     }
 
     switch (action) {
-        .new_game, .load_game => {
+        .new_game => {
+            state.state_machine.transition(.registration) catch return;
+            state.quine_terminal = quine_terminal_mod.QuineTerminal.init();
+        },
+        .load_game => {
             state.state_machine.transition(.loading) catch return;
             state.state_machine.transition(.landed) catch return;
             if (state.gameflow.rooms.len > 0) {
@@ -471,6 +484,66 @@ fn updateTitle(state: *GameState) void {
         },
         .none => {},
     }
+}
+
+fn updateRegistration(state: *GameState) void {
+    var qt = &(state.quine_terminal orelse {
+        // No terminal — cancel back to title
+        state.state_machine.transition(.title) catch {};
+        return;
+    });
+
+    // Handle keyboard input
+    const key = state.window.key_pressed;
+    if (key != 0) {
+        const result = qt.handleKeyPress(key, state.window.key_mod);
+        switch (result) {
+            .cancelled => {
+                state.quine_terminal = null;
+                state.state_machine.transition(.title) catch {};
+                state.title_fade_frame = GameState.TITLE_FADE_FRAMES; // skip fade on return
+                return;
+            },
+            .completed => {
+                // Initialize new game save data with registered name/callsign
+                var save = save_game_mod.SaveGameData{};
+                save.setPlayerName(qt.getName());
+                save.setPlayerCallsign(qt.getCallsign());
+                save.credits = 10000; // Starting credits
+                save.current_ship_id = 0; // Tarsus
+                save.current_system = 0; // Troy system
+                save.current_base = 0; // New Detroit
+                save.state = .landed;
+                state.current_save = save;
+
+                state.quine_terminal = null;
+                state.state_machine.transition(.loading) catch return;
+                state.state_machine.transition(.landed) catch return;
+                if (state.gameflow.rooms.len > 0) {
+                    const room = state.gameflow.rooms[0];
+                    if (room.scenes.len > 0) {
+                        loadLandingScene(state, room.info, room.scenes[0].info);
+                    }
+                }
+                std.debug.print("New game started: name=\"{s}\" callsign=\"{s}\"\n", .{
+                    save.getPlayerName(), save.getPlayerCallsign(),
+                });
+                return;
+            },
+            .continue_input => {},
+        }
+    }
+
+    // Render Quine terminal
+    const font_ptr: ?*const text_mod.Font = if (state.title_font) |*f| f else null;
+    qt.render(&state.fb, font_ptr);
+    state.fb.applyPalette(&state.palette);
+    state.fb.presentWithMode(
+        state.renderer,
+        @intCast(state.window.width),
+        @intCast(state.window.height),
+        state.viewport_mode,
+    );
 }
 
 fn updateLanded(state: *GameState) void {
@@ -756,6 +829,8 @@ fn initGameState(
         .title_font = title_font,
         .title_fade_frame = 0,
         .movie_player = movie_player,
+        .quine_terminal = null,
+        .current_save = null,
         .frame_count = 0,
     };
 
