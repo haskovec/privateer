@@ -28,7 +28,7 @@ const Vec3 = flight_physics.Vec3;
 pub const MAGIC = "PSVG".*;
 
 /// Current save format version.
-pub const FORMAT_VERSION: u16 = 1;
+pub const FORMAT_VERSION: u16 = 2;
 
 /// Maximum cargo entry slots in a save file.
 pub const MAX_CARGO_ENTRIES: usize = 32;
@@ -39,8 +39,17 @@ pub const MAX_EQUIPMENT: usize = 32;
 /// Maximum plot flag slots in a save file.
 pub const MAX_PLOT_FLAGS: usize = 32;
 
-/// Exact byte size of a version-1 save file.
-pub const SAVE_SIZE: usize = 360;
+/// Exact byte size of a version-1 save file (for backward compatibility).
+pub const SAVE_SIZE_V1: usize = 360;
+
+/// Exact byte size of a version-2 save file.
+pub const SAVE_SIZE: usize = 390;
+
+/// Maximum player name length.
+pub const MAX_NAME_LEN: usize = 16;
+
+/// Maximum player callsign length.
+pub const MAX_CALLSIGN_LEN: usize = 12;
 
 /// A serializable cargo slot (value type, no pointers).
 pub const CargoSlot = struct {
@@ -52,6 +61,10 @@ pub const CargoSlot = struct {
 /// No pointers, no allocations — designed for direct serialization.
 pub const SaveGameData = struct {
     // -- Player identity --
+    player_name: [MAX_NAME_LEN]u8 = [_]u8{0} ** MAX_NAME_LEN,
+    player_name_len: u8 = 0,
+    player_callsign: [MAX_CALLSIGN_LEN]u8 = [_]u8{0} ** MAX_CALLSIGN_LEN,
+    player_callsign_len: u8 = 0,
     credits: i32 = 0,
     current_ship_id: u16 = 0,
     current_system: u8 = 0,
@@ -104,6 +117,30 @@ pub const SaveGameData = struct {
 
     // -- Kill statistics --
     kills_by_faction: [reputation_mod.FACTION_COUNT]u32 = .{0} ** reputation_mod.FACTION_COUNT,
+
+    /// Get the player name as a string slice.
+    pub fn getPlayerName(self: *const SaveGameData) []const u8 {
+        return self.player_name[0..self.player_name_len];
+    }
+
+    /// Get the player callsign as a string slice.
+    pub fn getPlayerCallsign(self: *const SaveGameData) []const u8 {
+        return self.player_callsign[0..self.player_callsign_len];
+    }
+
+    /// Set the player name from a string slice.
+    pub fn setPlayerName(self: *SaveGameData, name: []const u8) void {
+        const len = @min(name.len, MAX_NAME_LEN);
+        @memcpy(self.player_name[0..len], name[0..len]);
+        self.player_name_len = @intCast(len);
+    }
+
+    /// Set the player callsign from a string slice.
+    pub fn setPlayerCallsign(self: *SaveGameData, callsign: []const u8) void {
+        const len = @min(callsign.len, MAX_CALLSIGN_LEN);
+        @memcpy(self.player_callsign[0..len], callsign[0..len]);
+        self.player_callsign_len = @intCast(len);
+    }
 };
 
 pub const SerializeError = error{OutOfMemory};
@@ -184,6 +221,12 @@ pub fn serialize(allocator: std.mem.Allocator, data: *const SaveGameData) Serial
     // Kill stats
     for (data.kills_by_faction) |k| putU32(buf, &off, k);
 
+    // Player name and callsign (v2)
+    putSlice(buf, &off, &data.player_name);
+    putU8(buf, &off, data.player_name_len);
+    putSlice(buf, &off, &data.player_callsign);
+    putU8(buf, &off, data.player_callsign_len);
+
     std.debug.assert(off == SAVE_SIZE);
     return buf;
 }
@@ -196,7 +239,7 @@ pub fn deserialize(bytes: []const u8) DeserializeError!SaveGameData {
     const magic = getSlice(4, bytes, &off) orelse return error.InvalidMagic;
     if (!std.mem.eql(u8, magic, &MAGIC)) return error.InvalidMagic;
     const version = getU16(bytes, &off) orelse return error.UnexpectedEof;
-    if (version != FORMAT_VERSION) return error.UnsupportedVersion;
+    if (version != 1 and version != FORMAT_VERSION) return error.UnsupportedVersion;
 
     var data = SaveGameData{};
 
@@ -208,7 +251,7 @@ pub fn deserialize(bytes: []const u8) DeserializeError!SaveGameData {
 
     // State machine
     const state_byte = getU8(bytes, &off) orelse return error.UnexpectedEof;
-    const max_state = @intFromEnum(game_state.State.animation);
+    const max_state = @intFromEnum(game_state.State.registration);
     if (state_byte > max_state) return error.InvalidState;
     data.state = @enumFromInt(state_byte);
     const room = getU8(bytes, &off) orelse return error.UnexpectedEof;
@@ -263,6 +306,16 @@ pub fn deserialize(bytes: []const u8) DeserializeError!SaveGameData {
 
     // Kill stats
     for (&data.kills_by_faction) |*k| k.* = getU32(bytes, &off) orelse return error.UnexpectedEof;
+
+    // Player name and callsign (v2 only; v1 saves leave these as defaults)
+    if (version >= 2) {
+        const name = getSlice(MAX_NAME_LEN, bytes, &off) orelse return error.UnexpectedEof;
+        @memcpy(&data.player_name, name);
+        data.player_name_len = getU8(bytes, &off) orelse return error.UnexpectedEof;
+        const callsign = getSlice(MAX_CALLSIGN_LEN, bytes, &off) orelse return error.UnexpectedEof;
+        @memcpy(&data.player_callsign, callsign);
+        data.player_callsign_len = getU8(bytes, &off) orelse return error.UnexpectedEof;
+    }
 
     return data;
 }
@@ -363,6 +416,9 @@ fn expectVec3Equal(expected: Vec3, actual: Vec3) !void {
 }
 
 fn expectSaveEqual(expected: *const SaveGameData, actual: *const SaveGameData) !void {
+    // Player name/callsign
+    try testing.expectEqualSlices(u8, expected.getPlayerName(), actual.getPlayerName());
+    try testing.expectEqualSlices(u8, expected.getPlayerCallsign(), actual.getPlayerCallsign());
     // Player identity
     try testing.expectEqual(expected.credits, actual.credits);
     try testing.expectEqual(expected.current_ship_id, actual.current_ship_id);
@@ -433,7 +489,7 @@ test "serialize writes correct magic and version" {
     const bytes = try serialize(allocator, &data);
     defer allocator.free(bytes);
     try testing.expectEqualSlices(u8, "PSVG", bytes[0..4]);
-    try testing.expectEqual(@as(u16, 1), std.mem.readInt(u16, bytes[4..6], .little));
+    try testing.expectEqual(@as(u16, FORMAT_VERSION), std.mem.readInt(u16, bytes[4..6], .little));
 }
 
 test "round-trip default state produces identical data" {
@@ -678,4 +734,68 @@ test "kill stats round-trip correctly" {
     try testing.expectEqual(@as(u32, 999), loaded.kills_by_faction[3]);
     try testing.expectEqual(@as(u32, 50000), loaded.kills_by_faction[4]);
     try testing.expectEqual(@as(u32, 1), loaded.kills_by_faction[5]);
+}
+
+// -- Player name/callsign tests --
+
+test "round-trip player name and callsign" {
+    const allocator = testing.allocator;
+    var data = SaveGameData{};
+    data.setPlayerName("Ace");
+    data.setPlayerCallsign("Maverick");
+
+    const bytes = try serialize(allocator, &data);
+    defer allocator.free(bytes);
+    const loaded = try deserialize(bytes);
+    try testing.expectEqualStrings("Ace", loaded.getPlayerName());
+    try testing.expectEqualStrings("Maverick", loaded.getPlayerCallsign());
+}
+
+test "default save has empty name and callsign" {
+    const data = SaveGameData{};
+    try testing.expectEqual(@as(usize, 0), data.getPlayerName().len);
+    try testing.expectEqual(@as(usize, 0), data.getPlayerCallsign().len);
+}
+
+test "setPlayerName truncates at max length" {
+    var data = SaveGameData{};
+    data.setPlayerName("This Name Is Way Too Long For Buffer");
+    try testing.expectEqual(@as(u8, MAX_NAME_LEN), data.player_name_len);
+}
+
+test "setPlayerCallsign truncates at max length" {
+    var data = SaveGameData{};
+    data.setPlayerCallsign("SuperLongCallsign");
+    try testing.expectEqual(@as(u8, MAX_CALLSIGN_LEN), data.player_callsign_len);
+}
+
+test "v1 backward compatibility: loads without name/callsign" {
+    const allocator = testing.allocator;
+    // Create a v1 save by serializing as v2 then truncating and patching version
+    var data = SaveGameData{};
+    data.credits = 10000;
+    data.state = .landed;
+    const v2_bytes = try serialize(allocator, &data);
+    defer allocator.free(v2_bytes);
+
+    // Create v1-sized buffer with v1 header
+    var v1_bytes: [SAVE_SIZE_V1]u8 = undefined;
+    @memcpy(&v1_bytes, v2_bytes[0..SAVE_SIZE_V1]);
+    std.mem.writeInt(u16, v1_bytes[4..6], 1, .little); // version 1
+
+    const loaded = try deserialize(&v1_bytes);
+    try testing.expectEqual(@as(i32, 10000), loaded.credits);
+    try testing.expectEqual(game_state.State.landed, loaded.state);
+    // Name/callsign should be empty defaults
+    try testing.expectEqual(@as(u8, 0), loaded.player_name_len);
+    try testing.expectEqual(@as(u8, 0), loaded.player_callsign_len);
+}
+
+test "v2 save has correct size" {
+    const allocator = testing.allocator;
+    const data = SaveGameData{};
+    const bytes = try serialize(allocator, &data);
+    defer allocator.free(bytes);
+    try testing.expectEqual(SAVE_SIZE, bytes.len);
+    try testing.expectEqual(@as(usize, 390), bytes.len);
 }
