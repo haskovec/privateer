@@ -110,6 +110,7 @@ pub const keyboard = @import("input/keyboard.zig");
 // Settings & UI
 pub const settings = @import("settings.zig");
 pub const options_menu = @import("ui/options_menu.zig");
+pub const quine_terminal = @import("ui/quine_terminal.zig");
 
 // Modding support
 pub const mod_loader = @import("modding/mod_loader.zig");
