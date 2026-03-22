@@ -154,6 +154,7 @@ Landing/takeoff animations and mid-game cinematics.
 | GAMELINK.IFF | Game link data |
 | JOYCALIB.IFF/.PAL | Joystick calibration |
 | LANDFEE.IFF | Landing fee data |
+| LOADSAVE.SHP | Quine 4000 computer terminal sprites (12 sprites: 0=full device background, 1=button panel, 2-7=button highlights for SAVE/LOAD/MISSIONS/FIN/MAN/PWR, 8-11=d-pad/UI states) |
 | LIMITS.IFF | Game limits/constraints |
 | OPTPALS2.IFF | Option palette set 2 |
 | OPTSHPS2.IFF | Option shapes set 2 |

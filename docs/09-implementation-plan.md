@@ -982,13 +982,12 @@ The Quine 4000 screen features:
 - After registration: game starts at the first base (Troy system, New Detroit)
 
 - [x] **18.1 Identify Quine 4000 background resource**
-  - **Found in CUBICLE.PAK** (not OPTSHPS.PAK): resource 8 is the 320x200 blank
-    Quine 4000 background, resource 9 is same with sample text content
-  - Uses **OPTPALS.PAK palette 28** (discovered via CUBICLE.IFF FILD commands:
-    file_ref=1 → optpals.pak, param3=27 → resource index 28)
-  - CUBICLE.PAK resources 0-7 are device component sprites (PDA body, buttons,
-    screen animations) composited by the MOVI system in the original game
-  - Resources 1-6 contain animation frames for screen effects and button highlights
+  - **Found in OPTIONS/LOADSAVE.SHP** sprite 0: 320x200 pre-rendered Quine 4000
+    PDA device with green screen, buttons, and QUINE 4000 branding. Uses PCMAIN palette.
+  - LOADSAVE.SHP contains 12 sprites total (see sprite inventory below).
+  - CUBICLE.PAK/IFF is a MOVI composition used for the in-game encyclopedia viewer,
+    NOT the registration screen. CUBICLE.PAK resource 8 = cockpit viewscreen frame,
+    resource 9 = encyclopedia text screen.
 
 - [x] **18.2 Add `registration` state to game state machine**
   - Add `registration` to the `State` enum in `src/game/game_state.zig` — append at end

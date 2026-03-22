@@ -341,10 +341,11 @@ mission progress, story flags.
 
 ### Player Identity
 The Quine 4000 computer terminal captures the player's name and callsign at game
-start. The terminal background is in `CUBICLE.PAK` (resource 8 = blank screen,
-resource 9 = screen with sample text) using `OPTPALS.PAK` palette 28.
-`CUBICLE.IFF` is the FORM:MOVI script that originally composed the full device
-from multiple sprite layers (device body, buttons, screen animations).
+start. The terminal background sprite is `OPTIONS/LOADSAVE.SHP` sprite 0 — a
+320x200 pre-rendered image of the PDA device with green screen, buttons
+(SAVE/LOAD/MISSIONS/FIN/MAN/PWR), and QUINE 4000 branding. Uses PCMAIN palette.
+LOADSAVE.SHP sprites 1-11 are button highlight overlays for the in-game computer.
+(Note: CUBICLE.PAK/IFF is the encyclopedia viewer, NOT the registration screen.)
 
 Name/callsign are stored in the save file (16-byte name + 12-byte callsign with
 length prefixes). Save format version 2 adds these fields; version 1 saves load
