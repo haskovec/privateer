@@ -169,7 +169,7 @@ pub const MovieRenderer = struct {
     pub fn executeActsBlock(self: *MovieRenderer, block: movie_mod.ActsBlock) MovieRendererError!void {
         if (block.composition_cmds.len > 0) {
             // BFOR-driven composition: build object table, then render via BFOR
-            try self.executeComposition(block);
+            self.executeComposition(block) catch {};
         } else {
             // No BFOR: fall back to rendering FILD commands directly
             for (block.field_commands) |cmd| {
@@ -213,22 +213,25 @@ pub const MovieRenderer = struct {
             // Object not found — skip silently (may be audio/control object)
         }
 
-        // Render unreferenced SPRI objects that are safe to overlay:
-        // - Type 12 (text overlays): additive, won't destroy background
-        // - Type 0/1 with FILD ref: positioned sprites, safe to overlay
-        // Skip type 4/19/20 self-ref (animation keyframes need interpolation,
-        // rendering them statically overwrites the scene with wrong content).
+        // Render unreferenced SPRI objects:
+        // Type 0/1/3/11 positioned sprites with FILD reference
         for (block.sprite_commands, 0..) |spri, i| {
             if (i < 256 and rendered_via_bfor[i]) continue;
             switch (spri.sprite_type) {
-                12 => self.renderSpriteObject(spri, block.field_commands) catch {},
                 0, 1, 3, 11 => {
-                    // Only render positioned sprites that have a FILD reference
                     if (spri.ref != movie_mod.SpriteCommand.SELF_REF) {
                         self.renderSpriteObject(spri, block.field_commands) catch {};
                     }
                 },
-                else => {}, // Skip animation types (4/18/19/20) not in BFOR
+                else => {},
+            }
+        }
+
+        // Render text overlays LAST (after all sprites, at the end of composition
+        // where we know the framebuffer is in its final state)
+        for (block.sprite_commands) |spri| {
+            if (spri.sprite_type == 12) {
+                self.renderTextSprite(spri, block.field_commands);
             }
         }
     }
@@ -342,7 +345,7 @@ pub const MovieRenderer = struct {
         if (str_end == 0) return;
         const text = resource[0..str_end];
 
-        // Compute Y position — y_param is relative to the bottom text region
+        // Compute Y position — y_param is offset from bottom of screen
         const screen_height: u16 = 200;
         const render_y: u16 = if (y_param < 0)
             screen_height -| @as(u16, @intCast(-@as(i32, y_param)))
