@@ -14,36 +14,41 @@ pub const CUBICLE_PAK = "CUBICLE.PAK";
 /// OPTPALS.PAK palette index for the Quine 4000 terminal.
 pub const CUBICLE_PALETTE_IDX: usize = 28;
 
-/// CUBICLE.PAK flat resource index for the blank Quine background.
-pub const CUBICLE_BG_RESOURCE: usize = 8;
+/// CUBICLE.PAK flat resource index for the Quine 4000 device background.
+/// Resource 9 is the fully composed device (screen + buttons + frame).
+/// Resource 8 is just the cockpit viewscreen frame.
+pub const CUBICLE_BG_RESOURCE: usize = 9;
 
 /// Color palette indices for text overlaid on the Quine screen.
+/// These indices are relative to OPTPALS palette 28.
 const COLOR = struct {
-    const background: u8 = 0; // black (fallback)
-    const title: u8 = 11; // yellow
-    const prompt: u8 = 2; // dark green text on green screen
-    const input: u8 = 0; // black input text (on green screen)
-    const cursor: u8 = 0; // black cursor
-    const label: u8 = 4; // dark gray label
+    const background: u8 = 0; // black (fallback when no sprite)
+    const screen_bg: u8 = 125; // teal green screen background (RGB 128,184,176)
+    const prompt: u8 = 5; // dark teal text on green screen (RGB 16,60,52)
+    const input: u8 = 12; // dark green-gray input text (RGB 32,48,44)
+    const cursor: u8 = 12; // same as input
+    const label: u8 = 61; // brown/muted label (RGB 84,52,32)
 };
 
-/// Layout constants for text on the Quine 4000 green screen area.
+/// Layout constants for the Quine 4000 green screen area.
 /// Coordinates are relative to the 320x200 framebuffer.
 const LAYOUT = struct {
-    // Green screen text area (left panel of the device)
-    const screen_x: u16 = 10;
-    const screen_y: u16 = 16;
+    // Green screen clear area (paint over baked-in encyclopedia text)
+    const clear_x: u16 = 7;
+    const clear_y: u16 = 7;
+    const clear_w: u16 = 146;
+    const clear_h: u16 = 162;
 
     // Text positions within the green screen
-    const title_x: u16 = 12;
-    const title_y: u16 = 20;
-    const prompt_x: u16 = 12;
-    const prompt_y: u16 = 60;
-    const input_x: u16 = 12;
-    const input_y: u16 = 80;
-    const name_label_y: u16 = 44;
-    const callsign_label_y: u16 = 60;
-    const status_y: u16 = 110;
+    const title_x: u16 = 10;
+    const title_y: u16 = 12;
+    const prompt_x: u16 = 10;
+    const prompt_y: u16 = 50;
+    const input_x: u16 = 10;
+    const input_y: u16 = 66;
+    const callsign_label_y: u16 = 90;
+    const callsign_input_y: u16 = 106;
+    const status_y: u16 = 130;
 };
 
 /// Maximum character lengths for input fields.
@@ -149,25 +154,25 @@ pub const QuineTerminal = struct {
     }
 
     /// Render the terminal onto the framebuffer.
-    /// bg_sprite: optional pre-rendered CUBICLE.PAK background (resource 8).
+    /// bg_sprite: optional pre-rendered CUBICLE.PAK background (resource 9).
     /// font: optional font for text rendering (null in unit tests).
     pub fn render(self: *QuineTerminal, fb: *framebuffer_mod.Framebuffer, bg_sprite: ?sprite_mod.Sprite, font: ?*const text_mod.Font) void {
         self.cursor_counter +%= 1;
 
-        // Render background
+        // Render Quine 4000 device background
         if (bg_sprite) |bg| {
             fb.blitSpriteOpaque(bg, 0, 0);
+            // Clear the green screen text area (paint over baked-in encyclopedia text)
+            fillRect(fb, LAYOUT.clear_x, LAYOUT.clear_y, LAYOUT.clear_w, LAYOUT.clear_h, COLOR.screen_bg);
         } else {
             fb.clear(COLOR.background);
         }
 
-        // Overlay text on the green screen area
+        // Draw registration text on the green screen
         if (font) |f| {
-            // Title line
             _ = f.drawTextColored(fb, LAYOUT.title_x, LAYOUT.title_y, "Please register your", COLOR.prompt);
             _ = f.drawTextColored(fb, LAYOUT.title_x, LAYOUT.title_y + 12, "new Quine 4000", COLOR.prompt);
 
-            // Phase-specific content
             switch (self.phase) {
                 .enter_name => {
                     _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.prompt);
@@ -176,24 +181,24 @@ pub const QuineTerminal = struct {
                         const cx = LAYOUT.input_x + @as(u16, @intCast(self.name_len)) * 8;
                         _ = f.drawTextColored(fb, cx, LAYOUT.input_y, "_", COLOR.cursor);
                     }
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.input_y + 20, "Enter Callsign!", COLOR.label);
+                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.label);
                 },
                 .enter_callsign => {
                     _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.prompt_y + 12, self.getName(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y + 40, "Enter Callsign!", COLOR.prompt);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_label_y + 52, self.getCallsign(), COLOR.input);
+                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.input_y, self.getName(), COLOR.input);
+                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.prompt);
+                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_input_y, self.getCallsign(), COLOR.input);
                     if (self.cursor_counter / 30 % 2 == 0) {
                         const cx = LAYOUT.input_x + @as(u16, @intCast(self.callsign_len)) * 8;
-                        _ = f.drawTextColored(fb, cx, LAYOUT.callsign_label_y + 52, "_", COLOR.cursor);
+                        _ = f.drawTextColored(fb, cx, LAYOUT.callsign_input_y, "_", COLOR.cursor);
                     }
                 },
                 .done => {
                     _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.prompt_y + 12, self.getName(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y + 40, "Enter Callsign!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_label_y + 52, self.getCallsign(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.status_y + 20, "Registration complete.", COLOR.prompt);
+                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.input_y, self.getName(), COLOR.input);
+                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.label);
+                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_input_y, self.getCallsign(), COLOR.input);
+                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.status_y, "Registration complete.", COLOR.prompt);
                 },
             }
         }
@@ -219,6 +224,17 @@ fn charFromKey(key: u32, key_mod: u16) ?u8 {
     if (key == c.SDLK_SPACE) return ' ';
 
     return null;
+}
+
+/// Fill a solid rectangle on the framebuffer.
+fn fillRect(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, color: u8) void {
+    var j: u16 = 0;
+    while (j < h) : (j += 1) {
+        var i: u16 = 0;
+        while (i < w) : (i += 1) {
+            fb.setPixel(x + i, y + j, color);
+        }
+    }
 }
 
 // --- Tests ---
