@@ -1,54 +1,55 @@
 //! Quine 4000 computer terminal UI for Wing Commander: Privateer.
 //! Renders the new-game registration screen where the player enters
-//! their name and callsign. Uses the pre-rendered CUBICLE.PAK resource 8
-//! background (with OPTPALS palette 28) and overlays text on the green screen.
+//! their name and callsign. Procedurally drawn to match the original
+//! game's handheld PDA device appearance at 320x200 resolution.
 
 const std = @import("std");
 const framebuffer_mod = @import("../render/framebuffer.zig");
 const text_mod = @import("../render/text.zig");
-const sprite_mod = @import("../formats/sprite.zig");
 
-/// TRE path for the Quine 4000 sprite data.
-pub const CUBICLE_PAK = "CUBICLE.PAK";
-
-/// OPTPALS.PAK palette index for the Quine 4000 terminal.
-pub const CUBICLE_PALETTE_IDX: usize = 28;
-
-/// CUBICLE.PAK flat resource index for the Quine 4000 device background.
-/// Resource 9 is the fully composed device (screen + buttons + frame).
-/// Resource 8 is just the cockpit viewscreen frame.
-pub const CUBICLE_BG_RESOURCE: usize = 9;
-
-/// Color palette indices for text overlaid on the Quine screen.
-/// These indices are relative to OPTPALS palette 28.
-const COLOR = struct {
-    const background: u8 = 0; // black (fallback when no sprite)
-    const screen_bg: u8 = 125; // teal green screen background (RGB 128,184,176)
-    const prompt: u8 = 5; // dark teal text on green screen (RGB 16,60,52)
-    const input: u8 = 12; // dark green-gray input text (RGB 32,48,44)
-    const cursor: u8 = 12; // same as input
-    const label: u8 = 61; // brown/muted label (RGB 84,52,32)
+/// Palette indices matching PCMAIN.PAL / general game palette.
+const C = struct {
+    const black: u8 = 0;
+    const dark_gray: u8 = 2; // dark background behind device
+    const mid_gray: u8 = 4; // device casing
+    const light_gray: u8 = 7; // device casing highlight
+    const dark_green: u8 = 10; // green screen dark edge
+    const green: u8 = 11; // green screen background
+    const text: u8 = 0; // black text on green screen
+    const text_dim: u8 = 4; // dimmed/inactive text
+    const red: u8 = 3; // red button labels (SAVE, LOAD)
+    const yellow: u8 = 11; // yellow button label (MISSIONS)
+    const btn_green: u8 = 10; // green button labels (FIN, MAN)
+    const white: u8 = 15; // bright highlights
+    const btn_bg: u8 = 5; // button background
+    const btn_border: u8 = 6; // button border
 };
 
-/// Layout constants for the Quine 4000 green screen area.
-/// Coordinates are relative to the 320x200 framebuffer.
-const LAYOUT = struct {
-    // Green screen clear area (paint over baked-in encyclopedia text)
-    const clear_x: u16 = 7;
-    const clear_y: u16 = 7;
-    const clear_w: u16 = 146;
-    const clear_h: u16 = 162;
+/// Device layout in 320x200 framebuffer coordinates.
+/// The PDA is roughly centered, offset slightly down.
+const D = struct {
+    // Full device bounding box
+    const x: u16 = 60;
+    const y: u16 = 55;
+    const w: u16 = 200;
+    const h: u16 = 135;
 
-    // Text positions within the green screen
-    const title_x: u16 = 10;
-    const title_y: u16 = 12;
-    const prompt_x: u16 = 10;
-    const prompt_y: u16 = 50;
-    const input_x: u16 = 10;
-    const input_y: u16 = 66;
-    const callsign_label_y: u16 = 90;
-    const callsign_input_y: u16 = 106;
-    const status_y: u16 = 130;
+    // Green screen panel (left side of device)
+    const scr_x: u16 = 66;
+    const scr_y: u16 = 62;
+    const scr_w: u16 = 118;
+    const scr_h: u16 = 118;
+
+    // Button panel (right side of device)
+    const btn_x: u16 = 190;
+    const btn_y: u16 = 62;
+    const btn_w: u16 = 64;
+    const btn_h: u16 = 118;
+
+    // Text on green screen
+    const txt_x: u16 = 70;
+    const txt_y: u16 = 68;
+    const txt_line: u16 = 12;
 };
 
 /// Maximum character lengths for input fields.
@@ -103,18 +104,13 @@ pub const QuineTerminal = struct {
     /// Handle a key press. Returns the result of the input action.
     /// key: SDL keycode, key_mod: SDL modifier flags.
     pub fn handleKeyPress(self: *QuineTerminal, key: u32, key_mod: u16) Result {
-        // Import SDL keycodes via the C bindings
         const c = @import("../sdl.zig").raw;
 
-        // Escape cancels at any phase
-        if (key == c.SDLK_ESCAPE) {
-            return .cancelled;
-        }
+        if (key == c.SDLK_ESCAPE) return .cancelled;
 
         switch (self.phase) {
             .enter_name => {
                 if (key == c.SDLK_RETURN or key == c.SDLK_KP_ENTER) {
-                    // Must have at least one character
                     if (self.name_len == 0) return .continue_input;
                     self.phase = .enter_callsign;
                     return .continue_input;
@@ -153,52 +149,114 @@ pub const QuineTerminal = struct {
         }
     }
 
-    /// Render the terminal onto the framebuffer.
-    /// bg_sprite: optional pre-rendered CUBICLE.PAK background (resource 9).
-    /// font: optional font for text rendering (null in unit tests).
-    pub fn render(self: *QuineTerminal, fb: *framebuffer_mod.Framebuffer, bg_sprite: ?sprite_mod.Sprite, font: ?*const text_mod.Font) void {
+    /// Render the Quine 4000 terminal procedurally.
+    /// font is optional — if null, text is not rendered (for unit tests).
+    pub fn render(self: *QuineTerminal, fb: *framebuffer_mod.Framebuffer, font: ?*const text_mod.Font) void {
         self.cursor_counter +%= 1;
 
-        // Render Quine 4000 device background
-        if (bg_sprite) |bg| {
-            fb.blitSpriteOpaque(bg, 0, 0);
-            // Clear the green screen text area (paint over baked-in encyclopedia text)
-            fillRect(fb, LAYOUT.clear_x, LAYOUT.clear_y, LAYOUT.clear_w, LAYOUT.clear_h, COLOR.screen_bg);
-        } else {
-            fb.clear(COLOR.background);
+        // Dark background (cockpit/desk surface)
+        fb.clear(C.dark_gray);
+
+        // Device casing - outer frame with 3D beveled look
+        fillRect(fb, D.x, D.y, D.w, D.h, C.mid_gray);
+        // Top/left highlight edge
+        drawHLine(fb, D.x, D.y, D.w, C.light_gray);
+        drawVLine(fb, D.x, D.y, D.h, C.light_gray);
+        // Bottom/right shadow edge
+        drawHLine(fb, D.x, D.y + D.h - 1, D.w, C.black);
+        drawVLine(fb, D.x + D.w - 1, D.y, D.h, C.black);
+        // Inner bevel
+        drawHLine(fb, D.x + 1, D.y + 1, D.w - 2, C.white);
+        drawVLine(fb, D.x + 1, D.y + 1, D.h - 2, C.white);
+        drawHLine(fb, D.x + 1, D.y + D.h - 2, D.w - 2, C.dark_gray);
+        drawVLine(fb, D.x + D.w - 2, D.y + 1, D.h - 2, C.dark_gray);
+
+        // Green screen panel - recessed with dark border
+        fillRect(fb, D.scr_x - 2, D.scr_y - 2, D.scr_w + 4, D.scr_h + 4, C.dark_green);
+        fillRect(fb, D.scr_x, D.scr_y, D.scr_w, D.scr_h, C.green);
+
+        // Button panel background
+        fillRect(fb, D.btn_x, D.btn_y, D.btn_w, D.btn_h, C.mid_gray);
+
+        // Draw buttons on right panel
+        if (font) |f| {
+            const bx = D.btn_x + 2;
+            const bw = D.btn_w - 4;
+            const half_w = bw / 2 - 1;
+
+            // Row 1: SAVE | LOAD (side by side)
+            drawButton(fb, bx, D.btn_y + 3, half_w, 14, C.btn_bg, C.btn_border);
+            drawButton(fb, bx + half_w + 2, D.btn_y + 3, half_w, 14, C.btn_bg, C.btn_border);
+            _ = f.drawTextColored(fb, bx + 3, D.btn_y + 7, "SAVE", C.red);
+            _ = f.drawTextColored(fb, bx + half_w + 5, D.btn_y + 7, "LOAD", C.red);
+
+            // Row 2: MISSIONS (full width)
+            drawButton(fb, bx, D.btn_y + 22, bw, 14, C.btn_bg, C.btn_border);
+            _ = f.drawTextColored(fb, bx + 3, D.btn_y + 26, "MISSIONS", C.yellow);
+
+            // Row 3: FIN | MAN (side by side)
+            drawButton(fb, bx, D.btn_y + 41, half_w, 14, C.btn_bg, C.btn_border);
+            drawButton(fb, bx + half_w + 2, D.btn_y + 41, half_w, 14, C.btn_bg, C.btn_border);
+            _ = f.drawTextColored(fb, bx + 7, D.btn_y + 45, "FIN", C.btn_green);
+            _ = f.drawTextColored(fb, bx + half_w + 7, D.btn_y + 45, "MAN", C.btn_green);
+
+            // Row 4: PWR button with d-pad
+            drawButton(fb, bx + half_w + 2, D.btn_y + 60, half_w, 14, C.btn_bg, C.btn_border);
+            _ = f.drawTextColored(fb, bx + half_w + 7, D.btn_y + 64, "PWR", C.red);
+            // D-pad cross (simplified)
+            const dx = bx + 10;
+            const dy = D.btn_y + 63;
+            drawHLine(fb, dx, dy + 4, 12, C.light_gray);
+            drawVLine(fb, dx + 6, dy, 9, C.light_gray);
+
+            // QUINE 4000 branding at bottom of button panel
+            _ = f.drawTextColored(fb, D.btn_x + 4, D.btn_y + 82, "QUINE", C.white);
+            _ = f.drawTextColored(fb, D.btn_x + 12, D.btn_y + 94, "4000", C.white);
         }
 
-        // Draw registration text on the green screen
+        // Green screen text content
         if (font) |f| {
-            _ = f.drawTextColored(fb, LAYOUT.title_x, LAYOUT.title_y, "Please register your", COLOR.prompt);
-            _ = f.drawTextColored(fb, LAYOUT.title_x, LAYOUT.title_y + 12, "new Quine 4000", COLOR.prompt);
+            const tx = D.txt_x;
+            var ty = D.txt_y;
+
+            _ = f.drawTextColored(fb, tx, ty, "Please register your", C.text);
+            ty += D.txt_line;
+            _ = f.drawTextColored(fb, tx, ty, "new Quine 4000", C.text);
+            ty += D.txt_line * 2;
 
             switch (self.phase) {
                 .enter_name => {
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.prompt);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.input_y, self.getName(), COLOR.input);
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text);
+                    ty += D.txt_line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
                     if (self.cursor_counter / 30 % 2 == 0) {
-                        const cx = LAYOUT.input_x + @as(u16, @intCast(self.name_len)) * 8;
-                        _ = f.drawTextColored(fb, cx, LAYOUT.input_y, "_", COLOR.cursor);
+                        const cx = tx + @as(u16, @intCast(self.name_len)) * 8;
+                        _ = f.drawTextColored(fb, cx, ty, "_", C.text);
                     }
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.label);
+                    ty += D.txt_line * 2;
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text_dim);
                 },
                 .enter_callsign => {
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.input_y, self.getName(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.prompt);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_input_y, self.getCallsign(), COLOR.input);
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text_dim);
+                    ty += D.txt_line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
+                    ty += D.txt_line * 2;
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text);
+                    ty += D.txt_line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.text);
                     if (self.cursor_counter / 30 % 2 == 0) {
-                        const cx = LAYOUT.input_x + @as(u16, @intCast(self.callsign_len)) * 8;
-                        _ = f.drawTextColored(fb, cx, LAYOUT.callsign_input_y, "_", COLOR.cursor);
+                        const cx = tx + @as(u16, @intCast(self.callsign_len)) * 8;
+                        _ = f.drawTextColored(fb, cx, ty, "_", C.text);
                     }
                 },
                 .done => {
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.prompt_y, "Enter Name!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.input_y, self.getName(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.callsign_label_y, "Enter Callsign!", COLOR.label);
-                    _ = f.drawTextColored(fb, LAYOUT.input_x, LAYOUT.callsign_input_y, self.getCallsign(), COLOR.input);
-                    _ = f.drawTextColored(fb, LAYOUT.prompt_x, LAYOUT.status_y, "Registration complete.", COLOR.prompt);
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text_dim);
+                    ty += D.txt_line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
+                    ty += D.txt_line * 2;
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text_dim);
+                    ty += D.txt_line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.text);
                 },
             }
         }
@@ -206,27 +264,22 @@ pub const QuineTerminal = struct {
 };
 
 /// Convert an SDL keycode + modifier to an ASCII character.
-/// Returns null for non-printable keys.
 fn charFromKey(key: u32, key_mod: u16) ?u8 {
     const c = @import("../sdl.zig").raw;
     const shift = (key_mod & c.SDL_KMOD_SHIFT) != 0;
-
-    // A-Z keys
     if (key >= c.SDLK_A and key <= c.SDLK_Z) {
         const base: u8 = @intCast(key - c.SDLK_A);
         return if (shift) 'A' + base else 'a' + base;
     }
-    // 0-9 keys
     if (key >= c.SDLK_0 and key <= c.SDLK_9) {
         return @intCast(key - c.SDLK_0 + '0');
     }
-    // Space
     if (key == c.SDLK_SPACE) return ' ';
-
     return null;
 }
 
-/// Fill a solid rectangle on the framebuffer.
+// Drawing helpers
+
 fn fillRect(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, color: u8) void {
     var j: u16 = 0;
     while (j < h) : (j += 1) {
@@ -235,6 +288,28 @@ fn fillRect(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, co
             fb.setPixel(x + i, y + j, color);
         }
     }
+}
+
+fn drawHLine(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, color: u8) void {
+    var i: u16 = 0;
+    while (i < w) : (i += 1) {
+        fb.setPixel(x + i, y, color);
+    }
+}
+
+fn drawVLine(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, h: u16, color: u8) void {
+    var j: u16 = 0;
+    while (j < h) : (j += 1) {
+        fb.setPixel(x, y + j, color);
+    }
+}
+
+fn drawButton(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, bg: u8, border: u8) void {
+    fillRect(fb, x, y, w, h, bg);
+    drawHLine(fb, x, y, w, border);
+    drawHLine(fb, x, y + h - 1, w, border);
+    drawVLine(fb, x, y, h, border);
+    drawVLine(fb, x + w - 1, y, h, border);
 }
 
 // --- Tests ---
@@ -324,7 +399,7 @@ test "handleKeyPress enter with callsign completes registration" {
     const c = @import("../sdl.zig").raw;
     var qt = QuineTerminal.init();
     _ = qt.handleKeyPress(c.SDLK_A, 0);
-    _ = qt.handleKeyPress(c.SDLK_RETURN, 0); // advance to callsign
+    _ = qt.handleKeyPress(c.SDLK_RETURN, 0);
     _ = qt.handleKeyPress(c.SDLK_B, 0);
     const result = qt.handleKeyPress(c.SDLK_RETURN, 0);
     try std.testing.expectEqual(Result.completed, result);
@@ -371,18 +446,12 @@ test "handleKeyPress enforces max callsign length" {
 test "full registration flow" {
     const c = @import("../sdl.zig").raw;
     var qt = QuineTerminal.init();
-
-    // Enter name "Ace"
     _ = qt.handleKeyPress(c.SDLK_A, c.SDL_KMOD_SHIFT);
     _ = qt.handleKeyPress(c.SDLK_C, 0);
     _ = qt.handleKeyPress(c.SDLK_E, 0);
     try std.testing.expectEqualStrings("Ace", qt.getName());
-
-    // Confirm name
     _ = qt.handleKeyPress(c.SDLK_RETURN, 0);
     try std.testing.expectEqual(Phase.enter_callsign, qt.phase);
-
-    // Enter callsign "Maverick"
     _ = qt.handleKeyPress(c.SDLK_M, c.SDL_KMOD_SHIFT);
     _ = qt.handleKeyPress(c.SDLK_A, 0);
     _ = qt.handleKeyPress(c.SDLK_V, 0);
@@ -392,20 +461,19 @@ test "full registration flow" {
     _ = qt.handleKeyPress(c.SDLK_C, 0);
     _ = qt.handleKeyPress(c.SDLK_K, 0);
     try std.testing.expectEqualStrings("Maverick", qt.getCallsign());
-
-    // Confirm callsign
     const result = qt.handleKeyPress(c.SDLK_RETURN, 0);
     try std.testing.expectEqual(Result.completed, result);
     try std.testing.expectEqual(Phase.done, qt.phase);
 }
 
-test "render without sprite clears to black" {
+test "render draws device on dark background" {
     var qt = QuineTerminal.init();
     var fb = framebuffer_mod.Framebuffer.create();
-
-    qt.render(&fb, null, null);
-
-    // Without a background sprite, framebuffer should be cleared to black
-    try std.testing.expectEqual(COLOR.background, fb.getPixel(0, 0));
-    try std.testing.expectEqual(COLOR.background, fb.getPixel(160, 100));
+    qt.render(&fb, null);
+    // Background should be dark gray
+    try std.testing.expectEqual(C.dark_gray, fb.getPixel(0, 0));
+    // Device casing should be mid gray (below the green screen)
+    try std.testing.expectEqual(C.mid_gray, fb.getPixel(D.x + 10, D.y + D.h - 5));
+    // Green screen should be green
+    try std.testing.expectEqual(C.green, fb.getPixel(D.scr_x + 5, D.scr_y + 5));
 }
