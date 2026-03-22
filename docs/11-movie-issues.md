@@ -2,6 +2,103 @@
 
 Status: Work in progress. Movie playback disabled by default (use `--movie` flag).
 
+## Render Pipeline (per frame)
+
+Understanding the exact order of operations is critical for debugging visual issues.
+Each game frame during movie playback follows this pipeline:
+
+### Stage 1: main.zig `updateIntroMovie()`
+```
+Entry point, called once per game frame from the main loop.
+```
+
+### Stage 2: `MoviePlayer.update()` → `updatePlaying()`
+```
+2a. IF !acts_rendered AND current_acts_idx < acts_blocks.len:
+      Call renderer.executeActsBlock(block)     ← writes to fb.pixels[]
+      Set acts_rendered = true
+
+2b. IF current_acts_idx < acts_blocks.len:
+      Call renderer.renderTextOverlays(block)   ← writes to fb.pixels[] EVERY frame
+
+2c. Advance timing (tick_accum += 70, check threshold)
+    IF threshold reached: advance acts_idx, set acts_rendered = false
+```
+
+### Stage 3: `MovieRenderer.executeActsBlock()` (called in 2a, ONCE per ACTS block)
+```
+IF block has BFOR commands:
+  Call executeComposition(block)
+ELSE:
+  Render all FILD commands directly to fb.pixels[]
+```
+
+### Stage 4: `executeComposition()` (called from Stage 3)
+```
+4a. BFOR LOOP — iterate composition_cmds in order:
+    - LAYER commands (flags=0x7FFF): SKIP (no-op, clip regions not implemented)
+    - Object references (flags != 0x7FFF):
+      * Look up flags as FILD object_id → renderFieldSprite(file_ref, param3+1, 0, 0, param1==2)
+        - param1==2: OPAQUE blit (blitSpriteOpaque) — writes ALL pixels including index 0
+        - param1==3: TRANSPARENT blit (blitSprite) — skips index 0
+      * If not FILD, look up as SPRI object_id → renderSpriteObject()
+
+4b. UNREFERENCED SPRI LOOP — iterate sprite_commands:
+    - Skip any SPRI already rendered via BFOR
+    - Type 0/1/3/11 with FILD ref: renderSpriteObject() → renderFieldSprite(transparent)
+    - Type 4/18/19/20: SKIP (animation keyframes, not implemented)
+    - Type 12: SKIP here (text rendered in separate pass, see Stage 5)
+    - else: SKIP
+
+4c. TEXT LOOP — iterate sprite_commands:
+    - Type 12 only: renderTextSprite()
+```
+
+### Stage 5: `renderTextOverlays()` (called in 2b, EVERY frame)
+```
+For each SPRI with type==12:
+  Call renderTextSprite() → writes glyphs to fb.pixels[] via font.drawTextColored()
+```
+**NOTE:** This is ALSO called in Stage 4c. So text renders TWICE on the first frame
+(once in executeComposition, once in renderTextOverlays), then once per subsequent frame.
+
+### Stage 6: back in `updateIntroMovie()` — palette conversion
+```
+Read fb.pixels[] (palette-indexed, 320×200 bytes)
+Convert to fb.rgba[] (RGBA, 320×200×4 bytes) using movie palette
+  - applyPalette: colors[pixels[i]] → rgba[i*4 .. i*4+3]
+  - applyPaletteWithFade: same but multiplied by fade factor
+```
+**THIS IS THE KEY STEP.** Everything written to `fb.pixels[]` in stages 2-5 is
+converted to RGBA here. If text pixels exist in fb.pixels[] at this point,
+they WILL appear on screen.
+
+### Stage 7: SDL presentation
+```
+fb.presentWithMode() → upload fb.rgba[] to SDL texture → SDL_RenderPresent()
+```
+
+### The Text Rendering Mystery
+
+Given this pipeline, text written in Stage 5 (renderTextOverlays) should be in
+`fb.pixels[]` when Stage 6 (applyPalette) runs. We verified:
+- renderTextSprite executes (debug prints confirmed)
+- Font glyphs have valid pixel data (62 non-zero pixels for '2')
+- drawTextColored returns valid width (37px for "TEST")
+- fb.getPixel readback confirms pixels ARE written (value=15)
+- Color 255 IS visible as magenta when drawn via setPixel in a large block
+
+**BUT** text drawn via drawTextColored or manual glyph iteration (if px != 0)
+is invisible, while solid rectangles drawn via setPixel at the same code position
+ARE visible. This suggests either:
+1. The glyph pixels are zero at render time despite non-zero during debug checks
+2. drawTextColored writes to a different memory location than expected
+3. Something between Stage 5 and Stage 6 overwrites the text area
+4. The text IS visible but only during mid1a (~7s), and the user captures during mid1b
+
+**Investigation needed:** Add a stage between 5 and 6 that reads back specific pixel
+positions and logs whether they contain the expected text color values.
+
 ## What Works
 
 - **Planet scene renders correctly** — MID1A shows the planet and starfield background
