@@ -792,17 +792,13 @@ pub fn main() !void {
 
     // Check for --movie flag (plays intro movie before title screen)
     var play_movie = false;
-    var config_args = std.ArrayList([]const u8).init(allocator);
-    defer config_args.deinit();
-    for (args[1..]) |arg| {
-        if (std.mem.eql(u8, arg, "--movie")) {
-            play_movie = true;
-        } else {
-            config_args.append(arg) catch {};
+    if (args.len > 1) {
+        for (args[1..]) |arg| {
+            if (std.mem.eql(u8, arg, "--movie")) {
+                play_movie = true;
+            }
         }
-    }
-    if (config_args.items.len > 0) {
-        try privateer.config.applyArgs(&cfg, config_args.items);
+        try privateer.config.applyArgs(&cfg, args[1..]);
     }
 
     privateer.sdl.init() catch |err| {
