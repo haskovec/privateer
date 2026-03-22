@@ -544,6 +544,103 @@ fn loadFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
 // Expose normalizeTrePath for use by other modules
 pub const normalizeTrePath = sprite_viewer.normalizeTrePath;
 
+/// Configuration for the sprite viewer pager.
+pub const PagerConfig = struct {
+    no_pager: bool = false,
+    page_size: usize = 25,
+    total_sprites: usize = 0,
+    is_tty: bool = true,
+    has_inline_display: bool = true,
+    single_index: bool = false,
+};
+
+/// Built-in pager for sprite viewer output.
+/// Prevents inline Kitty graphics from scrolling off-screen by
+/// breaking output into pages with a status line prompt.
+pub const Pager = struct {
+    config: PagerConfig,
+
+    pub fn init(config: PagerConfig) Pager {
+        return .{ .config = config };
+    }
+
+    /// Returns true when paging should be active.
+    /// Paging is disabled when any of these conditions is met:
+    /// - no_pager flag is set
+    /// - output is not a TTY
+    /// - a single sprite index is targeted
+    /// - no inline display capability
+    /// - all sprites fit in one page
+    pub fn isActive(self: Pager) bool {
+        if (self.config.no_pager) return false;
+        if (!self.config.is_tty) return false;
+        if (self.config.single_index) return false;
+        if (!self.config.has_inline_display) return false;
+        if (self.config.total_sprites <= self.config.page_size) return false;
+        return true;
+    }
+};
+
 test "sprite_cli module loads" {
     try std.testing.expect(true);
+}
+
+test "pager inactive when no_pager is set" {
+    const pager = Pager.init(.{
+        .no_pager = true,
+        .total_sprites = 100,
+        .is_tty = true,
+        .has_inline_display = true,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager inactive when not a TTY" {
+    const pager = Pager.init(.{
+        .is_tty = false,
+        .total_sprites = 100,
+        .has_inline_display = true,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager inactive when single index targeted" {
+    const pager = Pager.init(.{
+        .single_index = true,
+        .total_sprites = 100,
+        .is_tty = true,
+        .has_inline_display = true,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager inactive when no inline display" {
+    const pager = Pager.init(.{
+        .has_inline_display = false,
+        .total_sprites = 100,
+        .is_tty = true,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager inactive when sprites fit in one page" {
+    const pager = Pager.init(.{
+        .total_sprites = 10,
+        .page_size = 25,
+        .is_tty = true,
+        .has_inline_display = true,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager active when all conditions met" {
+    const pager = Pager.init(.{
+        .total_sprites = 100,
+        .page_size = 25,
+        .is_tty = true,
+        .has_inline_display = true,
+        .no_pager = false,
+        .single_index = false,
+    });
+    try std.testing.expect(pager.isActive());
 }

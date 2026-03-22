@@ -1045,6 +1045,77 @@ The Quine 4000 screen features:
 
 ---
 
+## Phase 19: Sprite Viewer CLI Pager
+*Add a built-in pager to the sprite viewer so inline graphics don't scroll off-screen.*
+
+When viewing sprites with `privateer-sprite view`, files with thousands of sprites scroll
+past too fast. Kitty graphics protocol output can't be piped to `less` (escape sequences get
+garbled), so the viewer needs a built-in `more(1)`-style pager with 25-sprite pages, a status
+line prompt, and single-keypress navigation.
+
+- [x] **19.1 Pager struct with auto-disable logic**
+  - Add `Pager` and `PagerConfig` structs to `src/cli/sprite_cli.zig`
+  - `PagerConfig`: `no_pager`, `page_size`, `total_sprites`, `is_tty`, `has_inline_display`, `single_index`
+  - `Pager.isActive()`: returns false when any disable condition is met (no_pager set,
+    not a TTY, single index targeted, no inline display, sprites fit in one page)
+  - RED: 6 tests — one per disable condition + one for the active case
+  - GREEN: Implement `PagerConfig`, `Pager.init()`, `Pager.isActive()`
+
+- [ ] **19.2 Page range calculation**
+  - `Pager.pageRange(page_number)` returns `PageRange{ start, end }` (0-based sprite indices)
+  - `Pager.totalPages()` returns ceiling division of total_sprites / page_size
+  - RED: 4 tests — first page, last page clamped to total, custom page_size, totalPages rounds up
+  - GREEN: Implement `PageRange` struct, `pageRange()`, `totalPages()`
+
+- [ ] **19.3 Status line formatting**
+  - `Pager.formatStatusLine(buf, start_idx, end_idx, total)` → `"-- sprites 1-25 of 1000 (SPACE=next, q=quit) --"`
+  - Display indices are 1-based (start_idx+1 through end_idx+1)
+  - RED: 3 tests — first page, final page, partial final page
+  - GREEN: Implement using `std.fmt.bufPrint`
+
+- [ ] **19.4 Key classification**
+  - `Pager.Action` enum: `.next_page`, `.quit`
+  - `Pager.classifyKey(byte)`: q/Q/Esc(0x1b) → quit, everything else → next_page
+  - RED: 6 tests — q, Q, Esc → quit; space, enter, CR, arbitrary key → next_page
+  - GREEN: Implement `Action` enum and `classifyKey()`
+
+- [ ] **19.5 Prompt I/O with injected reader/writer**
+  - `Pager.writePrompt(writer, start, end, total)` — writes formatted status line
+  - `Pager.clearPrompt(writer)` — writes `"\r\x1b[K"` (CR + clear-to-EOL)
+  - `Pager.readAction(reader)` — reads 1 byte, classifies it; EOF → quit
+  - All use `anytype` for testability with `std.io.fixedBufferStream`
+  - RED: 5 tests — writePrompt content, clearPrompt escape, readAction quit/next/EOF
+  - GREEN: Implement three functions
+
+- [ ] **19.6 POSIX raw mode for single-keypress input**
+  - `RawMode` struct with `fd` and `original_termios` fields in `src/cli/sprite_cli.zig`
+  - `RawMode.enable(fd) -> ?RawMode` — tcgetattr, disable ICANON+ECHO, set VMIN=1/VTIME=0,
+    tcsetattr; returns null if fd isn't a TTY (safe for tests/piped input)
+  - `RawMode.disable(self)` — restores original termios
+  - Uses: `std.posix.tcgetattr`, `std.posix.tcsetattr(.FLUSH, ...)`,
+    `termios.lflag.ICANON = false`, `termios.lflag.ECHO = false`,
+    `termios.cc[@intFromEnum(std.posix.V.MIN)] = 1`
+  - RED: 1 structural test — verify RawMode has expected fields
+  - GREEN: Implement struct
+
+- [ ] **19.7 CLI flags: --no-pager and --page-size**
+  - Add `no_pager: bool = false` and `page_size: usize = 25` to `ViewArgs`
+  - Add parsing branches to `parseViewArgs` for both flags
+  - Update `printUsage()` help text with new options
+  - RED: 4 tests — parse --no-pager, parse --page-size 50, default values
+  - GREEN: Add fields, parsing, and help text
+
+- [ ] **19.8 Integrate pager into render loop**
+  - Refactor `viewSpriteFile` render loop from flat iteration to page-based outer loop
+  - Create Pager from ViewArgs + runtime context (isatty, can_inline, sprite count)
+  - Enable RawMode if pager active (defer disable), get stdin reader
+  - Outer loop: render page of sprites → writePrompt to stderr → readAction → clearPrompt
+  - If pager inactive: single pass rendering all sprites (preserves existing behavior)
+  - `runViewAll` needs no changes — delegates to `viewSpriteFile` per file
+  - 2 wiring tests: ViewArgs with save+no_inline → inactive; ViewArgs with index → inactive
+
+---
+
 ## Future Considerations (Not in Current Scope)
 
 ### Righteous Fire Expansion
