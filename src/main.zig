@@ -19,6 +19,7 @@ const opening_mod = privateer.opening;
 const movie_music_mod = privateer.movie_music;
 const quine_terminal_mod = privateer.quine_terminal;
 const save_game_mod = privateer.save_game;
+const shp_mod = privateer.shp;
 
 /// Holds all live game data and rendering state for the main loop.
 const GameState = struct {
@@ -61,6 +62,8 @@ const GameState = struct {
 
     // Quine 4000 registration terminal (null when not in registration)
     quine_terminal: ?quine_terminal_mod.QuineTerminal,
+    // Quine 4000 PDA background sprite (LOADSAVE.SHP sprite 0)
+    quine_bg: ?sprite_mod.Sprite,
 
     // Current save data (populated after registration or load)
     current_save: ?save_game_mod.SaveGameData,
@@ -77,6 +80,10 @@ const GameState = struct {
             s.deinit();
         }
         if (self.title_bg) |*bg| {
+            var s = bg.*;
+            s.deinit();
+        }
+        if (self.quine_bg) |*bg| {
             var s = bg.*;
             s.deinit();
         }
@@ -534,9 +541,9 @@ fn updateRegistration(state: *GameState) void {
         }
     }
 
-    // Render Quine terminal (procedurally drawn)
+    // Render Quine terminal with LOADSAVE.SHP background
     const font_ptr: ?*const text_mod.Font = if (state.title_font) |*f| f else null;
-    qt.render(&state.fb, font_ptr);
+    qt.render(&state.fb, state.quine_bg, font_ptr);
     state.fb.applyPalette(&state.palette);
     state.fb.presentWithMode(
         state.renderer,
@@ -747,6 +754,25 @@ fn initGameState(
         std.debug.print("Warning: Could not load title screen\n", .{});
     }
 
+    // Load Quine 4000 PDA background from LOADSAVE.SHP sprite 0
+    var quine_bg: ?sprite_mod.Sprite = null;
+    if (tre_index.findEntry(quine_terminal_mod.LOADSAVE_SHP)) |shp_entry| {
+        const shp_data = tre.extractFileData(tre_data, shp_entry.offset, shp_entry.size) catch null;
+        if (shp_data) |sd| {
+            var shp_file = shp_mod.parse(allocator, sd) catch null;
+            if (shp_file) |*shp| {
+                defer shp.deinit();
+                quine_bg = shp.decodeSprite(allocator, quine_terminal_mod.QUINE_SPRITE_IDX) catch null;
+                if (quine_bg != null) {
+                    std.debug.print("LOADSAVE.SHP sprite 0 loaded (Quine 4000 background)\n", .{});
+                }
+            }
+        }
+    }
+    if (quine_bg == null) {
+        std.debug.print("Warning: Could not load Quine 4000 background from LOADSAVE.SHP\n", .{});
+    }
+
     // Try to load DEMOFONT.SHP for title screen text
     var title_font: ?text_mod.Font = null;
     if (tre_index.findEntry("DEMOFONT.SHP")) |font_entry| {
@@ -830,6 +856,7 @@ fn initGameState(
         .title_fade_frame = 0,
         .movie_player = movie_player,
         .quine_terminal = null,
+        .quine_bg = quine_bg,
         .current_save = null,
         .frame_count = 0,
     };

@@ -1,55 +1,32 @@
 //! Quine 4000 computer terminal UI for Wing Commander: Privateer.
 //! Renders the new-game registration screen where the player enters
-//! their name and callsign. Procedurally drawn to match the original
-//! game's handheld PDA device appearance at 320x200 resolution.
+//! their name and callsign. Uses the pre-rendered LOADSAVE.SHP sprite 0
+//! (the Quine 4000 PDA device) as background with PCMAIN palette, then
+//! overlays registration text on the green screen area.
 
 const std = @import("std");
 const framebuffer_mod = @import("../render/framebuffer.zig");
 const text_mod = @import("../render/text.zig");
+const sprite_mod = @import("../formats/sprite.zig");
 
-/// Palette indices matching PCMAIN.PAL / general game palette.
+/// TRE path for the Quine 4000 device sprite.
+pub const LOADSAVE_SHP = "LOADSAVE.SHP";
+
+/// Sprite index within LOADSAVE.SHP for the Quine 4000 background.
+pub const QUINE_SPRITE_IDX: usize = 0;
+
+/// Color palette indices for text on the green screen (PCMAIN palette).
 const C = struct {
-    const black: u8 = 0;
-    const dark_gray: u8 = 2; // dark background behind device
-    const mid_gray: u8 = 4; // device casing
-    const light_gray: u8 = 7; // device casing highlight
-    const dark_green: u8 = 10; // green screen dark edge
-    const green: u8 = 11; // green screen background
-    const text: u8 = 0; // black text on green screen
-    const text_dim: u8 = 4; // dimmed/inactive text
-    const red: u8 = 3; // red button labels (SAVE, LOAD)
-    const yellow: u8 = 11; // yellow button label (MISSIONS)
-    const btn_green: u8 = 10; // green button labels (FIN, MAN)
-    const white: u8 = 15; // bright highlights
-    const btn_bg: u8 = 5; // button background
-    const btn_border: u8 = 6; // button border
+    const black: u8 = 0; // fallback background / text color
+    const text_dim: u8 = 4; // dimmed/inactive prompt
 };
 
-/// Device layout in 320x200 framebuffer coordinates.
-/// The PDA is roughly centered, offset slightly down.
-const D = struct {
-    // Full device bounding box
-    const x: u16 = 60;
-    const y: u16 = 55;
-    const w: u16 = 200;
-    const h: u16 = 135;
-
-    // Green screen panel (left side of device)
-    const scr_x: u16 = 66;
-    const scr_y: u16 = 62;
-    const scr_w: u16 = 118;
-    const scr_h: u16 = 118;
-
-    // Button panel (right side of device)
-    const btn_x: u16 = 190;
-    const btn_y: u16 = 62;
-    const btn_w: u16 = 64;
-    const btn_h: u16 = 118;
-
-    // Text on green screen
-    const txt_x: u16 = 70;
-    const txt_y: u16 = 68;
-    const txt_line: u16 = 12;
+/// Text layout on the green screen area of the LOADSAVE.SHP device.
+/// Coordinates measured from the original 320x200 sprite.
+const T = struct {
+    const x: u16 = 18;
+    const y: u16 = 48;
+    const line: u16 = 12;
 };
 
 /// Maximum character lengths for input fields.
@@ -149,114 +126,62 @@ pub const QuineTerminal = struct {
         }
     }
 
-    /// Render the Quine 4000 terminal procedurally.
-    /// font is optional — if null, text is not rendered (for unit tests).
-    pub fn render(self: *QuineTerminal, fb: *framebuffer_mod.Framebuffer, font: ?*const text_mod.Font) void {
+    /// Render the Quine 4000 terminal.
+    /// bg: optional LOADSAVE.SHP sprite 0 (the PDA device).
+    /// font: optional font for text rendering (null in unit tests).
+    pub fn render(self: *QuineTerminal, fb: *framebuffer_mod.Framebuffer, bg: ?sprite_mod.Sprite, font: ?*const text_mod.Font) void {
         self.cursor_counter +%= 1;
 
-        // Dark background (cockpit/desk surface)
-        fb.clear(C.dark_gray);
-
-        // Device casing - outer frame with 3D beveled look
-        fillRect(fb, D.x, D.y, D.w, D.h, C.mid_gray);
-        // Top/left highlight edge
-        drawHLine(fb, D.x, D.y, D.w, C.light_gray);
-        drawVLine(fb, D.x, D.y, D.h, C.light_gray);
-        // Bottom/right shadow edge
-        drawHLine(fb, D.x, D.y + D.h - 1, D.w, C.black);
-        drawVLine(fb, D.x + D.w - 1, D.y, D.h, C.black);
-        // Inner bevel
-        drawHLine(fb, D.x + 1, D.y + 1, D.w - 2, C.white);
-        drawVLine(fb, D.x + 1, D.y + 1, D.h - 2, C.white);
-        drawHLine(fb, D.x + 1, D.y + D.h - 2, D.w - 2, C.dark_gray);
-        drawVLine(fb, D.x + D.w - 2, D.y + 1, D.h - 2, C.dark_gray);
-
-        // Green screen panel - recessed with dark border
-        fillRect(fb, D.scr_x - 2, D.scr_y - 2, D.scr_w + 4, D.scr_h + 4, C.dark_green);
-        fillRect(fb, D.scr_x, D.scr_y, D.scr_w, D.scr_h, C.green);
-
-        // Button panel background
-        fillRect(fb, D.btn_x, D.btn_y, D.btn_w, D.btn_h, C.mid_gray);
-
-        // Draw buttons on right panel
-        if (font) |f| {
-            const bx = D.btn_x + 2;
-            const bw = D.btn_w - 4;
-            const half_w = bw / 2 - 1;
-
-            // Row 1: SAVE | LOAD (side by side)
-            drawButton(fb, bx, D.btn_y + 3, half_w, 14, C.btn_bg, C.btn_border);
-            drawButton(fb, bx + half_w + 2, D.btn_y + 3, half_w, 14, C.btn_bg, C.btn_border);
-            _ = f.drawTextColored(fb, bx + 3, D.btn_y + 7, "SAVE", C.red);
-            _ = f.drawTextColored(fb, bx + half_w + 5, D.btn_y + 7, "LOAD", C.red);
-
-            // Row 2: MISSIONS (full width)
-            drawButton(fb, bx, D.btn_y + 22, bw, 14, C.btn_bg, C.btn_border);
-            _ = f.drawTextColored(fb, bx + 3, D.btn_y + 26, "MISSIONS", C.yellow);
-
-            // Row 3: FIN | MAN (side by side)
-            drawButton(fb, bx, D.btn_y + 41, half_w, 14, C.btn_bg, C.btn_border);
-            drawButton(fb, bx + half_w + 2, D.btn_y + 41, half_w, 14, C.btn_bg, C.btn_border);
-            _ = f.drawTextColored(fb, bx + 7, D.btn_y + 45, "FIN", C.btn_green);
-            _ = f.drawTextColored(fb, bx + half_w + 7, D.btn_y + 45, "MAN", C.btn_green);
-
-            // Row 4: PWR button with d-pad
-            drawButton(fb, bx + half_w + 2, D.btn_y + 60, half_w, 14, C.btn_bg, C.btn_border);
-            _ = f.drawTextColored(fb, bx + half_w + 7, D.btn_y + 64, "PWR", C.red);
-            // D-pad cross (simplified)
-            const dx = bx + 10;
-            const dy = D.btn_y + 63;
-            drawHLine(fb, dx, dy + 4, 12, C.light_gray);
-            drawVLine(fb, dx + 6, dy, 9, C.light_gray);
-
-            // QUINE 4000 branding at bottom of button panel
-            _ = f.drawTextColored(fb, D.btn_x + 4, D.btn_y + 82, "QUINE", C.white);
-            _ = f.drawTextColored(fb, D.btn_x + 12, D.btn_y + 94, "4000", C.white);
+        // Blit the pre-rendered PDA device background
+        if (bg) |spr| {
+            fb.blitSpriteOpaque(spr, 0, 0);
+        } else {
+            fb.clear(C.black);
         }
 
-        // Green screen text content
+        // Overlay registration text on the green screen area
         if (font) |f| {
-            const tx = D.txt_x;
-            var ty = D.txt_y;
+            const tx = T.x;
+            var ty = T.y;
 
-            _ = f.drawTextColored(fb, tx, ty, "Please register your", C.text);
-            ty += D.txt_line;
-            _ = f.drawTextColored(fb, tx, ty, "new Quine 4000", C.text);
-            ty += D.txt_line * 2;
+            _ = f.drawTextColored(fb, tx, ty, "Please register your", C.black);
+            ty += T.line;
+            _ = f.drawTextColored(fb, tx, ty, "new Quine 4000", C.black);
+            ty += T.line * 2;
 
             switch (self.phase) {
                 .enter_name => {
-                    _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text);
-                    ty += D.txt_line;
-                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.black);
+                    ty += T.line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.black);
                     if (self.cursor_counter / 30 % 2 == 0) {
                         const cx = tx + @as(u16, @intCast(self.name_len)) * 8;
-                        _ = f.drawTextColored(fb, cx, ty, "_", C.text);
+                        _ = f.drawTextColored(fb, cx, ty, "_", C.black);
                     }
-                    ty += D.txt_line * 2;
+                    ty += T.line * 2;
                     _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text_dim);
                 },
                 .enter_callsign => {
                     _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text_dim);
-                    ty += D.txt_line;
-                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
-                    ty += D.txt_line * 2;
-                    _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text);
-                    ty += D.txt_line;
-                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.text);
+                    ty += T.line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.black);
+                    ty += T.line * 2;
+                    _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.black);
+                    ty += T.line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.black);
                     if (self.cursor_counter / 30 % 2 == 0) {
                         const cx = tx + @as(u16, @intCast(self.callsign_len)) * 8;
-                        _ = f.drawTextColored(fb, cx, ty, "_", C.text);
+                        _ = f.drawTextColored(fb, cx, ty, "_", C.black);
                     }
                 },
                 .done => {
                     _ = f.drawTextColored(fb, tx, ty, "Enter Name!", C.text_dim);
-                    ty += D.txt_line;
-                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.text);
-                    ty += D.txt_line * 2;
+                    ty += T.line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getName(), C.black);
+                    ty += T.line * 2;
                     _ = f.drawTextColored(fb, tx, ty, "Enter Callsign!", C.text_dim);
-                    ty += D.txt_line;
-                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.text);
+                    ty += T.line;
+                    _ = f.drawTextColored(fb, tx, ty, self.getCallsign(), C.black);
                 },
             }
         }
@@ -276,40 +201,6 @@ fn charFromKey(key: u32, key_mod: u16) ?u8 {
     }
     if (key == c.SDLK_SPACE) return ' ';
     return null;
-}
-
-// Drawing helpers
-
-fn fillRect(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, color: u8) void {
-    var j: u16 = 0;
-    while (j < h) : (j += 1) {
-        var i: u16 = 0;
-        while (i < w) : (i += 1) {
-            fb.setPixel(x + i, y + j, color);
-        }
-    }
-}
-
-fn drawHLine(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, color: u8) void {
-    var i: u16 = 0;
-    while (i < w) : (i += 1) {
-        fb.setPixel(x + i, y, color);
-    }
-}
-
-fn drawVLine(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, h: u16, color: u8) void {
-    var j: u16 = 0;
-    while (j < h) : (j += 1) {
-        fb.setPixel(x, y + j, color);
-    }
-}
-
-fn drawButton(fb: *framebuffer_mod.Framebuffer, x: u16, y: u16, w: u16, h: u16, bg: u8, border: u8) void {
-    fillRect(fb, x, y, w, h, bg);
-    drawHLine(fb, x, y, w, border);
-    drawHLine(fb, x, y + h - 1, w, border);
-    drawVLine(fb, x, y, h, border);
-    drawVLine(fb, x + w - 1, y, h, border);
 }
 
 // --- Tests ---
@@ -466,14 +357,11 @@ test "full registration flow" {
     try std.testing.expectEqual(Phase.done, qt.phase);
 }
 
-test "render draws device on dark background" {
+test "render without sprite clears to black" {
     var qt = QuineTerminal.init();
     var fb = framebuffer_mod.Framebuffer.create();
-    qt.render(&fb, null);
-    // Background should be dark gray
-    try std.testing.expectEqual(C.dark_gray, fb.getPixel(0, 0));
-    // Device casing should be mid gray (below the green screen)
-    try std.testing.expectEqual(C.mid_gray, fb.getPixel(D.x + 10, D.y + D.h - 5));
-    // Green screen should be green
-    try std.testing.expectEqual(C.green, fb.getPixel(D.scr_x + 5, D.scr_y + 5));
+    qt.render(&fb, null, null);
+    // Without a background sprite, framebuffer should be cleared to black
+    try std.testing.expectEqual(C.black, fb.getPixel(0, 0));
+    try std.testing.expectEqual(C.black, fb.getPixel(160, 100));
 }
