@@ -243,13 +243,29 @@ Offset  Size  Description
 0x0004  768   RGB palette data (256 entries x 3 bytes, VGA 6-bit per channel)
 ```
 
-### Files (4 files)
+VGA 6-bit to 8-bit conversion: `(value << 2) | (value >> 4)`, producing range 0-255.
+
+### Standalone PAL Files (4 files)
 | File | Purpose |
 |------|---------|
-| `PCMAIN.PAL` | Main game palette |
+| `PCMAIN.PAL` | Main game palette (default fallback) |
 | `PREFMAIN.PAL` | Preference/menu palette |
 | `SPACE.PAL` | Space flight palette |
 | `JOYCALIB.PAL` | Joystick calibration screen palette |
+
+### OPTPALS.PAK — Scene Palette Container
+42 palettes (indices 0-41), 772 bytes each. Scene IDs 0-41 map directly to
+palette indices. Scenes 42+ inherit from the room's first scene.
+
+Special entries: **palette 28** = Quine 4000 terminal, **palette 39** = title screen.
+
+### Embedded PAK Palettes
+Many PAK files (especially MOVI scene PAKs like MID1.PAK) embed a palette as
+resource 0 (772 bytes). FILD commands in MOVI files reference sprites at
+`param3 + 1` to skip the palette resource.
+
+See [Palette Mapping Guide](12-palette-mapping.md) for the complete mapping of
+which palettes go with which resources.
 
 ---
 

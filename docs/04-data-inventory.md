@@ -113,7 +113,7 @@ Landing/takeoff animations and mid-game cinematics.
 
 | File | Description |
 |------|-------------|
-| CUBICLE.IFF/.PAK | Cubicle/room scenes |
+| CUBICLE.IFF/.PAK | Quine 4000 computer terminal (IFF=MOVI script, PAK=device sprites + 320x200 backgrounds, palette=OPTPALS 28) |
 | DEATHAPR.IFF | Death approach sequence |
 | GFMIDGAM.IFF | Game flow midgame data |
 | JUMP.IFF/.PAK | Jump sequence animation |

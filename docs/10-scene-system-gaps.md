@@ -38,11 +38,17 @@ Palettes are in `..\..\DATA\OPTIONS\OPTPALS.PAK` (42 L1 entries, 772 bytes each)
 
 - **Scene IDs 0-41**: Direct mapping -- palette[scene_id] in OPTPALS.PAK
 - **Scene IDs 42+**: Share palette with the first scene of the same room type:
-  - Scenes 42-45 (guild, tune=8): Use palette from scene 39
-  - Scenes 46-55 (merchant guild, tune=9): Need guild palette (exact index TBD)
-  - Scenes 56-57 (finale, tune=2): Need finale palette (exact index TBD)
+  - Scenes 42-45 (guild, tune=8): Use palette 39
+  - Scenes 46-55 (merchant guild, tune=9): Use room's first scene palette
+  - Scenes 56-57 (finale, tune=2): Use palette 0 (fallback)
   - Scenes 59, 61 (bar/conversation): Shared across all rooms -- inherit the
     current room's palette (use the first scene's palette from that room)
+
+Special non-scene palette entries:
+- **Palette 28**: Quine 4000 terminal (CUBICLE.PAK), discovered via CUBICLE.IFF FILD
+- **Palette 39**: Title screen (OPTSHPS.PAK resource 181), dark purple theme
+
+See [Palette Mapping Guide](12-palette-mapping.md) for the complete reference.
 
 ### CU.PAK (Close-Up Views)
 

@@ -981,14 +981,14 @@ The Quine 4000 screen features:
 - Keyboard text input for name and callsign
 - After registration: game starts at the first base (Troy system, New Detroit)
 
-- [x] **18.1 Identify Quine 4000 background resource in OPTSHPS.PAK**
-  - OPTSHPS.PAK entries 0-61 are scene backgrounds, entry 181 is the title screen
-  - The Quine 4000 background is in the UI range (entries 62-225) — exact index unknown
-  - Use the sprite viewer CLI (`zig build sprite -- view --file OPTSHPS.PAK --index <N>`)
-    to dump candidate entries 170-190, then broader if needed
-  - Test with different OPTPALS.PAK palettes to find correct colors
-  - Fallback: if not found as a pre-rendered sprite, draw procedurally using
-    `fillRect`/`drawRect` + font rendering (following the `options_menu.zig` pattern)
+- [x] **18.1 Identify Quine 4000 background resource**
+  - **Found in CUBICLE.PAK** (not OPTSHPS.PAK): resource 8 is the 320x200 blank
+    Quine 4000 background, resource 9 is same with sample text content
+  - Uses **OPTPALS.PAK palette 28** (discovered via CUBICLE.IFF FILD commands:
+    file_ref=1 → optpals.pak, param3=27 → resource index 28)
+  - CUBICLE.PAK resources 0-7 are device component sprites (PDA body, buttons,
+    screen animations) composited by the MOVI system in the original game
+  - Resources 1-6 contain animation frames for screen effects and button highlights
 
 - [x] **18.2 Add `registration` state to game state machine**
   - Add `registration` to the `State` enum in `src/game/game_state.zig` — append at end

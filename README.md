@@ -207,6 +207,7 @@ All project documentation lives in the `docs/` directory:
 | [Implementation Plan](docs/09-implementation-plan.md) | 14-phase plan with checkboxes for progress tracking, ordered by priority, using red/green TDD methodology throughout |
 | [Scene System Analysis](docs/10-scene-system-gaps.md) | PRCD.EXE reverse engineering results: scene ID → OPTSHPS.PAK mapping, sprite INFO → global PAK index for click regions, palette inheritance |
 | [Movie Issues](docs/11-movie-issues.md) | Movie render pipeline (7-stage per-frame flow), known issues, reverse engineering findings, BFOR composition model, text rendering mystery |
+| [Palette Mapping](docs/12-palette-mapping.md) | Complete palette-to-resource mapping: OPTPALS.PAK scene indices, embedded PAK palettes, MOVI palette system, standalone PAL files |
 
 ## Original Game Data
 
