@@ -152,6 +152,16 @@ pub const MovieRenderer = struct {
         self.loaded_files[file_ref] = .{ .font = font };
     }
 
+    /// Render text overlays for the current ACTS block.
+    /// Called every frame (not just once) so text persists on screen.
+    pub fn renderTextOverlays(self: *MovieRenderer, block: movie_mod.ActsBlock) void {
+        for (block.sprite_commands) |spri| {
+            if (spri.sprite_type == 12) {
+                self.renderTextSprite(spri, block.field_commands);
+            }
+        }
+    }
+
     /// Clear the framebuffer (triggered by CLRC command).
     pub fn clearScreen(self: *MovieRenderer) void {
         self.fb.clear(0);
@@ -227,8 +237,7 @@ pub const MovieRenderer = struct {
             }
         }
 
-        // Render text overlays LAST (after all sprites, at the end of composition
-        // where we know the framebuffer is in its final state)
+        // Render text overlays LAST
         for (block.sprite_commands) |spri| {
             if (spri.sprite_type == 12) {
                 self.renderTextSprite(spri, block.field_commands);

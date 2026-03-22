@@ -369,6 +369,12 @@ pub const MoviePlayer = struct {
             self.acts_rendered = true;
         }
 
+        // Re-render text overlays every frame (text is cheap to draw and must
+        // persist on screen even though sprites are rendered only once)
+        if (self.current_acts_idx < script.acts_blocks.len) {
+            renderer.renderTextOverlays(script.acts_blocks[self.current_acts_idx]);
+        }
+
         // Advance timing
         self.tick_accum += DOS_TICK_HZ;
         if (self.tick_threshold > 0 and self.tick_accum >= self.tick_threshold) {
