@@ -339,6 +339,12 @@ FORM:GAME
 Tracks: current ship, location, credits, cargo, equipment, faction standings,
 mission progress, story flags.
 
+### Player Identity
+The Quine 4000 computer terminal captures the player's name and callsign at game
+start. These are stored in the save file (16-byte name + 12-byte callsign with
+length prefixes). Save format version 2 adds these fields; version 1 saves load
+with empty name/callsign for backward compatibility.
+
 ---
 
 ## 10. Intro Movie / Cinematic System

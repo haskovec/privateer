@@ -25,6 +25,8 @@ Phase 15 (Title Screen & Main Menu) complete. Phase 16 (Intro Movie System) comp
 Phase 17 (MOVI Parser & Renderer Rewrite) in progress (17.1-17.9 done) — reverse engineering revealed the FORM:MOVI
 format uses a scene-graph composition model with polymorphic file slots, BFOR-driven composition,
 opaque/transparent blit modes, and per-scene voice clip references.
+Phase 18 (Quine 4000 Computer Terminal) planned — adds the original game's new-game registration
+screen with name/callsign entry before gameplay begins.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout
