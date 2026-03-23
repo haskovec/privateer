@@ -591,6 +591,13 @@ pub const Pager = struct {
         return (self.config.total_sprites + self.config.page_size - 1) / self.config.page_size;
     }
 
+    /// Formats a status line like "-- sprites 1-25 of 1000 (SPACE=next, q=quit) --"
+    /// Display indices are 1-based (start_idx+1 through end_idx).
+    pub fn formatStatusLine(self: Pager, buf: []u8, start_idx: usize, end_idx: usize, total: usize) []const u8 {
+        _ = self;
+        return std.fmt.bufPrint(buf, "-- sprites {d}-{d} of {d} (SPACE=next, q=quit) --", .{ start_idx + 1, end_idx, total }) catch "-- pager --";
+    }
+
     pub fn isActive(self: Pager) bool {
         if (self.config.no_pager) return false;
         if (!self.config.is_tty) return false;
@@ -695,4 +702,25 @@ test "totalPages rounds up" {
 
     const pager3 = Pager.init(.{ .total_sprites = 0, .page_size = 25 });
     try std.testing.expectEqual(@as(usize, 0), pager3.totalPages());
+}
+
+test "formatStatusLine first page" {
+    const pager = Pager.init(.{ .total_sprites = 1000, .page_size = 25 });
+    var buf: [256]u8 = undefined;
+    const line = pager.formatStatusLine(&buf, 0, 25, 1000);
+    try std.testing.expectEqualStrings("-- sprites 1-25 of 1000 (SPACE=next, q=quit) --", line);
+}
+
+test "formatStatusLine final page" {
+    const pager = Pager.init(.{ .total_sprites = 50, .page_size = 25 });
+    var buf: [256]u8 = undefined;
+    const line = pager.formatStatusLine(&buf, 25, 50, 50);
+    try std.testing.expectEqualStrings("-- sprites 26-50 of 50 (SPACE=next, q=quit) --", line);
+}
+
+test "formatStatusLine partial final page" {
+    const pager = Pager.init(.{ .total_sprites = 30, .page_size = 25 });
+    var buf: [256]u8 = undefined;
+    const line = pager.formatStatusLine(&buf, 25, 30, 30);
+    try std.testing.expectEqualStrings("-- sprites 26-30 of 30 (SPACE=next, q=quit) --", line);
 }

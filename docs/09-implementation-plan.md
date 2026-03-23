@@ -1067,7 +1067,7 @@ line prompt, and single-keypress navigation.
   - RED: 4 tests — first page, last page clamped to total, custom page_size, totalPages rounds up
   - GREEN: Implement `PageRange` struct, `pageRange()`, `totalPages()`
 
-- [ ] **19.3 Status line formatting**
+- [x] **19.3 Status line formatting**
   - `Pager.formatStatusLine(buf, start_idx, end_idx, total)` → `"-- sprites 1-25 of 1000 (SPACE=next, q=quit) --"`
   - Display indices are 1-based (start_idx+1 through end_idx+1)
   - RED: 3 tests — first page, final page, partial final page
