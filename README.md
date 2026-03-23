@@ -27,6 +27,8 @@ format uses a scene-graph composition model with polymorphic file slots, BFOR-dr
 opaque/transparent blit modes, and per-scene voice clip references.
 Phase 18 (Quine 4000 Computer Terminal) complete — adds the original game's new-game registration
 screen with name/callsign entry before gameplay begins.
+Phase 19 (Sprite Viewer CLI Pager) complete — adds built-in paging to the sprite viewer CLI
+so inline Kitty graphics don't scroll off-screen.
 See the [Implementation Plan](docs/09-implementation-plan.md) for detailed progress.
 
 ## Project Layout

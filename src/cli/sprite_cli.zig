@@ -411,90 +411,157 @@ fn viewSpriteFile(
     }
 
     // Determine which sprites to show
-    const start_idx: usize = if (view_args.index) |idx| @min(idx, sprites.len - 1) else 0;
-    const end_idx: usize = if (view_args.index) |idx| @min(idx + 1, sprites.len) else sprites.len;
+    const global_start: usize = if (view_args.index) |idx| @min(idx, sprites.len - 1) else 0;
+    const global_end: usize = if (view_args.index) |idx| @min(idx + 1, sprites.len) else sprites.len;
+    const total_to_show = global_end - global_start;
 
+    // Create pager from ViewArgs + runtime context
+    const is_tty = std.posix.isatty(std.posix.STDIN_FILENO);
+    const pager = Pager.init(.{
+        .no_pager = view_args.no_pager,
+        .page_size = view_args.page_size,
+        .total_sprites = total_to_show,
+        .is_tty = is_tty,
+        .has_inline_display = can_inline,
+        .single_index = view_args.index != null,
+    });
+
+    const pager_active = pager.isActive();
+
+    // Enable raw mode for single-keypress input if pager is active
+    const raw_mode = if (pager_active) RawMode.enable(std.posix.STDIN_FILENO) else null;
+    defer if (raw_mode) |rm| rm.disable();
+
+    const stdin_reader = std.fs.File.stdin().deprecatedReader();
+    const stderr_writer = std.fs.File.stderr().deprecatedWriter();
     const stdout_writer = std.fs.File.stdout().deprecatedWriter();
 
-    for (start_idx..end_idx) |idx| {
-        const spr = sprites[idx];
-        std.debug.print("Sprite {}/{}: {}x{}\n", .{ idx, sprites.len, spr.width, spr.height });
+    // Page-based outer loop
+    var page: usize = 0;
+    const total_pages = pager.totalPages();
+    while (true) {
+        // Calculate sprite range for this page
+        const page_start: usize = if (pager_active) blk: {
+            const range = pager.pageRange(page);
+            break :blk global_start + range.start;
+        } else global_start;
+        const page_end: usize = if (pager_active) blk: {
+            const range = pager.pageRange(page);
+            break :blk global_start + @min(range.end, total_to_show);
+        } else global_end;
 
-        // Convert to RGBA
-        var rgba_image = try render_mod.spriteToRgba(allocator, spr, palette);
-        defer rgba_image.deinit();
+        // Render sprites in the current page
+        for (page_start..page_end) |idx| {
+            try renderSprite(allocator, view_args, sprites, idx, palette, can_inline, auto_save, stdout_writer);
+        }
 
-        // Determine the effective save path: explicit --save, or auto-generated
-        const effective_save = if (view_args.save_path) |p|
-            p
-        else if (auto_save)
-            "sprite.png"
-        else
-            @as(?[]const u8, null);
-
-        if (view_args.scale > 1 and view_args.side_by_side) {
-            // Side-by-side: original + upscaled
-            const factor = scaleToFactor(view_args.scale);
-            var upscaled = try upscale_mod.upscale(
-                allocator,
-                rgba_image.pixels,
-                rgba_image.width,
-                rgba_image.height,
-                factor,
-            );
-            defer upscaled.deinit();
-
-            var composite = try kitty.compositeSideBySide(
-                allocator,
-                rgba_image.pixels,
-                rgba_image.width,
-                rgba_image.height,
-                upscaled.pixels,
-                upscaled.width,
-                upscaled.height,
-                8, // 8px gap
-            );
-            defer composite.deinit();
-
-            if (can_inline) {
-                std.debug.print("  [1x: {}x{}]  |  [{}x: {}x{}]\n", .{
-                    rgba_image.width, rgba_image.height,
-                    view_args.scale,   upscaled.width,  upscaled.height,
-                });
-                try kitty.displayImage(stdout_writer, allocator, composite.pixels, composite.width, composite.height);
-            }
-
-            if (effective_save) |base_path| {
-                try savePng(allocator, base_path, idx, sprites.len, composite.pixels, composite.width, composite.height);
-            }
-        } else if (view_args.scale > 1) {
-            // Upscaled only
-            const factor = scaleToFactor(view_args.scale);
-            var upscaled = try upscale_mod.upscale(
-                allocator,
-                rgba_image.pixels,
-                rgba_image.width,
-                rgba_image.height,
-                factor,
-            );
-            defer upscaled.deinit();
-
-            if (can_inline) {
-                try kitty.displayImage(stdout_writer, allocator, upscaled.pixels, upscaled.width, upscaled.height);
-            }
-
-            if (effective_save) |base_path| {
-                try savePng(allocator, base_path, idx, sprites.len, upscaled.pixels, upscaled.width, upscaled.height);
+        // If pager is active and there are more pages, prompt the user
+        if (pager_active and page + 1 < total_pages) {
+            var status_buf: [256]u8 = undefined;
+            try pager.writePrompt(stderr_writer, &status_buf, page_start - global_start, page_end - global_start, total_to_show);
+            const action = pager.readAction(stdin_reader) catch .quit;
+            try pager.clearPrompt(stderr_writer);
+            switch (action) {
+                .quit => break,
+                .next_page => {
+                    page += 1;
+                    continue;
+                },
             }
         } else {
-            // Original size
-            if (can_inline) {
-                try kitty.displayImage(stdout_writer, allocator, rgba_image.pixels, rgba_image.width, rgba_image.height);
-            }
+            break;
+        }
+    }
+}
 
-            if (effective_save) |base_path| {
-                try savePng(allocator, base_path, idx, sprites.len, rgba_image.pixels, rgba_image.width, rgba_image.height);
-            }
+/// Render a single sprite at the given index.
+fn renderSprite(
+    allocator: std.mem.Allocator,
+    view_args: ViewArgs,
+    sprites: []sprite_mod.Sprite,
+    idx: usize,
+    palette: pal_mod.Palette,
+    can_inline: bool,
+    auto_save: bool,
+    stdout_writer: anytype,
+) !void {
+    const spr = sprites[idx];
+    std.debug.print("Sprite {}/{}: {}x{}\n", .{ idx, sprites.len, spr.width, spr.height });
+
+    // Convert to RGBA
+    var rgba_image = try render_mod.spriteToRgba(allocator, spr, palette);
+    defer rgba_image.deinit();
+
+    // Determine the effective save path: explicit --save, or auto-generated
+    const effective_save = if (view_args.save_path) |p|
+        p
+    else if (auto_save)
+        "sprite.png"
+    else
+        @as(?[]const u8, null);
+
+    if (view_args.scale > 1 and view_args.side_by_side) {
+        // Side-by-side: original + upscaled
+        const factor = scaleToFactor(view_args.scale);
+        var upscaled = try upscale_mod.upscale(
+            allocator,
+            rgba_image.pixels,
+            rgba_image.width,
+            rgba_image.height,
+            factor,
+        );
+        defer upscaled.deinit();
+
+        var composite = try kitty.compositeSideBySide(
+            allocator,
+            rgba_image.pixels,
+            rgba_image.width,
+            rgba_image.height,
+            upscaled.pixels,
+            upscaled.width,
+            upscaled.height,
+            8, // 8px gap
+        );
+        defer composite.deinit();
+
+        if (can_inline) {
+            std.debug.print("  [1x: {}x{}]  |  [{}x: {}x{}]\n", .{
+                rgba_image.width, rgba_image.height,
+                view_args.scale,   upscaled.width,  upscaled.height,
+            });
+            try kitty.displayImage(stdout_writer, allocator, composite.pixels, composite.width, composite.height);
+        }
+
+        if (effective_save) |base_path| {
+            try savePng(allocator, base_path, idx, sprites.len, composite.pixels, composite.width, composite.height);
+        }
+    } else if (view_args.scale > 1) {
+        // Upscaled only
+        const factor = scaleToFactor(view_args.scale);
+        var upscaled = try upscale_mod.upscale(
+            allocator,
+            rgba_image.pixels,
+            rgba_image.width,
+            rgba_image.height,
+            factor,
+        );
+        defer upscaled.deinit();
+
+        if (can_inline) {
+            try kitty.displayImage(stdout_writer, allocator, upscaled.pixels, upscaled.width, upscaled.height);
+        }
+
+        if (effective_save) |base_path| {
+            try savePng(allocator, base_path, idx, sprites.len, upscaled.pixels, upscaled.width, upscaled.height);
+        }
+    } else {
+        // Original size
+        if (can_inline) {
+            try kitty.displayImage(stdout_writer, allocator, rgba_image.pixels, rgba_image.width, rgba_image.height);
+        }
+
+        if (effective_save) |base_path| {
+            try savePng(allocator, base_path, idx, sprites.len, rgba_image.pixels, rgba_image.width, rgba_image.height);
         }
     }
 }
@@ -894,6 +961,39 @@ test "parseViewArgs --page-size 50" {
     const args: []const [:0]const u8 = &.{ "--page-size", "50" };
     const result = parseViewArgs(args);
     try std.testing.expectEqual(@as(usize, 50), result.page_size);
+}
+
+test "pager inactive when save and no_inline set" {
+    // When saving to file with no inline display, pager should be inactive
+    const view_args = ViewArgs{
+        .save_path = "output.png",
+        .no_inline = true,
+    };
+    const pager = Pager.init(.{
+        .no_pager = view_args.no_pager,
+        .page_size = view_args.page_size,
+        .total_sprites = 100,
+        .is_tty = true,
+        .has_inline_display = !view_args.no_inline,
+        .single_index = view_args.index != null,
+    });
+    try std.testing.expect(!pager.isActive());
+}
+
+test "pager inactive when index is set" {
+    // When viewing a single sprite index, pager should be inactive
+    const view_args = ViewArgs{
+        .index = 5,
+    };
+    const pager = Pager.init(.{
+        .no_pager = view_args.no_pager,
+        .page_size = view_args.page_size,
+        .total_sprites = 100,
+        .is_tty = true,
+        .has_inline_display = true,
+        .single_index = view_args.index != null,
+    });
+    try std.testing.expect(!pager.isActive());
 }
 
 test "RawMode has expected fields" {

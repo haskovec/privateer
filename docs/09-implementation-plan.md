@@ -1105,7 +1105,7 @@ line prompt, and single-keypress navigation.
   - RED: 4 tests — parse --no-pager, parse --page-size 50, default values
   - GREEN: Add fields, parsing, and help text
 
-- [ ] **19.8 Integrate pager into render loop**
+- [x] **19.8 Integrate pager into render loop**
   - Refactor `viewSpriteFile` render loop from flat iteration to page-based outer loop
   - Create Pager from ViewArgs + runtime context (isatty, can_inline, sprite count)
   - Enable RawMode if pager active (defer disable), get stdin reader
