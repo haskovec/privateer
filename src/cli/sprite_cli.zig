@@ -613,6 +613,26 @@ pub const Pager = struct {
         };
     }
 
+    /// Write the formatted status line prompt to the given writer.
+    pub fn writePrompt(self: Pager, writer: anytype, buf: []u8, start_idx: usize, end_idx: usize, total: usize) !void {
+        const line = self.formatStatusLine(buf, start_idx, end_idx, total);
+        try writer.writeAll(line);
+    }
+
+    /// Clear the prompt line by writing CR + clear-to-EOL escape sequence.
+    pub fn clearPrompt(_: Pager, writer: anytype) !void {
+        try writer.writeAll("\r\x1b[K");
+    }
+
+    /// Read a single byte from the reader and classify it as a pager action.
+    /// Returns .quit on EOF (no bytes available).
+    pub fn readAction(_: Pager, reader: anytype) !Action {
+        var byte_buf: [1]u8 = undefined;
+        const n = try reader.read(&byte_buf);
+        if (n == 0) return .quit;
+        return classifyKey(byte_buf[0]);
+    }
+
     pub fn isActive(self: Pager) bool {
         if (self.config.no_pager) return false;
         if (!self.config.is_tty) return false;
@@ -762,4 +782,47 @@ test "classifyKey enter maps to next_page" {
 
 test "classifyKey arbitrary key maps to next_page" {
     try std.testing.expectEqual(Pager.Action.next_page, Pager.classifyKey('x'));
+}
+
+test "writePrompt writes formatted status line" {
+    var buf: [256]u8 = undefined;
+    var output_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&output_buf);
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    try pager.writePrompt(stream.writer(), &buf, 0, 25, 100);
+    const written = stream.getWritten();
+    try std.testing.expectEqualStrings("-- sprites 1-25 of 100 (SPACE=next, q=quit) --", written);
+}
+
+test "clearPrompt writes CR and clear-to-EOL escape" {
+    var output_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&output_buf);
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    try pager.clearPrompt(stream.writer());
+    const written = stream.getWritten();
+    try std.testing.expectEqualStrings("\r\x1b[K", written);
+}
+
+test "readAction returns quit for q" {
+    var input = [_]u8{'q'};
+    var stream = std.io.fixedBufferStream(&input);
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    const action = try pager.readAction(stream.reader());
+    try std.testing.expectEqual(Pager.Action.quit, action);
+}
+
+test "readAction returns next_page for space" {
+    var input = [_]u8{' '};
+    var stream = std.io.fixedBufferStream(&input);
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    const action = try pager.readAction(stream.reader());
+    try std.testing.expectEqual(Pager.Action.next_page, action);
+}
+
+test "readAction returns quit on EOF" {
+    var input = [_]u8{};
+    var stream = std.io.fixedBufferStream(&input);
+    const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
+    const action = try pager.readAction(stream.reader());
+    try std.testing.expectEqual(Pager.Action.quit, action);
 }
