@@ -643,6 +643,38 @@ pub const Pager = struct {
     }
 };
 
+/// POSIX raw mode for single-keypress input.
+/// Disables canonical mode and echo so the pager can read one key at a time.
+/// Returns null from enable() if the fd isn't a TTY (safe for tests/piped input).
+pub const RawMode = struct {
+    fd: std.posix.fd_t,
+    original_termios: std.posix.termios,
+
+    /// Enable raw mode on the given file descriptor.
+    /// Returns null if the fd is not a TTY.
+    pub fn enable(fd: std.posix.fd_t) ?RawMode {
+        const original = std.posix.tcgetattr(fd) catch return null;
+
+        var raw = original;
+        raw.lflag.ICANON = false;
+        raw.lflag.ECHO = false;
+        raw.cc[@intFromEnum(std.posix.V.MIN)] = 1;
+        raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
+
+        std.posix.tcsetattr(fd, .FLUSH, raw) catch return null;
+
+        return .{
+            .fd = fd,
+            .original_termios = original,
+        };
+    }
+
+    /// Restore the original terminal settings.
+    pub fn disable(self: RawMode) void {
+        std.posix.tcsetattr(self.fd, .FLUSH, self.original_termios) catch {};
+    }
+};
+
 test "sprite_cli module loads" {
     try std.testing.expect(true);
 }
@@ -825,4 +857,17 @@ test "readAction returns quit on EOF" {
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
     const action = try pager.readAction(stream.reader());
     try std.testing.expectEqual(Pager.Action.quit, action);
+}
+
+test "RawMode has expected fields" {
+    // Verify RawMode struct has fd and original_termios fields
+    const info = @typeInfo(RawMode);
+    const fields = info.@"struct".fields;
+
+    // Should have exactly 2 fields
+    try std.testing.expectEqual(@as(usize, 2), fields.len);
+
+    // Verify field names
+    try std.testing.expectEqualStrings("fd", fields[0].name);
+    try std.testing.expectEqualStrings("original_termios", fields[1].name);
 }

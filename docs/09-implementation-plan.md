@@ -1087,7 +1087,7 @@ line prompt, and single-keypress navigation.
   - RED: 5 tests — writePrompt content, clearPrompt escape, readAction quit/next/EOF
   - GREEN: Implement three functions
 
-- [ ] **19.6 POSIX raw mode for single-keypress input**
+- [x] **19.6 POSIX raw mode for single-keypress input**
   - `RawMode` struct with `fd` and `original_termios` fields in `src/cli/sprite_cli.zig`
   - `RawMode.enable(fd) -> ?RawMode` — tcgetattr, disable ICANON+ECHO, set VMIN=1/VTIME=0,
     tcsetattr; returns null if fd isn't a TTY (safe for tests/piped input)
