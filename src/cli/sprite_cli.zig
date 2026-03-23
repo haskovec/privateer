@@ -18,6 +18,8 @@
 //!   --side-by-side       Show original and upscaled side by side
 //!   --save <path.png>    Save sprite as PNG file
 //!   --no-inline          Skip inline terminal display
+//!   --no-pager           Disable built-in pager
+//!   --page-size <n>      Sprites per page (default: 25)
 
 const std = @import("std");
 const privateer = @import("privateer");
@@ -80,6 +82,8 @@ fn printUsage() void {
         \\  --side-by-side       Show original and upscaled side by side
         \\  --save <path.png>    Save sprite(s) as PNG file(s)
         \\  --no-inline          Skip inline terminal display
+        \\  --no-pager           Disable built-in pager (show all sprites at once)
+        \\  --page-size <n>      Sprites per page (default: 25)
         \\
     , .{});
 }
@@ -94,6 +98,8 @@ const ViewArgs = struct {
     side_by_side: bool = false,
     save_path: ?[]const u8 = null,
     no_inline: bool = false,
+    no_pager: bool = false,
+    page_size: usize = 25,
 };
 
 fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
@@ -122,16 +128,23 @@ fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
             } else if (std.mem.eql(u8, args[i], "--save")) {
                 result.save_path = args[i + 1];
                 i += 1;
+            } else if (std.mem.eql(u8, args[i], "--page-size")) {
+                result.page_size = std.fmt.parseInt(usize, args[i + 1], 10) catch 25;
+                i += 1;
             } else if (std.mem.eql(u8, args[i], "--side-by-side")) {
                 result.side_by_side = true;
             } else if (std.mem.eql(u8, args[i], "--no-inline")) {
                 result.no_inline = true;
+            } else if (std.mem.eql(u8, args[i], "--no-pager")) {
+                result.no_pager = true;
             }
         } else {
             if (std.mem.eql(u8, args[i], "--side-by-side")) {
                 result.side_by_side = true;
             } else if (std.mem.eql(u8, args[i], "--no-inline")) {
                 result.no_inline = true;
+            } else if (std.mem.eql(u8, args[i], "--no-pager")) {
+                result.no_pager = true;
             }
         }
     }
@@ -857,6 +870,30 @@ test "readAction returns quit on EOF" {
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
     const action = try pager.readAction(stream.reader());
     try std.testing.expectEqual(Pager.Action.quit, action);
+}
+
+test "parseViewArgs default no_pager is false" {
+    const args: []const [:0]const u8 = &.{};
+    const result = parseViewArgs(args);
+    try std.testing.expect(!result.no_pager);
+}
+
+test "parseViewArgs default page_size is 25" {
+    const args: []const [:0]const u8 = &.{};
+    const result = parseViewArgs(args);
+    try std.testing.expectEqual(@as(usize, 25), result.page_size);
+}
+
+test "parseViewArgs --no-pager flag" {
+    const args: []const [:0]const u8 = &.{"--no-pager"};
+    const result = parseViewArgs(args);
+    try std.testing.expect(result.no_pager);
+}
+
+test "parseViewArgs --page-size 50" {
+    const args: []const [:0]const u8 = &.{ "--page-size", "50" };
+    const result = parseViewArgs(args);
+    try std.testing.expectEqual(@as(usize, 50), result.page_size);
 }
 
 test "RawMode has expected fields" {

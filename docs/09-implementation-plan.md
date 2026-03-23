@@ -1098,7 +1098,7 @@ line prompt, and single-keypress navigation.
   - RED: 1 structural test — verify RawMode has expected fields
   - GREEN: Implement struct
 
-- [ ] **19.7 CLI flags: --no-pager and --page-size**
+- [x] **19.7 CLI flags: --no-pager and --page-size**
   - Add `no_pager: bool = false` and `page_size: usize = 25` to `ViewArgs`
   - Add parsing branches to `parseViewArgs` for both flags
   - Update `printUsage()` help text with new options
