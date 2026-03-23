@@ -598,6 +598,21 @@ pub const Pager = struct {
         return std.fmt.bufPrint(buf, "-- sprites {d}-{d} of {d} (SPACE=next, q=quit) --", .{ start_idx + 1, end_idx, total }) catch "-- pager --";
     }
 
+    /// Actions the pager can take in response to a keypress.
+    pub const Action = enum {
+        next_page,
+        quit,
+    };
+
+    /// Classify a single input byte into a pager action.
+    /// q, Q, and Esc (0x1b) map to quit; everything else maps to next_page.
+    pub fn classifyKey(byte: u8) Action {
+        return switch (byte) {
+            'q', 'Q', 0x1b => .quit,
+            else => .next_page,
+        };
+    }
+
     pub fn isActive(self: Pager) bool {
         if (self.config.no_pager) return false;
         if (!self.config.is_tty) return false;
@@ -723,4 +738,28 @@ test "formatStatusLine partial final page" {
     var buf: [256]u8 = undefined;
     const line = pager.formatStatusLine(&buf, 25, 30, 30);
     try std.testing.expectEqualStrings("-- sprites 26-30 of 30 (SPACE=next, q=quit) --", line);
+}
+
+test "classifyKey q maps to quit" {
+    try std.testing.expectEqual(Pager.Action.quit, Pager.classifyKey('q'));
+}
+
+test "classifyKey Q maps to quit" {
+    try std.testing.expectEqual(Pager.Action.quit, Pager.classifyKey('Q'));
+}
+
+test "classifyKey Esc maps to quit" {
+    try std.testing.expectEqual(Pager.Action.quit, Pager.classifyKey(0x1b));
+}
+
+test "classifyKey space maps to next_page" {
+    try std.testing.expectEqual(Pager.Action.next_page, Pager.classifyKey(' '));
+}
+
+test "classifyKey enter maps to next_page" {
+    try std.testing.expectEqual(Pager.Action.next_page, Pager.classifyKey('\n'));
+}
+
+test "classifyKey arbitrary key maps to next_page" {
+    try std.testing.expectEqual(Pager.Action.next_page, Pager.classifyKey('x'));
 }

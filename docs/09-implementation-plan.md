@@ -1073,7 +1073,7 @@ line prompt, and single-keypress navigation.
   - RED: 3 tests — first page, final page, partial final page
   - GREEN: Implement using `std.fmt.bufPrint`
 
-- [ ] **19.4 Key classification**
+- [x] **19.4 Key classification**
   - `Pager.Action` enum: `.next_page`, `.quit`
   - `Pager.classifyKey(byte)`: q/Q/Esc(0x1b) → quit, everything else → next_page
   - RED: 6 tests — q, Q, Esc → quit; space, enter, CR, arbitrary key → next_page
