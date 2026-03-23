@@ -1079,7 +1079,7 @@ line prompt, and single-keypress navigation.
   - RED: 6 tests — q, Q, Esc → quit; space, enter, CR, arbitrary key → next_page
   - GREEN: Implement `Action` enum and `classifyKey()`
 
-- [ ] **19.5 Prompt I/O with injected reader/writer**
+- [x] **19.5 Prompt I/O with injected reader/writer**
   - `Pager.writePrompt(writer, start, end, total)` — writes formatted status line
   - `Pager.clearPrompt(writer)` — writes `"\r\x1b[K"` (CR + clear-to-EOL)
   - `Pager.readAction(reader)` — reads 1 byte, classifies it; EOF → quit
