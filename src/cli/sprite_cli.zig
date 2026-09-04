@@ -37,7 +37,9 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const environ = init.minimal.environ;
 
-    const args = try init.minimal.args.toSlice(init.arena.allocator());
+    const arena = init.arena.allocator();
+    const argv = try init.minimal.args.toSlice(arena);
+    const args = try privateer.config.argSlices(arena, argv);
 
     if (args.len < 2) {
         printUsage();
@@ -101,7 +103,7 @@ const ViewArgs = struct {
     page_size: usize = 25,
 };
 
-fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
+fn parseViewArgs(args: []const []const u8) ViewArgs {
     var result = ViewArgs{};
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -154,9 +156,9 @@ fn runList(
     allocator: std.mem.Allocator,
     io: std.Io,
     environ: std.process.Environ,
-    args: []const [:0]const u8,
+    args: []const []const u8,
 ) !void {
-    var cfg = privateer.config.resolveForCli(io, environ, allocator, try privateer.config.argSlices(allocator, args)) catch {
+    var cfg = privateer.config.resolveForCli(io, environ, allocator, args) catch {
         std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
@@ -209,9 +211,9 @@ fn runView(
     allocator: std.mem.Allocator,
     io: std.Io,
     environ: std.process.Environ,
-    args: []const [:0]const u8,
+    args: []const []const u8,
 ) !void {
-    var cfg = privateer.config.resolveForCli(io, environ, allocator, try privateer.config.argSlices(allocator, args)) catch {
+    var cfg = privateer.config.resolveForCli(io, environ, allocator, args) catch {
         std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
@@ -443,11 +445,13 @@ fn viewSpriteFile(
     const raw_mode = if (pager_active) RawMode.enable(std.Io.File.stdin().handle) else null;
     defer if (raw_mode) |rm| rm.disable();
 
+    // stdout is buffered because Kitty image payloads are large. stderr is
+    // unbuffered so the pager prompt reaches the terminal before we block on
+    // a keypress.
     var stdin_buf: [64]u8 = undefined;
-    var stderr_buf: [512]u8 = undefined;
     var stdout_buf: [64 * 1024]u8 = undefined;
     var stdin_file_reader = std.Io.File.stdin().readerStreaming(io, &stdin_buf);
-    var stderr_file_writer = std.Io.File.stderr().writerStreaming(io, &stderr_buf);
+    var stderr_file_writer = std.Io.File.stderr().writerStreaming(io, &.{});
     var stdout_file_writer = std.Io.File.stdout().writerStreaming(io, &stdout_buf);
     const stdin_reader = &stdin_file_reader.interface;
     const stderr_writer = &stderr_file_writer.interface;
@@ -472,6 +476,9 @@ fn viewSpriteFile(
         for (page_start..page_end) |idx| {
             try renderSprite(allocator, io, view_args, sprites, idx, palette, can_inline, auto_save, stdout_writer);
         }
+        // Drain the page before prompting, so the sprites are on screen
+        // before we block waiting for a keypress.
+        try stdout_writer.flush();
 
         // If pager is active and there are more pages, prompt the user
         if (pager_active and page + 1 < total_pages) {
@@ -959,25 +966,25 @@ test "readAction returns quit on EOF" {
 }
 
 test "parseViewArgs default no_pager is false" {
-    const args: []const [:0]const u8 = &.{};
+    const args: []const []const u8 = &.{};
     const result = parseViewArgs(args);
     try std.testing.expect(!result.no_pager);
 }
 
 test "parseViewArgs default page_size is 25" {
-    const args: []const [:0]const u8 = &.{};
+    const args: []const []const u8 = &.{};
     const result = parseViewArgs(args);
     try std.testing.expectEqual(@as(usize, 25), result.page_size);
 }
 
 test "parseViewArgs --no-pager flag" {
-    const args: []const [:0]const u8 = &.{"--no-pager"};
+    const args: []const []const u8 = &.{"--no-pager"};
     const result = parseViewArgs(args);
     try std.testing.expect(result.no_pager);
 }
 
 test "parseViewArgs --page-size 50" {
-    const args: []const [:0]const u8 = &.{ "--page-size", "50" };
+    const args: []const []const u8 = &.{ "--page-size", "50" };
     const result = parseViewArgs(args);
     try std.testing.expectEqual(@as(usize, 50), result.page_size);
 }

@@ -62,8 +62,7 @@ pub fn slotFileName(buf: *[12]u8, slot: u8) []const u8 {
 }
 
 /// Save game data to a numbered slot.
-/// `timestamp` is seconds since Unix epoch
-/// (`@divFloor(std.Io.Clock.real.now(io).nanoseconds, std.time.ns_per_s)`).
+/// `timestamp` is seconds since Unix epoch.
 /// `dir` is the save directory handle.
 pub fn saveToSlot(
     allocator: std.mem.Allocator,

@@ -406,21 +406,6 @@ test "TreIndex: all entries accessible" {
 
 // --- MappedTre tests ---
 
-/// Resolve `sub_path` within `dir` to an absolute path.
-/// Replaces `Dir.realpathAlloc`, removed in Zig 0.16.
-fn realPathAlloc(
-    io: std.Io,
-    allocator: std.mem.Allocator,
-    dir: std.Io.Dir,
-    sub_path: []const u8,
-) ![]u8 {
-    const file = try dir.openFile(io, sub_path, .{});
-    defer file.close(io);
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const len = try file.realPath(io, &buf);
-    return allocator.dupe(u8, buf[0..len]);
-}
-
 test "MappedTre: memory-map fixture file and parse header" {
     // Write fixture to a temp file so we can mmap it
     const allocator = std.testing.allocator;
@@ -433,7 +418,9 @@ test "MappedTre: memory-map fixture file and parse header" {
     const io = std.testing.io;
     try tmp_dir.dir.writeFile(io, .{ .sub_path = "test.tre", .data = fixture });
 
-    const tmp_path = try realPathAlloc(io, allocator, tmp_dir.dir, "test.tre");
+    const tmp_dir_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
+    defer allocator.free(tmp_dir_path);
+    const tmp_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "test.tre" });
     defer allocator.free(tmp_path);
 
     var mapped = try MappedTre.open(io, allocator, tmp_path);
@@ -455,7 +442,9 @@ test "MappedTre: build TreIndex from mapped data" {
     const io = std.testing.io;
     try tmp_dir.dir.writeFile(io, .{ .sub_path = "test.tre", .data = fixture });
 
-    const tmp_path = try realPathAlloc(io, allocator, tmp_dir.dir, "test.tre");
+    const tmp_dir_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
+    defer allocator.free(tmp_dir_path);
+    const tmp_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "test.tre" });
     defer allocator.free(tmp_path);
 
     var mapped = try MappedTre.open(io, allocator, tmp_path);

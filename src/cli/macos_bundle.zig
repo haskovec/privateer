@@ -35,8 +35,10 @@ pub fn validateBundle(io: std.Io, allocator: std.mem.Allocator, bundle_path: []c
     // Check Contents/Info.plist
     const plist_path = try std.fs.path.join(allocator, &.{ bundle_path, "Contents", "Info.plist" });
     defer allocator.free(plist_path);
-    const plist_data = cwd.readFileAlloc(io, plist_path, allocator, .limited(64 * 1024 + 1)) catch {
-        return try std.fmt.allocPrint(allocator, "Missing Contents/Info.plist in bundle", .{});
+    const plist_data = cwd.readFileAlloc(io, plist_path, allocator, .limited(64 * 1024 + 1)) catch |err| switch (err) {
+        error.FileNotFound => return try std.fmt.allocPrint(allocator, "Missing Contents/Info.plist in bundle", .{}),
+        error.StreamTooLong => return try std.fmt.allocPrint(allocator, "Contents/Info.plist is larger than 64 KiB", .{}),
+        else => |e| return e,
     };
     defer allocator.free(plist_data);
 

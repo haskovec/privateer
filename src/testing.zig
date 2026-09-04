@@ -17,7 +17,6 @@ pub fn loadFixture(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
 
 /// Path of a `std.testing.TmpDir` relative to the current working directory.
 ///
-/// Replaces `Dir.realpathAlloc(allocator, ".")`, removed in Zig 0.16.
 /// `std.testing.tmpDir` always creates its directory at
 /// `.zig-cache/tmp/<sub_path>` relative to cwd, so the path can be
 /// reconstructed without a realpath syscall.
