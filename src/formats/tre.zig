@@ -123,16 +123,8 @@ pub const MappedTre = if (builtin.os.tag == .windows) struct {
     data: []u8,
     allocator: std.mem.Allocator,
 
-    pub fn open(allocator: std.mem.Allocator, path: []const u8) !MappedTre {
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const stat = try file.stat();
-        const data = try allocator.alloc(u8, stat.size);
-        const bytes_read = try file.readAll(data);
-        if (bytes_read != stat.size) {
-            allocator.free(data);
-            return error.IncompleteRead;
-        }
+    pub fn open(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !MappedTre {
+        const data = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
         return .{ .data = data, .allocator = allocator };
     }
 
@@ -144,10 +136,10 @@ pub const MappedTre = if (builtin.os.tag == .windows) struct {
 
     /// Memory-map a TRE file from disk. The returned data slice is valid until
     /// `deinit()` is called. No allocator is needed for the mapping itself.
-    pub fn open(_: std.mem.Allocator, path: []const u8) !MappedTre {
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const stat = try file.stat();
+    pub fn open(io: std.Io, _: std.mem.Allocator, path: []const u8) !MappedTre {
+        const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+        defer file.close(io);
+        const stat = try file.stat(io);
         const data = try std.posix.mmap(
             null,
             stat.size,
@@ -423,16 +415,15 @@ test "MappedTre: memory-map fixture file and parse header" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const f = try tmp_dir.dir.createFile("test.tre", .{});
-        defer f.close();
-        try f.writeAll(fixture);
-    }
+    const io = std.testing.io;
+    try tmp_dir.dir.writeFile(io, .{ .sub_path = "test.tre", .data = fixture });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
+    const tmp_dir_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
+    defer allocator.free(tmp_dir_path);
+    const tmp_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "test.tre" });
     defer allocator.free(tmp_path);
 
-    var mapped = try MappedTre.open(allocator, tmp_path);
+    var mapped = try MappedTre.open(io, allocator, tmp_path);
     defer mapped.deinit();
 
     // Should be able to parse the header from mapped data
@@ -448,16 +439,15 @@ test "MappedTre: build TreIndex from mapped data" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const f = try tmp_dir.dir.createFile("test.tre", .{});
-        defer f.close();
-        try f.writeAll(fixture);
-    }
+    const io = std.testing.io;
+    try tmp_dir.dir.writeFile(io, .{ .sub_path = "test.tre", .data = fixture });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, "test.tre");
+    const tmp_dir_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
+    defer allocator.free(tmp_dir_path);
+    const tmp_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "test.tre" });
     defer allocator.free(tmp_path);
 
-    var mapped = try MappedTre.open(allocator, tmp_path);
+    var mapped = try MappedTre.open(io, allocator, tmp_path);
     defer mapped.deinit();
 
     var index = try TreIndex.build(allocator, mapped.data);

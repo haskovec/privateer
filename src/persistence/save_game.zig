@@ -590,8 +590,8 @@ test "round-trip negative reputation standings" {
 test "round-trip all game states" {
     const allocator = testing.allocator;
     const states = [_]game_state.State{
-        .title,      .loading,  .space_flight, .landed,
-        .conversation, .combat, .dead,         .animation,
+        .title,        .loading, .space_flight, .landed,
+        .conversation, .combat,  .dead,         .animation,
     };
     for (states) |s| {
         var data = SaveGameData{};

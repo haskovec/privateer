@@ -5,7 +5,7 @@ data for building, testing, and running the Privateer engine.
 
 ## Prerequisites
 
-- **Zig 0.15.2** (or later)
+- **Zig 0.16.0** (or later)
 - **Original game files**: A copy of Wing Commander: Privateer containing `GAME.DAT`
   (the ISO 9660 image with `PRIV.TRE` inside)
 

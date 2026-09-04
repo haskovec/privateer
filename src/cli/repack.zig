@@ -203,20 +203,20 @@ pub fn buildIso(allocator: std.mem.Allocator, tre_data: []const u8) ![]u8 {
 
 /// Collect all files from an extracted directory tree.
 /// Walks subdirectories and builds FileEntry list sorted by path.
-pub fn collectFiles(allocator: std.mem.Allocator, input_dir: []const u8) ![]FileEntry {
+pub fn collectFiles(allocator: std.mem.Allocator, io: std.Io, input_dir: []const u8) ![]FileEntry {
     var entries: std.ArrayListUnmanaged(FileEntry) = .empty;
     errdefer {
         for (entries.items) |*e| e.deinit();
         entries.deinit(allocator);
     }
 
-    const dir = std.fs.cwd().openDir(input_dir, .{ .iterate = true }) catch return error.InputDirNotFound;
-    defer @constCast(&dir).close();
+    const dir = std.Io.Dir.cwd().openDir(io, input_dir, .{ .iterate = true }) catch return error.InputDirNotFound;
+    defer dir.close(io);
 
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |entry| {
+    while (try walker.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const rel_path = try allocator.dupe(u8, entry.path);
@@ -226,18 +226,8 @@ pub fn collectFiles(allocator: std.mem.Allocator, input_dir: []const u8) ![]File
         errdefer allocator.free(tre_path);
 
         // Read file data
-        const file = try dir.openFile(entry.path, .{});
-        defer file.close();
-        const stat = try file.stat();
-        const data = try allocator.alloc(u8, stat.size);
+        const data = try dir.readFileAlloc(io, entry.path, allocator, .unlimited);
         errdefer allocator.free(data);
-        const bytes_read = try file.readAll(data);
-        if (bytes_read != stat.size) {
-            allocator.free(data);
-            allocator.free(tre_path);
-            allocator.free(rel_path);
-            continue;
-        }
 
         try entries.append(allocator, .{
             .tre_path = tre_path,
@@ -258,9 +248,9 @@ pub fn collectFiles(allocator: std.mem.Allocator, input_dir: []const u8) ![]File
 }
 
 /// Repack an extracted directory into a GAME.DAT ISO image.
-pub fn repackAll(allocator: std.mem.Allocator, input_dir: []const u8, output_path: []const u8) !RepackResult {
+pub fn repackAll(allocator: std.mem.Allocator, io: std.Io, input_dir: []const u8, output_path: []const u8) !RepackResult {
     // Collect files from input directory
-    const entries = try collectFiles(allocator, input_dir);
+    const entries = try collectFiles(allocator, io, input_dir);
     defer {
         for (entries) |*e| {
             var entry = e.*;
@@ -278,9 +268,7 @@ pub fn repackAll(allocator: std.mem.Allocator, input_dir: []const u8, output_pat
     defer allocator.free(iso_data);
 
     // Write to output file
-    const file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(iso_data);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = output_path, .data = iso_data });
 
     var bytes_written: u64 = 0;
     for (entries) |e| {
@@ -451,14 +439,14 @@ test "round-trip: extract then repack preserves file content" {
     // Extract to temp dir
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    const extract_result = try extract.extractAll(allocator, original_iso, tmp_path);
+    const extract_result = try extract.extractAll(allocator, std.testing.io, original_iso, tmp_path);
     try std.testing.expectEqual(@as(u32, 1), extract_result.files_extracted);
 
     // Repack from temp dir
-    const repacked_entries = try collectFiles(allocator, tmp_path);
+    const repacked_entries = try collectFiles(allocator, std.testing.io, tmp_path);
     defer {
         for (repacked_entries) |*e| {
             var entry = e.*;

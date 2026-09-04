@@ -69,13 +69,13 @@ const path_defaults = .{
 
 /// On macOS, detect if running inside a .app bundle and resolve the
 /// Resources directory path.  Returns null when not in a bundle.
-pub fn detectBundleResourcesDir(allocator: std.mem.Allocator) ?[]const u8 {
+pub fn detectBundleResourcesDir(io: std.Io, allocator: std.mem.Allocator) ?[]const u8 {
     const builtin = @import("builtin");
     if (builtin.os.tag != .macos) return null;
 
     // The executable lives at Privateer.app/Contents/MacOS/privateer.
     // We need Privateer.app/Contents/Resources.
-    const self_exe = std.fs.selfExePathAlloc(allocator) catch return null;
+    const self_exe = std.process.executablePathAlloc(io, allocator) catch return null;
     defer allocator.free(self_exe);
 
     // Walk up: strip "privateer" -> Contents/MacOS, strip "MacOS" -> Contents
@@ -93,19 +93,19 @@ pub fn detectBundleResourcesDir(allocator: std.mem.Allocator) ?[]const u8 {
 
 /// Resolve data_dir for macOS bundles: if the default "data" path doesn't
 /// exist but the bundle's Resources/data does, use the bundle path instead.
-pub fn applyBundleOverride(config: *Config) void {
+pub fn applyBundleOverride(io: std.Io, config: *Config) void {
     // Only override if data_dir is still the default
     if (!std.mem.eql(u8, config.data_dir, path_defaults.data_dir)) return;
 
     // Check if default data dir exists
-    std.fs.cwd().access(config.data_dir, .{}) catch {
+    std.Io.Dir.cwd().access(io, config.data_dir, .{}) catch {
         // Default doesn't exist — try bundle Resources
-        const resources_dir = detectBundleResourcesDir(config.allocator) orelse return;
+        const resources_dir = detectBundleResourcesDir(io, config.allocator) orelse return;
         defer config.allocator.free(resources_dir);
 
         const bundle_data = std.fs.path.join(config.allocator, &.{ resources_dir, "data" }) catch return;
 
-        std.fs.cwd().access(bundle_data, .{}) catch {
+        std.Io.Dir.cwd().access(io, bundle_data, .{}) catch {
             config.allocator.free(bundle_data);
             return;
         };
@@ -136,29 +136,21 @@ pub const Config = struct {
 };
 
 /// Load configuration from a JSON file. Returns defaults if file doesn't exist.
-pub fn load(allocator: std.mem.Allocator, path: []const u8) !Config {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
-        if (err == error.FileNotFound) {
-            return Config{
-                .data_dir = try allocator.dupe(u8, path_defaults.data_dir),
-                .mod_dir = try allocator.dupe(u8, path_defaults.mod_dir),
-                .output_dir = try allocator.dupe(u8, path_defaults.output_dir),
-                .settings = Settings.defaults(),
-                .allocator = allocator,
-            };
-        }
-        return err;
+pub fn load(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !Config {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024 + 1)) catch |err| switch (err) {
+        error.FileNotFound => return Config{
+            .data_dir = try allocator.dupe(u8, path_defaults.data_dir),
+            .mod_dir = try allocator.dupe(u8, path_defaults.mod_dir),
+            .output_dir = try allocator.dupe(u8, path_defaults.output_dir),
+            .settings = Settings.defaults(),
+            .allocator = allocator,
+        },
+        error.StreamTooLong => return error.ConfigTooLarge,
+        else => |e| return e,
     };
-    defer file.close();
-
-    const stat = try file.stat();
-    if (stat.size > 1024 * 1024) return error.ConfigTooLarge;
-    const content = try allocator.alloc(u8, stat.size);
     defer allocator.free(content);
-    const bytes_read = try file.readAll(content);
-    if (bytes_read != stat.size) return error.IncompleteRead;
 
-    return parseJson(allocator, content[0..bytes_read]);
+    return parseJson(allocator, content);
 }
 
 /// Parse a JSON string into a Config.
@@ -251,49 +243,56 @@ pub fn parseJson(allocator: std.mem.Allocator, json_str: []const u8) !Config {
 /// Serialize a Config to a JSON string.
 /// Caller owns the returned slice.
 pub fn toJson(allocator: std.mem.Allocator, cfg: Config) ![]u8 {
-    var buf: std.ArrayListUnmanaged(u8) = .empty;
-    errdefer buf.deinit(allocator);
-    const w = buf.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const w = &aw.writer;
 
-    try buf.appendSlice(allocator, "{\n");
-    try std.fmt.format(w, "  \"data_dir\": \"{s}\",\n", .{cfg.data_dir});
-    try std.fmt.format(w, "  \"mod_dir\": \"{s}\",\n", .{cfg.mod_dir});
-    try std.fmt.format(w, "  \"output_dir\": \"{s}\",\n", .{cfg.output_dir});
+    try w.writeAll("{\n");
+    try w.print("  \"data_dir\": \"{s}\",\n", .{cfg.data_dir});
+    try w.print("  \"mod_dir\": \"{s}\",\n", .{cfg.mod_dir});
+    try w.print("  \"output_dir\": \"{s}\",\n", .{cfg.output_dir});
 
     // Graphics section
-    try buf.appendSlice(allocator, "  \"graphics\": {\n");
-    try std.fmt.format(w, "    \"scale_factor\": {d},\n", .{cfg.settings.scale_factor.multiplier()});
-    try std.fmt.format(w, "    \"fullscreen\": {s},\n", .{if (cfg.settings.fullscreen) "true" else "false"});
-    try std.fmt.format(w, "    \"viewport_mode\": \"{s}\"\n", .{switch (cfg.settings.viewport_mode) {
+    try w.writeAll("  \"graphics\": {\n");
+    try w.print("    \"scale_factor\": {d},\n", .{cfg.settings.scale_factor.multiplier()});
+    try w.print("    \"fullscreen\": {s},\n", .{if (cfg.settings.fullscreen) "true" else "false"});
+    try w.print("    \"viewport_mode\": \"{s}\"\n", .{switch (cfg.settings.viewport_mode) {
         .fill => "fill",
         .fit_4_3 => "fit_4_3",
     }});
-    try buf.appendSlice(allocator, "  },\n");
+    try w.writeAll("  },\n");
 
     // Audio section
-    try buf.appendSlice(allocator, "  \"audio\": {\n");
-    try std.fmt.format(w, "    \"sfx_volume\": {d:.2},\n", .{cfg.settings.sfx_volume});
-    try std.fmt.format(w, "    \"music_volume\": {d:.2}\n", .{cfg.settings.music_volume});
-    try buf.appendSlice(allocator, "  },\n");
+    try w.writeAll("  \"audio\": {\n");
+    try w.print("    \"sfx_volume\": {d:.2},\n", .{cfg.settings.sfx_volume});
+    try w.print("    \"music_volume\": {d:.2}\n", .{cfg.settings.music_volume});
+    try w.writeAll("  },\n");
 
     // Input section
-    try buf.appendSlice(allocator, "  \"input\": {\n");
-    try std.fmt.format(w, "    \"joystick_deadzone\": {d:.2}\n", .{cfg.settings.joystick_deadzone});
-    try buf.appendSlice(allocator, "  }\n");
+    try w.writeAll("  \"input\": {\n");
+    try w.print("    \"joystick_deadzone\": {d:.2}\n", .{cfg.settings.joystick_deadzone});
+    try w.writeAll("  }\n");
 
-    try buf.appendSlice(allocator, "}");
+    try w.writeAll("}");
 
-    return buf.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 /// Save configuration to a file.
-pub fn save(allocator: std.mem.Allocator, cfg: Config, path: []const u8) !void {
+pub fn save(io: std.Io, allocator: std.mem.Allocator, cfg: Config, path: []const u8) !void {
     const json = try toJson(allocator, cfg);
     defer allocator.free(json);
 
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
-    try file.writeAll(json);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = json });
+}
+
+/// Convert the NUL-terminated argv slices produced by `std.process.Args.toSlice`
+/// into plain slices suitable for `applyArgs`.
+/// The result is allocated with `allocator` (an arena at the call sites).
+pub fn argSlices(allocator: std.mem.Allocator, argv: []const [:0]const u8) ![]const []const u8 {
+    const out = try allocator.alloc([]const u8, argv.len);
+    for (argv, out) |src, *dst| dst.* = src;
+    return out;
 }
 
 /// Apply command-line overrides to an existing config.
@@ -324,20 +323,25 @@ pub fn applyArgs(config: *Config, args: []const []const u8) !void {
 /// Resolve configuration for CLI tools.
 /// Loads config file → applies env var override → applies CLI arg overrides.
 /// Caller owns the returned Config and must call deinit().
-pub fn resolveForCli(allocator: std.mem.Allocator, cli_args: []const []const u8) !Config {
-    var cfg = try load(allocator, CONFIG_FILE);
+pub fn resolveForCli(
+    io: std.Io,
+    environ: std.process.Environ,
+    allocator: std.mem.Allocator,
+    cli_args: []const []const u8,
+) !Config {
+    var cfg = try load(io, allocator, CONFIG_FILE);
     errdefer cfg.deinit();
-    applyEnvOverride(&cfg) catch {};
+    applyEnvOverride(environ, &cfg) catch {};
     try applyArgs(&cfg, cli_args);
     return cfg;
 }
 
 /// Apply PRIVATEER_DATA environment variable override to data_dir.
 /// Env var takes precedence over the config file value but not CLI args.
-pub fn applyEnvOverride(config: *Config) !void {
-    const env_val = std.process.getEnvVarOwned(config.allocator, "PRIVATEER_DATA") catch |err| {
-        if (err == error.EnvironmentVariableNotFound) return;
-        return err;
+pub fn applyEnvOverride(environ: std.process.Environ, config: *Config) !void {
+    const env_val = environ.getAlloc(config.allocator, "PRIVATEER_DATA") catch |err| switch (err) {
+        error.EnvironmentVariableMissing => return,
+        else => |e| return e,
     };
     config.allocator.free(config.data_dir);
     config.data_dir = env_val;
@@ -559,7 +563,7 @@ test "toJson round-trips through parseJson" {
 
 test "load returns defaults when config file missing" {
     const allocator = testing.allocator;
-    var cfg = try load(allocator, "nonexistent_privateer_config.json");
+    var cfg = try load(testing.io, allocator, "nonexistent_privateer_config.json");
     defer cfg.deinit();
 
     try testing.expectEqualStrings("data", cfg.data_dir);
@@ -613,7 +617,7 @@ test "Settings windowWidth and windowHeight compute correctly" {
 test "detectBundleResourcesDir returns null on non-bundle path" {
     // When not running from a .app bundle, should return null (or on non-macOS).
     const allocator = testing.allocator;
-    const result = detectBundleResourcesDir(allocator);
+    const result = detectBundleResourcesDir(testing.io, allocator);
     // In test context we're not inside a .app bundle, so expect null
     // (unless actually running tests from within a bundle, which is unlikely)
     if (result) |r| {
@@ -634,7 +638,7 @@ test "applyBundleOverride does not change non-default data_dir" {
     };
     defer cfg.deinit();
 
-    applyBundleOverride(&cfg);
+    applyBundleOverride(testing.io, &cfg);
     // Should remain unchanged since it's not the default
     try testing.expectEqualStrings("/custom/path", cfg.data_dir);
 }
@@ -652,7 +656,7 @@ test "Settings sanitize clamps values" {
 
 test "resolveForCli succeeds with no args" {
     const allocator = testing.allocator;
-    var cfg = try resolveForCli(allocator, &.{});
+    var cfg = try resolveForCli(testing.io, .empty, allocator, &.{});
     defer cfg.deinit();
 
     // Should return a valid config (from file or defaults)
@@ -664,7 +668,7 @@ test "resolveForCli succeeds with no args" {
 test "resolveForCli applies --data-dir from CLI args" {
     const allocator = testing.allocator;
     const args = [_][]const u8{ "--data-dir", "/custom/data" };
-    var cfg = try resolveForCli(allocator, &args);
+    var cfg = try resolveForCli(testing.io, .empty, allocator, &args);
     defer cfg.deinit();
 
     // CLI arg overrides config file / env var
@@ -674,7 +678,7 @@ test "resolveForCli applies --data-dir from CLI args" {
 test "resolveForCli applies multiple CLI overrides" {
     const allocator = testing.allocator;
     const args = [_][]const u8{ "--data-dir", "/my/data", "--output-dir", "/my/out" };
-    var cfg = try resolveForCli(allocator, &args);
+    var cfg = try resolveForCli(testing.io, .empty, allocator, &args);
     defer cfg.deinit();
 
     try testing.expectEqualStrings("/my/data", cfg.data_dir);

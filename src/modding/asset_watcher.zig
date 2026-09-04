@@ -3,13 +3,14 @@
 //! and signals when assets need to be reloaded.
 //!
 //! Usage:
-//!   var watcher = AssetWatcher.init(allocator, "mods/mymod");
+//!   var watcher = AssetWatcher.init(allocator, io, "mods/mymod");
 //!   defer watcher.deinit();
 //!   // In game loop:
 //!   const changes = watcher.check();
 //!   for (changes) |path| { reloadAsset(path); }
 
 const std = @import("std");
+const testing_helpers = @import("../testing.zig");
 
 pub const AssetWatcherError = error{
     OutOfMemory,
@@ -27,6 +28,8 @@ const TrackedFile = struct {
 /// Asset watcher that detects file modifications in a directory tree.
 pub const AssetWatcher = struct {
     allocator: std.mem.Allocator,
+    /// I/O implementation used for all directory scanning.
+    io: std.Io,
     /// Root directory being watched.
     watch_dir: []const u8,
     /// Map of relative path → last known modification time.
@@ -37,9 +40,10 @@ pub const AssetWatcher = struct {
     first_scan: bool,
 
     /// Create a new asset watcher for the given directory.
-    pub fn init(allocator: std.mem.Allocator, watch_dir: []const u8) AssetWatcher {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, watch_dir: []const u8) AssetWatcher {
         return .{
             .allocator = allocator,
+            .io = io,
             .watch_dir = watch_dir,
             .tracked = std.StringHashMap(i128).init(allocator),
             .changed_paths = .empty,
@@ -87,16 +91,16 @@ pub const AssetWatcher = struct {
 
     /// Scan the watch directory tree and update tracked files.
     fn scanDirectory(self: *AssetWatcher) !void {
-        var dir = std.fs.cwd().openDir(self.watch_dir, .{ .iterate = true }) catch return;
-        defer dir.close();
+        var dir = std.Io.Dir.cwd().openDir(self.io, self.watch_dir, .{ .iterate = true }) catch return;
+        defer dir.close(self.io);
 
         try self.walkDir(dir, "");
     }
 
     /// Recursively walk a directory and check file modification times.
-    fn walkDir(self: *AssetWatcher, dir: std.fs.Dir, prefix: []const u8) !void {
+    fn walkDir(self: *AssetWatcher, dir: std.Io.Dir, prefix: []const u8) !void {
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(self.io)) |entry| {
             const rel_path = if (prefix.len == 0)
                 try self.allocator.dupe(u8, entry.name)
             else
@@ -105,13 +109,13 @@ pub const AssetWatcher = struct {
 
             switch (entry.kind) {
                 .directory => {
-                    var sub_dir = dir.openDir(entry.name, .{ .iterate = true }) catch continue;
-                    defer sub_dir.close();
+                    var sub_dir = dir.openDir(self.io, entry.name, .{ .iterate = true }) catch continue;
+                    defer sub_dir.close(self.io);
                     try self.walkDir(sub_dir, rel_path);
                 },
                 .file => {
-                    const stat = dir.statFile(entry.name) catch continue;
-                    const mtime = stat.mtime;
+                    const stat = dir.statFile(self.io, entry.name, .{}) catch continue;
+                    const mtime = stat.mtime.nanoseconds;
                     try self.trackFile(rel_path, mtime);
                 },
                 else => {},
@@ -153,7 +157,7 @@ pub const AssetWatcher = struct {
 
 test "init creates watcher with no tracked files" {
     const allocator = std.testing.allocator;
-    var watcher = AssetWatcher.init(allocator, "nonexistent_watch_dir");
+    var watcher = AssetWatcher.init(allocator, std.testing.io, "nonexistent_watch_dir");
     defer watcher.deinit();
 
     try std.testing.expectEqual(@as(usize, 0), watcher.trackedCount());
@@ -161,7 +165,7 @@ test "init creates watcher with no tracked files" {
 
 test "check on nonexistent directory returns empty changes" {
     const allocator = std.testing.allocator;
-    var watcher = AssetWatcher.init(allocator, "nonexistent_watch_dir_12345");
+    var watcher = AssetWatcher.init(allocator, std.testing.io, "nonexistent_watch_dir_12345");
     defer watcher.deinit();
 
     const changes = watcher.check();
@@ -175,16 +179,12 @@ test "first scan tracks files but reports no changes" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const file = try tmp_dir.dir.createFile("test.iff", .{});
-        defer file.close();
-        try file.writeAll("FORM_DATA");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "test.iff", .data = "FORM_DATA" });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    var watcher = AssetWatcher.init(allocator, tmp_path);
+    var watcher = AssetWatcher.init(allocator, std.testing.io, tmp_path);
     defer watcher.deinit();
 
     // First scan should report no changes
@@ -200,16 +200,12 @@ test "modified file is detected on second check" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const file = try tmp_dir.dir.createFile("sprite.shp", .{});
-        defer file.close();
-        try file.writeAll("original");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "sprite.shp", .data = "original" });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    var watcher = AssetWatcher.init(allocator, tmp_path);
+    var watcher = AssetWatcher.init(allocator, std.testing.io, tmp_path);
     defer watcher.deinit();
 
     // First scan — baseline
@@ -217,11 +213,7 @@ test "modified file is detected on second check" {
     try std.testing.expectEqual(@as(usize, 1), watcher.trackedCount());
 
     // Modify the file (write different content to change mtime)
-    {
-        const file = try tmp_dir.dir.createFile("sprite.shp", .{ .truncate = true });
-        defer file.close();
-        try file.writeAll("modified_content_longer");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "sprite.shp", .data = "modified_content_longer" });
 
     // Second scan — should detect the change
     const changes = watcher.check();
@@ -237,16 +229,12 @@ test "new file added after first scan is detected" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const file = try tmp_dir.dir.createFile("existing.iff", .{});
-        defer file.close();
-        try file.writeAll("data");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "existing.iff", .data = "data" });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    var watcher = AssetWatcher.init(allocator, tmp_path);
+    var watcher = AssetWatcher.init(allocator, std.testing.io, tmp_path);
     defer watcher.deinit();
 
     // First scan
@@ -254,11 +242,7 @@ test "new file added after first scan is detected" {
     try std.testing.expectEqual(@as(usize, 1), watcher.trackedCount());
 
     // Add a new file
-    {
-        const file = try tmp_dir.dir.createFile("new_sprite.shp", .{});
-        defer file.close();
-        try file.writeAll("new data");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "new_sprite.shp", .data = "new data" });
 
     // Second scan — should detect the new file
     const changes = watcher.check();
@@ -273,22 +257,14 @@ test "subdirectory files are tracked" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    try tmp_dir.dir.makePath("AIDS");
-    {
-        const file = try tmp_dir.dir.createFile("AIDS/ATTITUDE.IFF", .{});
-        defer file.close();
-        try file.writeAll("modded attitude");
-    }
-    {
-        const file = try tmp_dir.dir.createFile("top_level.dat", .{});
-        defer file.close();
-        try file.writeAll("data");
-    }
+    try tmp_dir.dir.createDirPath(std.testing.io, "AIDS");
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "AIDS/ATTITUDE.IFF", .data = "modded attitude" });
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "top_level.dat", .data = "data" });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    var watcher = AssetWatcher.init(allocator, tmp_path);
+    var watcher = AssetWatcher.init(allocator, std.testing.io, tmp_path);
     defer watcher.deinit();
 
     _ = watcher.check();
@@ -301,16 +277,12 @@ test "consecutive checks with no changes return empty" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    {
-        const file = try tmp_dir.dir.createFile("static.iff", .{});
-        defer file.close();
-        try file.writeAll("unchanged");
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "static.iff", .data = "unchanged" });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    var watcher = AssetWatcher.init(allocator, tmp_path);
+    var watcher = AssetWatcher.init(allocator, std.testing.io, tmp_path);
     defer watcher.deinit();
 
     // First scan

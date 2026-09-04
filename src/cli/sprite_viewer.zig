@@ -380,17 +380,19 @@ pub const SPACE_PALETTE_PATH = "PALETTE/SPACE.PAL";
 /// based on the source filename context.
 pub fn loadPalette(
     allocator: std.mem.Allocator,
+    io: std.Io,
     palette_override: ?[]const u8,
     tre_data: ?[]const u8,
     file_data: []const u8,
     format: FileFormat,
 ) !pal_mod.Palette {
-    return loadPaletteForFile(allocator, palette_override, tre_data, file_data, format, null);
+    return loadPaletteForFile(allocator, io, palette_override, tre_data, file_data, format, null);
 }
 
 /// Load a palette with filename context for smarter auto-detection.
 pub fn loadPaletteForFile(
     allocator: std.mem.Allocator,
+    io: std.Io,
     palette_override: ?[]const u8,
     tre_data: ?[]const u8,
     file_data: []const u8,
@@ -400,7 +402,7 @@ pub fn loadPaletteForFile(
     // Priority 1: explicit palette override
     if (palette_override) |pal_path| {
         // Try as filesystem path first
-        const pal_data = loadFileFromDisk(allocator, pal_path) catch |err| blk: {
+        const pal_data = loadFileFromDisk(allocator, io, pal_path) catch |err| blk: {
             // Try as TRE path
             if (tre_data) |td| {
                 break :blk loadFileFromTre(allocator, td, pal_path) catch return err;
@@ -463,15 +465,8 @@ fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
 }
 
 /// Load a file from disk.
-fn loadFileFromDisk(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    const stat = try file.stat();
-    const data = try allocator.alloc(u8, stat.size);
-    errdefer allocator.free(data);
-    const bytes_read = try file.readAll(data);
-    if (bytes_read != stat.size) return error.FileNotFound;
-    return data;
+fn loadFileFromDisk(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }
 
 /// Load a file from the TRE archive by normalized path (e.g. "PALETTE/PCMAIN.PAL").

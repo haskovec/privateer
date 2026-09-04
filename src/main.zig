@@ -673,6 +673,7 @@ fn findBrightestColor(palette: *const pal.Palette) u8 {
 /// Load all game data and initialize the game state.
 fn initGameState(
     allocator: std.mem.Allocator,
+    io: std.Io,
     cfg: *const privateer.config.Config,
     win: *privateer.window.Window,
     play_movie: bool,
@@ -684,13 +685,8 @@ fn initGameState(
     std.debug.print("Loading {s}...\n", .{dat_path});
 
     // Load GAME.DAT
-    const file = try std.fs.cwd().openFile(dat_path, .{});
-    defer file.close();
-    const stat = try file.stat();
-    const game_dat = try allocator.alloc(u8, stat.size);
+    const game_dat = try std.Io.Dir.cwd().readFileAlloc(io, dat_path, allocator, .unlimited);
     errdefer allocator.free(game_dat);
-    const bytes_read = try file.readAll(game_dat);
-    if (bytes_read != stat.size) return error.IncompleteRead;
 
     std.debug.print("GAME.DAT loaded ({d} bytes)\n", .{game_dat.len});
 
@@ -809,7 +805,8 @@ fn initGameState(
 
         // Collapse variant groups (mid1c1-c4, mid1e1-e4 → random pick per group)
         collapse_variants: {
-            var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+            const seed = std.Io.Clock.real.now(io).nanoseconds;
+            var prng = std.Random.DefaultPrng.init(@bitCast(@as(i64, @truncate(seed))));
             const collapsed = opening_mod.selectVariants(allocator, &sequence, prng.random()) catch break :collapse_variants;
             sequence.deinit();
             sequence = collapsed;
@@ -871,26 +868,26 @@ fn initGameState(
     return state;
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    const arena = init.arena.allocator();
 
     std.debug.print("Privateer engine starting...\n", .{});
 
     // Load unified config (privateer.json → env var → defaults)
-    var cfg = try privateer.config.load(allocator, privateer.config.CONFIG_FILE);
+    var cfg = try privateer.config.load(io, allocator, privateer.config.CONFIG_FILE);
     defer cfg.deinit();
 
     // Apply macOS bundle override (Resources/data inside .app)
-    privateer.config.applyBundleOverride(&cfg);
+    privateer.config.applyBundleOverride(io, &cfg);
 
     // Apply PRIVATEER_DATA env var override for data_dir
-    privateer.config.applyEnvOverride(&cfg) catch {};
+    privateer.config.applyEnvOverride(init.minimal.environ, &cfg) catch {};
 
     // Apply CLI arg overrides
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const argv = try init.minimal.args.toSlice(arena);
+    const args = try privateer.config.argSlices(arena, argv);
 
     // Check for --movie flag (plays intro movie before title screen)
     var play_movie = false;
@@ -918,7 +915,7 @@ pub fn main() !void {
     defer win.destroy();
 
     // Initialize game state (loads GAME.DAT, PRIV.TRE, palettes, scenes)
-    var state = initGameState(allocator, &cfg, &win, play_movie) catch |err| {
+    var state = initGameState(allocator, io, &cfg, &win, play_movie) catch |err| {
         std.debug.print("Failed to load game data: {}\n", .{err});
         std.debug.print("Make sure GAME.DAT is in your data directory: {s}\n", .{cfg.data_dir});
         std.debug.print("Set PRIVATEER_DATA environment variable or edit privateer.json\n", .{});
@@ -932,7 +929,7 @@ pub fn main() !void {
 
     std.debug.print("Game initialized. Starting main loop...\n", .{});
 
-    win.runLoop(@ptrCast(state), &update);
+    win.runLoop(io, @ptrCast(state), &update);
 
     std.debug.print("Privateer engine shutting down after {d} frames.\n", .{state.frame_count});
 }

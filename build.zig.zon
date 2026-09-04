@@ -2,7 +2,7 @@
     .name = .privateer,
     .version = "0.0.0",
     .fingerprint = 0x93184973ea5969f2,
-    .minimum_zig_version = "0.15.0",
+    .minimum_zig_version = "0.16.0",
     .paths = .{
         "build.zig",
         "build.zig.zon",
@@ -10,8 +10,8 @@
     },
     .dependencies = .{
         .sdl = .{
-            .url = "https://github.com/allyourcodebase/SDL3/archive/refs/heads/main.tar.gz",
-            .hash = "sdl-0.0.0-i4QD0WN-qQB1RKdRC9-6iZyTco2jIIr3y2DFrAz-D9CH",
+            .url = "https://github.com/allyourcodebase/SDL3/archive/refs/tags/1.0.1+3.4.14.tar.gz",
+            .hash = "sdl-1.0.1+3.4.14-i4QD0ViwqQAThHDlng1K46lINQ5PioLIz9bDKpGJTuzs",
         },
     },
 }

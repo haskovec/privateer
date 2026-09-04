@@ -178,10 +178,10 @@ pub const Joystick = struct {
     /// Map SDL button to our tracked button state.
     fn updateButton(self: *Joystick, sdl_button: u8, pressed: bool) void {
         switch (sdl_button) {
-            c.SDL_GAMEPAD_BUTTON_SOUTH => self.curr_buttons.fire_missile = pressed,    // A
-            c.SDL_GAMEPAD_BUTTON_NORTH => self.curr_buttons.cycle_target = pressed,    // Y
-            c.SDL_GAMEPAD_BUTTON_WEST => self.curr_buttons.autopilot = pressed,        // X
-            c.SDL_GAMEPAD_BUTTON_EAST => self.curr_buttons.nav_map = pressed,          // B
+            c.SDL_GAMEPAD_BUTTON_SOUTH => self.curr_buttons.fire_missile = pressed, // A
+            c.SDL_GAMEPAD_BUTTON_NORTH => self.curr_buttons.cycle_target = pressed, // Y
+            c.SDL_GAMEPAD_BUTTON_WEST => self.curr_buttons.autopilot = pressed, // X
+            c.SDL_GAMEPAD_BUTTON_EAST => self.curr_buttons.nav_map = pressed, // B
             else => {},
         }
     }
