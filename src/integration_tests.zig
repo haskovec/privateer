@@ -39,16 +39,17 @@ const movie_sfx = @import("movie/movie_sfx.zig");
 const music_player = @import("audio/music_player.zig");
 
 const app_config = @import("config.zig");
+const testing_helpers = @import("testing.zig");
 
 /// Resolve the game data directory.
 /// Precedence: PRIVATEER_DATA env var → privateer.json data_dir → null.
 fn getGameDataDir() ?[]const u8 {
     // Try env var first
-    if (std.process.getEnvVarOwned(std.heap.page_allocator, "PRIVATEER_DATA") catch null) |dir| {
+    if (std.testing.environ.getAlloc(std.heap.page_allocator, "PRIVATEER_DATA") catch null) |dir| {
         return dir;
     }
     // Fall back to privateer.json
-    var cfg = app_config.load(std.heap.page_allocator, app_config.CONFIG_FILE) catch return null;
+    var cfg = app_config.load(std.testing.io, std.heap.page_allocator, app_config.CONFIG_FILE) catch return null;
     // Check if data_dir is the default "data" (meaning no config file was found or no real path set)
     if (std.mem.eql(u8, cfg.data_dir, "data")) {
         cfg.deinit();
@@ -75,20 +76,10 @@ fn loadGameDat(allocator: std.mem.Allocator) !?[]const u8 {
     const dat_path = try getGameDatPath(allocator, data_dir);
     defer allocator.free(dat_path);
 
-    const file = std.fs.cwd().openFile(dat_path, .{}) catch |err| {
-        if (err == error.FileNotFound) return null;
-        return err;
+    return std.Io.Dir.cwd().readFileAlloc(std.testing.io, dat_path, allocator, .unlimited) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => |e| e,
     };
-    defer file.close();
-
-    const stat = try file.stat();
-    const buf = try allocator.alloc(u8, stat.size);
-    const bytes_read = try file.readAll(buf);
-    if (bytes_read != stat.size) {
-        allocator.free(buf);
-        return null;
-    }
-    return buf;
 }
 
 test "integration: GAME.DAT PVD has CD001 signature" {
@@ -1175,10 +1166,10 @@ test "integration: extractAll produces correct file count and sizes" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    const result = try extract.extractAll(allocator, data, tmp_path);
+    const result = try extract.extractAll(allocator, std.testing.io, data, tmp_path);
 
     // All 832 files should be extracted with 0 failures
     try std.testing.expectEqual(@as(u32, 832), result.files_extracted);
@@ -1199,10 +1190,10 @@ test "integration: extracted files match TRE entry sizes" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    _ = try extract.extractAll(allocator, data, tmp_path);
+    _ = try extract.extractAll(allocator, std.testing.io, data, tmp_path);
 
     // Spot-check a few files: verify extracted sizes match TRE entry sizes
     const entries = try tre.readAllEntries(allocator, tre_data);
@@ -1221,10 +1212,10 @@ test "integration: extracted files match TRE entry sizes" {
         const clean_path = try extract.toForwardSlashes(allocator, raw_path);
         defer allocator.free(clean_path);
 
-        const f = tmp_dir.dir.openFile(clean_path, .{}) catch continue;
-        defer f.close();
+        const f = tmp_dir.dir.openFile(std.testing.io, clean_path, .{}) catch continue;
+        defer f.close(std.testing.io);
 
-        const stat = try f.stat();
+        const stat = try f.stat(std.testing.io);
         try std.testing.expectEqual(@as(u64, entry.size), stat.size);
         checked += 1;
     }

@@ -62,11 +62,13 @@ pub fn slotFileName(buf: *[12]u8, slot: u8) []const u8 {
 }
 
 /// Save game data to a numbered slot.
-/// `timestamp` is seconds since Unix epoch (use std.time.timestamp()).
+/// `timestamp` is seconds since Unix epoch
+/// (`@divFloor(std.Io.Clock.real.now(io).nanoseconds, std.time.ns_per_s)`).
 /// `dir` is the save directory handle.
 pub fn saveToSlot(
     allocator: std.mem.Allocator,
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     slot: u8,
     data: *const save_game.SaveGameData,
     timestamp: i64,
@@ -85,15 +87,14 @@ pub fn saveToSlot(
     // Write to disk
     var name_buf: [12]u8 = undefined;
     const name = slotFileName(&name_buf, slot);
-    const file = dir.createFile(name, .{}) catch return SlotError.IoError;
-    defer file.close();
-    file.writeAll(&file_buf) catch return SlotError.IoError;
+    dir.writeFile(io, .{ .sub_path = name, .data = &file_buf }) catch return SlotError.IoError;
 }
 
 /// Load game data from a numbered slot.
 /// Returns the deserialized save data and timestamp.
 pub fn loadFromSlot(
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     slot: u8,
 ) (SlotError || save_game.DeserializeError)!struct { data: save_game.SaveGameData, timestamp: i64 } {
     if (slot >= MAX_SLOTS) return SlotError.InvalidSlot;
@@ -101,11 +102,11 @@ pub fn loadFromSlot(
     var name_buf: [12]u8 = undefined;
     const name = slotFileName(&name_buf, slot);
 
-    const file = dir.openFile(name, .{}) catch return SlotError.SlotEmpty;
-    defer file.close();
+    const file = dir.openFile(io, name, .{}) catch return SlotError.SlotEmpty;
+    defer file.close(io);
 
     var file_buf: [SLOT_FILE_SIZE]u8 = undefined;
-    const bytes_read = file.readAll(&file_buf) catch return SlotError.IoError;
+    const bytes_read = file.readPositionalAll(io, &file_buf, 0) catch return SlotError.IoError;
     if (bytes_read != SLOT_FILE_SIZE) return SlotError.CorruptSlotFile;
 
     const timestamp = std.mem.readInt(i64, file_buf[0..8], .little);
@@ -116,19 +117,19 @@ pub fn loadFromSlot(
 
 /// Read metadata for a single slot without loading full game state.
 /// Returns unoccupied metadata if slot file doesn't exist.
-pub fn getSlotMetadata(dir: std.fs.Dir, slot: u8) SlotError!SlotMetadata {
+pub fn getSlotMetadata(io: std.Io, dir: std.Io.Dir, slot: u8) SlotError!SlotMetadata {
     if (slot >= MAX_SLOTS) return SlotError.InvalidSlot;
 
     var name_buf: [12]u8 = undefined;
     const name = slotFileName(&name_buf, slot);
 
-    const file = dir.openFile(name, .{}) catch {
+    const file = dir.openFile(io, name, .{}) catch {
         return SlotMetadata{ .slot = slot };
     };
-    defer file.close();
+    defer file.close(io);
 
     var file_buf: [SLOT_FILE_SIZE]u8 = undefined;
-    const bytes_read = file.readAll(&file_buf) catch return SlotError.IoError;
+    const bytes_read = file.readPositionalAll(io, &file_buf, 0) catch return SlotError.IoError;
     if (bytes_read != SLOT_FILE_SIZE) return SlotError.CorruptSlotFile;
 
     // Verify magic before extracting metadata
@@ -156,22 +157,22 @@ pub fn getSlotMetadata(dir: std.fs.Dir, slot: u8) SlotError!SlotMetadata {
 }
 
 /// List metadata for all save slots.
-pub fn listSlots(dir: std.fs.Dir) [MAX_SLOTS]SlotMetadata {
+pub fn listSlots(io: std.Io, dir: std.Io.Dir) [MAX_SLOTS]SlotMetadata {
     var slots: [MAX_SLOTS]SlotMetadata = undefined;
     for (0..MAX_SLOTS) |i| {
         const slot: u8 = @intCast(i);
-        slots[i] = getSlotMetadata(dir, slot) catch SlotMetadata{ .slot = slot };
+        slots[i] = getSlotMetadata(io, dir, slot) catch SlotMetadata{ .slot = slot };
     }
     return slots;
 }
 
 /// Delete a save slot.
-pub fn deleteSlot(dir: std.fs.Dir, slot: u8) SlotError!void {
+pub fn deleteSlot(io: std.Io, dir: std.Io.Dir, slot: u8) SlotError!void {
     if (slot >= MAX_SLOTS) return SlotError.InvalidSlot;
 
     var name_buf: [12]u8 = undefined;
     const name = slotFileName(&name_buf, slot);
-    dir.deleteFile(name) catch |err| {
+    dir.deleteFile(io, name) catch |err| {
         if (err == error.FileNotFound) return SlotError.SlotEmpty;
         return SlotError.IoError;
     };
@@ -231,8 +232,8 @@ test "save and load round-trips game data" {
     const original = makeSampleData();
     const timestamp: i64 = 1710500000;
 
-    try saveToSlot(allocator, tmp.dir, 0, &original, timestamp);
-    const result = try loadFromSlot(tmp.dir, 0);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &original, timestamp);
+    const result = try loadFromSlot(testing.io, tmp.dir, 0);
 
     try testing.expectEqual(timestamp, result.timestamp);
     try testing.expectEqual(original.credits, result.data.credits);
@@ -248,11 +249,11 @@ test "save writes correct file size" {
     defer closeTmpDir(&tmp);
 
     const data = save_game.SaveGameData{};
-    try saveToSlot(allocator, tmp.dir, 0, &data, 0);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data, 0);
 
-    const file = try tmp.dir.openFile("slot_00.sav", .{});
-    defer file.close();
-    const stat = try file.stat();
+    const file = try tmp.dir.openFile(testing.io, "slot_00.sav", .{});
+    defer file.close(testing.io);
+    const stat = try file.stat(testing.io);
     try testing.expectEqual(SLOT_FILE_SIZE, stat.size);
 }
 
@@ -266,11 +267,11 @@ test "save to different slots creates separate files" {
     var data2 = save_game.SaveGameData{};
     data2.credits = 2000;
 
-    try saveToSlot(allocator, tmp.dir, 0, &data1, 100);
-    try saveToSlot(allocator, tmp.dir, 1, &data2, 200);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data1, 100);
+    try saveToSlot(allocator, testing.io, tmp.dir, 1, &data2, 200);
 
-    const result0 = try loadFromSlot(tmp.dir, 0);
-    const result1 = try loadFromSlot(tmp.dir, 1);
+    const result0 = try loadFromSlot(testing.io, tmp.dir, 0);
+    const result1 = try loadFromSlot(testing.io, tmp.dir, 1);
 
     try testing.expectEqual(@as(i32, 1000), result0.data.credits);
     try testing.expectEqual(@as(i64, 100), result0.timestamp);
@@ -285,13 +286,13 @@ test "save overwrites existing slot" {
 
     var data1 = save_game.SaveGameData{};
     data1.credits = 1000;
-    try saveToSlot(allocator, tmp.dir, 0, &data1, 100);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data1, 100);
 
     var data2 = save_game.SaveGameData{};
     data2.credits = 9999;
-    try saveToSlot(allocator, tmp.dir, 0, &data2, 200);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data2, 200);
 
-    const result = try loadFromSlot(tmp.dir, 0);
+    const result = try loadFromSlot(testing.io, tmp.dir, 0);
     try testing.expectEqual(@as(i32, 9999), result.data.credits);
     try testing.expectEqual(@as(i64, 200), result.timestamp);
 }
@@ -304,22 +305,22 @@ test "saveToSlot rejects invalid slot number" {
     defer closeTmpDir(&tmp);
 
     const data = save_game.SaveGameData{};
-    try testing.expectError(SlotError.InvalidSlot, saveToSlot(allocator, tmp.dir, MAX_SLOTS, &data, 0));
-    try testing.expectError(SlotError.InvalidSlot, saveToSlot(allocator, tmp.dir, 255, &data, 0));
+    try testing.expectError(SlotError.InvalidSlot, saveToSlot(allocator, testing.io, tmp.dir, MAX_SLOTS, &data, 0));
+    try testing.expectError(SlotError.InvalidSlot, saveToSlot(allocator, testing.io, tmp.dir, 255, &data, 0));
 }
 
 test "loadFromSlot rejects invalid slot number" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    try testing.expectError(SlotError.InvalidSlot, loadFromSlot(tmp.dir, MAX_SLOTS));
+    try testing.expectError(SlotError.InvalidSlot, loadFromSlot(testing.io, tmp.dir, MAX_SLOTS));
 }
 
 test "loadFromSlot returns SlotEmpty for missing file" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    try testing.expectError(SlotError.SlotEmpty, loadFromSlot(tmp.dir, 0));
+    try testing.expectError(SlotError.SlotEmpty, loadFromSlot(testing.io, tmp.dir, 0));
 }
 
 test "loadFromSlot returns CorruptSlotFile for wrong size" {
@@ -327,11 +328,9 @@ test "loadFromSlot returns CorruptSlotFile for wrong size" {
     defer closeTmpDir(&tmp);
 
     // Write a too-short file
-    const file = try tmp.dir.createFile("slot_00.sav", .{});
-    defer file.close();
-    try file.writeAll("too short");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "slot_00.sav", .data = "too short" });
 
-    try testing.expectError(SlotError.CorruptSlotFile, loadFromSlot(tmp.dir, 0));
+    try testing.expectError(SlotError.CorruptSlotFile, loadFromSlot(testing.io, tmp.dir, 0));
 }
 
 // -- getSlotMetadata tests --
@@ -340,7 +339,7 @@ test "getSlotMetadata returns unoccupied for missing slot" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    const meta = try getSlotMetadata(tmp.dir, 0);
+    const meta = try getSlotMetadata(testing.io, tmp.dir, 0);
     try testing.expectEqual(@as(u8, 0), meta.slot);
     try testing.expect(!meta.occupied);
 }
@@ -351,9 +350,9 @@ test "getSlotMetadata returns correct metadata for saved slot" {
     defer closeTmpDir(&tmp);
 
     const data = makeSampleData();
-    try saveToSlot(allocator, tmp.dir, 3, &data, 1710500000);
+    try saveToSlot(allocator, testing.io, tmp.dir, 3, &data, 1710500000);
 
-    const meta = try getSlotMetadata(tmp.dir, 3);
+    const meta = try getSlotMetadata(testing.io, tmp.dir, 3);
     try testing.expectEqual(@as(u8, 3), meta.slot);
     try testing.expect(meta.occupied);
     try testing.expectEqual(@as(i64, 1710500000), meta.timestamp);
@@ -367,7 +366,7 @@ test "getSlotMetadata rejects invalid slot" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    try testing.expectError(SlotError.InvalidSlot, getSlotMetadata(tmp.dir, MAX_SLOTS));
+    try testing.expectError(SlotError.InvalidSlot, getSlotMetadata(testing.io, tmp.dir, MAX_SLOTS));
 }
 
 test "getSlotMetadata detects corrupt file" {
@@ -377,11 +376,9 @@ test "getSlotMetadata detects corrupt file" {
     // Write correct size but bad magic
     var bad_data: [SLOT_FILE_SIZE]u8 = .{0} ** SLOT_FILE_SIZE;
     bad_data[SLOT_HEADER_SIZE] = 'X'; // corrupt magic
-    const file = try tmp.dir.createFile("slot_00.sav", .{});
-    defer file.close();
-    try file.writeAll(&bad_data);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "slot_00.sav", .data = &bad_data });
 
-    try testing.expectError(SlotError.CorruptSlotFile, getSlotMetadata(tmp.dir, 0));
+    try testing.expectError(SlotError.CorruptSlotFile, getSlotMetadata(testing.io, tmp.dir, 0));
 }
 
 // -- listSlots tests --
@@ -390,7 +387,7 @@ test "listSlots returns all unoccupied for empty directory" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    const slots = listSlots(tmp.dir);
+    const slots = listSlots(testing.io, tmp.dir);
     for (0..MAX_SLOTS) |i| {
         try testing.expectEqual(@as(u8, @intCast(i)), slots[i].slot);
         try testing.expect(!slots[i].occupied);
@@ -404,12 +401,12 @@ test "listSlots shows occupied slots correctly" {
 
     var data = save_game.SaveGameData{};
     data.credits = 10000;
-    try saveToSlot(allocator, tmp.dir, 0, &data, 100);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data, 100);
 
     data.credits = 20000;
-    try saveToSlot(allocator, tmp.dir, 5, &data, 200);
+    try saveToSlot(allocator, testing.io, tmp.dir, 5, &data, 200);
 
-    const slots = listSlots(tmp.dir);
+    const slots = listSlots(testing.io, tmp.dir);
 
     try testing.expect(slots[0].occupied);
     try testing.expectEqual(@as(i32, 10000), slots[0].credits);
@@ -435,17 +432,17 @@ test "deleteSlot removes saved file" {
     defer closeTmpDir(&tmp);
 
     const data = save_game.SaveGameData{};
-    try saveToSlot(allocator, tmp.dir, 0, &data, 100);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data, 100);
 
     // Verify it exists
-    const meta = try getSlotMetadata(tmp.dir, 0);
+    const meta = try getSlotMetadata(testing.io, tmp.dir, 0);
     try testing.expect(meta.occupied);
 
     // Delete it
-    try deleteSlot(tmp.dir, 0);
+    try deleteSlot(testing.io, tmp.dir, 0);
 
     // Verify it's gone
-    const meta2 = try getSlotMetadata(tmp.dir, 0);
+    const meta2 = try getSlotMetadata(testing.io, tmp.dir, 0);
     try testing.expect(!meta2.occupied);
 }
 
@@ -453,14 +450,14 @@ test "deleteSlot returns SlotEmpty for non-existent slot" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    try testing.expectError(SlotError.SlotEmpty, deleteSlot(tmp.dir, 0));
+    try testing.expectError(SlotError.SlotEmpty, deleteSlot(testing.io, tmp.dir, 0));
 }
 
 test "deleteSlot rejects invalid slot number" {
     var tmp = openTmpDir();
     defer closeTmpDir(&tmp);
 
-    try testing.expectError(SlotError.InvalidSlot, deleteSlot(tmp.dir, MAX_SLOTS));
+    try testing.expectError(SlotError.InvalidSlot, deleteSlot(testing.io, tmp.dir, MAX_SLOTS));
 }
 
 // -- Timestamp encoding tests --
@@ -472,12 +469,12 @@ test "timestamp is stored as little-endian i64 at file start" {
 
     const data = save_game.SaveGameData{};
     const ts: i64 = 0x0102030405060708;
-    try saveToSlot(allocator, tmp.dir, 0, &data, ts);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data, ts);
 
-    const file = try tmp.dir.openFile("slot_00.sav", .{});
-    defer file.close();
+    const file = try tmp.dir.openFile(testing.io, "slot_00.sav", .{});
+    defer file.close(testing.io);
     var header: [8]u8 = undefined;
-    _ = try file.readAll(&header);
+    _ = try file.readPositionalAll(testing.io, &header, 0);
     const read_ts = std.mem.readInt(i64, &header, .little);
     try testing.expectEqual(ts, read_ts);
 }
@@ -489,8 +486,8 @@ test "negative timestamp round-trips correctly" {
 
     const data = save_game.SaveGameData{};
     const ts: i64 = -1000;
-    try saveToSlot(allocator, tmp.dir, 0, &data, ts);
+    try saveToSlot(allocator, testing.io, tmp.dir, 0, &data, ts);
 
-    const result = try loadFromSlot(tmp.dir, 0);
+    const result = try loadFromSlot(testing.io, tmp.dir, 0);
     try testing.expectEqual(ts, result.timestamp);
 }

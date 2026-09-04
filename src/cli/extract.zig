@@ -72,9 +72,11 @@ pub fn dirName(path: []const u8) ?[]const u8 {
 /// `output_dir` is the base directory to write extracted files to.
 pub fn extractAll(
     allocator: std.mem.Allocator,
+    io: std.Io,
     game_dat_data: []const u8,
     output_dir: []const u8,
 ) !ExtractResult {
+    const cwd: std.Io.Dir = .cwd();
     // Parse ISO 9660 to find PRIV.TRE
     const pvd = iso9660.readPvd(game_dat_data) catch return ExtractError.TreNotFound;
     const tre_info = iso9660.findFile(allocator, game_dat_data, pvd, "PRIV.TRE") catch return ExtractError.TreNotFound;
@@ -125,7 +127,7 @@ pub fn extractAll(
             };
             defer allocator.free(dir_path);
 
-            std.fs.cwd().makePath(dir_path) catch {
+            cwd.createDirPath(io, dir_path) catch {
                 result.files_failed += 1;
                 continue;
             };
@@ -138,13 +140,7 @@ pub fn extractAll(
         };
 
         // Write file to disk
-        const file = std.fs.cwd().createFile(full_path, .{}) catch {
-            result.files_failed += 1;
-            continue;
-        };
-        defer file.close();
-
-        file.writeAll(file_data) catch {
+        cwd.writeFile(io, .{ .sub_path = full_path, .data = file_data }) catch {
             result.files_failed += 1;
             continue;
         };
@@ -285,6 +281,7 @@ test "extraction pipeline: normalize, convert slashes, get dir for each TRE entr
 test "extractAll writes files to temp directory" {
     // This test creates a minimal fake ISO 9660 + TRE structure and extracts to a temp dir.
     // We verify the correct number of files and their contents.
+    const testing_helpers = @import("../testing.zig");
     const allocator = std.testing.allocator;
 
     // Build a minimal ISO 9660 image containing a small TRE archive.
@@ -389,11 +386,11 @@ test "extractAll writes files to temp directory" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
     // Run extraction
-    const result = try extractAll(allocator, iso_buf, tmp_path);
+    const result = try extractAll(allocator, std.testing.io, iso_buf, tmp_path);
 
     // Verify results
     try std.testing.expectEqual(@as(u32, 2), result.files_extracted);
@@ -402,17 +399,17 @@ test "extractAll writes files to temp directory" {
 
     // Verify extracted files exist and have correct content
     {
-        const f = try tmp_dir.dir.openFile("AIDS/TEST.IFF", .{});
-        defer f.close();
+        const f = try tmp_dir.dir.openFile(std.testing.io, "AIDS/TEST.IFF", .{});
+        defer f.close(std.testing.io);
         var buf: [64]u8 = undefined;
-        const n = try f.readAll(&buf);
+        const n = try f.readPositionalAll(std.testing.io, &buf, 0);
         try std.testing.expectEqualStrings("FORM", buf[0..n]);
     }
     {
-        const f = try tmp_dir.dir.openFile("APPEARNC/TEST.PAK", .{});
-        defer f.close();
+        const f = try tmp_dir.dir.openFile(std.testing.io, "APPEARNC/TEST.PAK", .{});
+        defer f.close(std.testing.io);
         var buf: [64]u8 = undefined;
-        const n = try f.readAll(&buf);
+        const n = try f.readPositionalAll(std.testing.io, &buf, 0);
         try std.testing.expectEqualStrings("HELLO", buf[0..n]);
     }
 }

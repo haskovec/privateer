@@ -459,7 +459,7 @@ test "selectVariants collapses variant groups" {
 
     // Build a sequence with variant groups: mid1c1-c4, mid1e1-e4
     const raw_names = [_][]const u8{
-        "mid1a", "mid1b", "mid1c1", "mid1c2", "mid1c3", "mid1c4",
+        "mid1a", "mid1b",  "mid1c1", "mid1c2", "mid1c3", "mid1c4",
         "mid1d", "mid1e1", "mid1e2", "mid1e3", "mid1e4", "mid1f",
     };
 

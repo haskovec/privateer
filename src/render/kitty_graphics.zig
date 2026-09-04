@@ -266,14 +266,14 @@ pub const CompositeResult = struct {
 
 test "displayImage writes Kitty escape sequence with raw RGBA payload" {
     const allocator = std.testing.allocator;
-    var output: std.ArrayListUnmanaged(u8) = .empty;
-    defer output.deinit(allocator);
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
 
     // 1x1 red pixel
     const pixels = [_]u8{ 255, 0, 0, 255 };
-    try displayImage(output.writer(allocator), allocator, &pixels, 1, 1);
+    try displayImage(&output.writer, allocator, &pixels, 1, 1);
 
-    const result = output.items;
+    const result = output.written();
 
     // Must contain cursor hide/show
     try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25l") != null);
@@ -294,13 +294,13 @@ test "displayImage writes Kitty escape sequence with raw RGBA payload" {
 
 test "displayImage contains valid base64 payload" {
     const allocator = std.testing.allocator;
-    var output: std.ArrayListUnmanaged(u8) = .empty;
-    defer output.deinit(allocator);
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
 
     const pixels = [_]u8{ 0, 255, 0, 255 };
-    try displayImage(output.writer(allocator), allocator, &pixels, 1, 1);
+    try displayImage(&output.writer, allocator, &pixels, 1, 1);
 
-    const result = output.items;
+    const result = output.written();
 
     // Find the base64 payload between ';' and ESC (skip the cursor-hide prefix)
     if (std.mem.indexOf(u8, result, ";")) |semi_pos| {
@@ -319,17 +319,17 @@ test "displayImage contains valid base64 payload" {
 
 test "displayPng handles small PNG in single chunk" {
     const allocator = std.testing.allocator;
-    var output: std.ArrayListUnmanaged(u8) = .empty;
-    defer output.deinit(allocator);
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
 
     // Encode a tiny 1x1 PNG
     const pixels = [_]u8{ 128, 128, 128, 255 };
     const png_data = try png_mod.encode(allocator, 1, 1, &pixels);
     defer allocator.free(png_data);
 
-    try displayPng(output.writer(allocator), png_data);
+    try displayPng(&output.writer, png_data);
 
-    const result = output.items;
+    const result = output.written();
 
     // Must contain cursor hide/show
     try std.testing.expect(std.mem.indexOf(u8, result, "\x1b[?25l") != null);

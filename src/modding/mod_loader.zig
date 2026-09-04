@@ -28,15 +28,18 @@ pub const LoadResult = struct {
 
 pub const ModLoader = struct {
     allocator: std.mem.Allocator,
+    /// I/O implementation used to read mod override files.
+    io: std.Io,
     /// Active mod directory path, or null if no mod is active.
     mod_dir: ?[]const u8,
     /// TRE archive data (the full PRIV.TRE contents).
     tre_data: []const u8,
 
     /// Initialize a ModLoader with an optional mod directory and TRE archive data.
-    pub fn init(allocator: std.mem.Allocator, mod_dir: ?[]const u8, tre_data: []const u8) ModLoader {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, mod_dir: ?[]const u8, tre_data: []const u8) ModLoader {
         return .{
             .allocator = allocator,
+            .io = io,
             .mod_dir = mod_dir,
             .tre_data = tre_data,
         };
@@ -115,18 +118,11 @@ pub const ModLoader = struct {
         const full_path = try std.fs.path.join(self.allocator, &.{ mod_dir, rel_path });
         defer self.allocator.free(full_path);
 
-        const file = std.fs.cwd().openFile(full_path, .{}) catch return ModLoaderError.FileNotFound;
-        defer file.close();
-
-        const stat = try file.stat();
-        const buf = try self.allocator.alloc(u8, stat.size);
-        errdefer self.allocator.free(buf);
-        const bytes_read = try file.readAll(buf);
-        if (bytes_read != stat.size) {
-            self.allocator.free(buf);
-            return ModLoaderError.ReadError;
-        }
-        return buf;
+        return std.Io.Dir.cwd().readFileAlloc(self.io, full_path, self.allocator, .unlimited) catch |err| switch (err) {
+            error.FileNotFound => ModLoaderError.FileNotFound,
+            error.OutOfMemory => ModLoaderError.OutOfMemory,
+            else => ModLoaderError.ReadError,
+        };
     }
 
     /// Load a file from the TRE archive by filename.
@@ -149,7 +145,7 @@ test "loadFile returns data from TRE when no mod dir" {
     const tre_data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
     defer allocator.free(tre_data);
 
-    const loader = ModLoader.init(allocator, null, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, null, tre_data);
     const result = try loader.loadFile("ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -164,7 +160,7 @@ test "loadFile returns data from TRE when mod dir has no matching file" {
     defer allocator.free(tre_data);
 
     // Use a non-existent mod directory
-    const loader = ModLoader.init(allocator, "tests/fixtures/nonexistent_mod_dir", tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, "tests/fixtures/nonexistent_mod_dir", tre_data);
     const result = try loader.loadFile("ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -183,19 +179,15 @@ test "loadFile returns mod file when it exists in mod dir" {
 
     // The TRE path for ATTITUDE.IFF is ..\..\DATA\AIDS\ATTITUDE.IFF
     // Normalized: AIDS/ATTITUDE.IFF
-    try tmp_dir.dir.makePath("AIDS");
+    try tmp_dir.dir.createDirPath(std.testing.io, "AIDS");
     const mod_data = "MODDED_ATTITUDE_DATA";
-    {
-        const file = try tmp_dir.dir.createFile("AIDS/ATTITUDE.IFF", .{});
-        defer file.close();
-        try file.writeAll(mod_data);
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "AIDS/ATTITUDE.IFF", .data = mod_data });
 
     // Get the absolute path of the tmp directory
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    const loader = ModLoader.init(allocator, tmp_path, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, tmp_path, tre_data);
     const result = try loader.loadFile("ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -212,10 +204,10 @@ test "loadFile falls back to TRE when mod dir exists but file is not overridden"
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    const loader = ModLoader.init(allocator, tmp_path, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, tmp_path, tre_data);
     const result = try loader.loadFile("ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -228,7 +220,7 @@ test "loadFile returns FileNotFound for unknown file" {
     const tre_data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
     defer allocator.free(tre_data);
 
-    const loader = ModLoader.init(allocator, null, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, null, tre_data);
     const result = loader.loadFile("NONEXISTENT.IFF");
     try std.testing.expectError(ModLoaderError.FileNotFound, result);
 }
@@ -238,7 +230,7 @@ test "loadFilePath loads by normalized TRE path" {
     const tre_data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
     defer allocator.free(tre_data);
 
-    const loader = ModLoader.init(allocator, null, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, null, tre_data);
     const result = try loader.loadFilePath("..\\..\\DATA\\AIDS\\ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -254,18 +246,14 @@ test "loadFilePath prefers mod override by path" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    try tmp_dir.dir.makePath("AIDS");
+    try tmp_dir.dir.createDirPath(std.testing.io, "AIDS");
     const mod_data = "PATH_OVERRIDE_DATA";
-    {
-        const file = try tmp_dir.dir.createFile("AIDS/ATTITUDE.IFF", .{});
-        defer file.close();
-        try file.writeAll(mod_data);
-    }
+    try tmp_dir.dir.writeFile(std.testing.io, .{ .sub_path = "AIDS/ATTITUDE.IFF", .data = mod_data });
 
-    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    const tmp_path = try testing_helpers.tmpDirPath(allocator, &tmp_dir);
     defer allocator.free(tmp_path);
 
-    const loader = ModLoader.init(allocator, tmp_path, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, tmp_path, tre_data);
     const result = try loader.loadFilePath("..\\..\\DATA\\AIDS\\ATTITUDE.IFF");
     defer allocator.free(result.data);
 
@@ -278,7 +266,7 @@ test "loadFile is case-insensitive on filename" {
     const tre_data = try testing_helpers.loadFixture(allocator, "test_tre.bin");
     defer allocator.free(tre_data);
 
-    const loader = ModLoader.init(allocator, null, tre_data);
+    const loader = ModLoader.init(allocator, std.testing.io, null, tre_data);
 
     // Test lowercase lookup
     const result = try loader.loadFile("attitude.iff");

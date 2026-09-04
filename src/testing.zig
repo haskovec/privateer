@@ -1,22 +1,30 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// Load a test fixture file from the tests/fixtures/ directory.
 /// Returns the file contents as a slice owned by the caller's allocator.
+///
+/// Test-only helper: uses `std.testing.io` rather than taking an `Io`
+/// parameter, the same way `std.testing.tmpDir` does.
 pub fn loadFixture(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
+    comptime std.debug.assert(builtin.is_test);
+
     const path = try std.fs.path.join(allocator, &.{ "tests/fixtures", name });
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    return std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, .unlimited);
+}
 
-    const stat = try file.stat();
-    const buf = try allocator.alloc(u8, stat.size);
-    const bytes_read = try file.readAll(buf);
-    if (bytes_read != stat.size) {
-        allocator.free(buf);
-        return error.IncompleteRead;
-    }
-    return buf;
+/// Path of a `std.testing.TmpDir` relative to the current working directory.
+///
+/// Replaces `Dir.realpathAlloc(allocator, ".")`, removed in Zig 0.16.
+/// `std.testing.tmpDir` always creates its directory at
+/// `.zig-cache/tmp/<sub_path>` relative to cwd, so the path can be
+/// reconstructed without a realpath syscall.
+/// Caller owns the returned slice.
+pub fn tmpDirPath(allocator: std.mem.Allocator, tmp: *const std.testing.TmpDir) ![]u8 {
+    comptime std.debug.assert(builtin.is_test);
+    return std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", &tmp.sub_path });
 }
 
 /// Assert two byte slices are equal, with a descriptive error on mismatch.

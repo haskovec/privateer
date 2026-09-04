@@ -592,7 +592,7 @@ test "decode with delay between notes" {
     const evnt = [_]u8{
         0x90, 60, 100, 24, // Note On C4, vel 100, dur 24 at tick 0
         24, // Delay 24 ticks
-        0x90, 64, 80,  24, // Note On E4, vel 80, dur 24 at tick 24
+        0x90, 64, 80, 24, // Note On E4, vel 80, dur 24 at tick 24
         0xFF, 0x2F, 0x00, // End of track at tick 24
     };
     const events = try decodeXmidiEvents(allocator, &evnt);
@@ -629,7 +629,7 @@ test "decode with program change" {
     const allocator = std.testing.allocator;
     const evnt = [_]u8{
         0xC0, 10, // Program Change ch 0, program 10
-        0x90, 60, 100, 48, // Note On C4
+        0x90, 60,   100,  48, // Note On C4
         0xFF, 0x2F, 0x00,
     };
     const events = try decodeXmidiEvents(allocator, &evnt);
@@ -643,7 +643,7 @@ test "decode with program change" {
 test "decode with control change" {
     const allocator = std.testing.allocator;
     const evnt = [_]u8{
-        0xB0, 7, 100, // Control Change ch 0, controller 7 (volume), value 100
+        0xB0, 7,    100, // Control Change ch 0, controller 7 (volume), value 100
         0xFF, 0x2F, 0x00,
     };
     const events = try decodeXmidiEvents(allocator, &evnt);

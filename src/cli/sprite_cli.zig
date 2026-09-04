@@ -32,13 +32,12 @@ const png_mod = privateer.png;
 const upscale_mod = privateer.upscale;
 const kitty = privateer.kitty_graphics;
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    const environ = init.minimal.environ;
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 2) {
         printUsage();
@@ -48,9 +47,9 @@ pub fn main() !void {
     const subcommand = args[1];
 
     if (std.mem.eql(u8, subcommand, "list")) {
-        try runList(allocator, args[2..]);
+        try runList(allocator, io, environ, args[2..]);
     } else if (std.mem.eql(u8, subcommand, "view")) {
-        try runView(allocator, args[2..]);
+        try runView(allocator, io, environ, args[2..]);
     } else if (std.mem.eql(u8, subcommand, "--help") or std.mem.eql(u8, subcommand, "-h")) {
         printUsage();
     } else {
@@ -151,8 +150,13 @@ fn parseViewArgs(args: []const [:0]const u8) ViewArgs {
     return result;
 }
 
-fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
-    var cfg = privateer.config.resolveForCli(allocator, args) catch {
+fn runList(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    environ: std.process.Environ,
+    args: []const [:0]const u8,
+) !void {
+    var cfg = privateer.config.resolveForCli(io, environ, allocator, try privateer.config.argSlices(allocator, args)) catch {
         std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
@@ -166,7 +170,7 @@ fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 
     std.debug.print("Loading {s}...\n", .{game_dat_path});
 
-    const game_dat = loadFile(allocator, game_dat_path) catch {
+    const game_dat = loadFile(allocator, io, game_dat_path) catch {
         std.debug.print("Error: could not open {s}\n", .{game_dat_path});
         std.process.exit(1);
     };
@@ -201,8 +205,13 @@ fn runList(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     std.debug.print("\nTotal: {} sprite-containing files\n", .{files.len});
 }
 
-fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
-    var cfg = privateer.config.resolveForCli(allocator, args) catch {
+fn runView(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    environ: std.process.Environ,
+    args: []const [:0]const u8,
+) !void {
+    var cfg = privateer.config.resolveForCli(io, environ, allocator, try privateer.config.argSlices(allocator, args)) catch {
         std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
@@ -221,7 +230,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
 
     // If neither --file nor --input provided, dump all sprites from GAME.DAT
     if (view_args.tre_file == null and view_args.input_file == null) {
-        try runViewAll(allocator, view_args, cfg.data_dir);
+        try runViewAll(allocator, io, view_args, cfg.data_dir);
         return;
     }
 
@@ -232,7 +241,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     var filename: []const u8 = undefined;
 
     if (view_args.input_file) |input_path| {
-        file_data = loadFile(allocator, input_path) catch {
+        file_data = loadFile(allocator, io, input_path) catch {
             std.debug.print("Error: could not open {s}\n", .{input_path});
             std.process.exit(1);
         };
@@ -242,7 +251,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         {
             const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{cfg.data_dir});
             defer allocator.free(gd_path);
-            game_dat = loadFile(allocator, gd_path) catch null;
+            game_dat = loadFile(allocator, io, gd_path) catch null;
             if (game_dat) |gd| {
                 tre_data_opt = sprite_viewer.loadTreFromGameDat(allocator, gd) catch null;
             }
@@ -253,7 +262,7 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
         defer allocator.free(gd_path);
 
-        game_dat = loadFile(allocator, gd_path) catch {
+        game_dat = loadFile(allocator, io, gd_path) catch {
             std.debug.print("Error: could not open {s}\n", .{gd_path});
             std.process.exit(1);
         };
@@ -290,17 +299,17 @@ fn runView(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     defer allocator.free(file_data);
     defer if (game_dat) |gd| allocator.free(gd);
 
-    try viewSpriteFile(allocator, view_args, file_data, filename, tre_data_opt);
+    try viewSpriteFile(allocator, io, view_args, file_data, filename, tre_data_opt);
 }
 
 /// Dump all sprites from every sprite-containing file in GAME.DAT.
-fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs, data_path: []const u8) !void {
+fn runViewAll(allocator: std.mem.Allocator, io: std.Io, view_args: ViewArgs, data_path: []const u8) !void {
     const gd_path = try std.fmt.allocPrint(allocator, "{s}/GAME.DAT", .{data_path});
     defer allocator.free(gd_path);
 
     std.debug.print("Loading {s}...\n", .{gd_path});
 
-    const game_dat = loadFile(allocator, gd_path) catch {
+    const game_dat = loadFile(allocator, io, gd_path) catch {
         std.debug.print("Error: could not open {s}\n", .{gd_path});
         std.process.exit(1);
     };
@@ -345,7 +354,7 @@ fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs, data_path: []co
         defer allocator.free(data);
 
         std.debug.print("=== {s} ===\n", .{f.path});
-        viewSpriteFile(allocator, view_args, data, f.path, tre_data) catch |err| {
+        viewSpriteFile(allocator, io, view_args, data, f.path, tre_data) catch |err| {
             std.debug.print("  Error viewing {s}: {}\n\n", .{ f.path, err });
         };
         std.debug.print("\n", .{});
@@ -355,6 +364,7 @@ fn runViewAll(allocator: std.mem.Allocator, view_args: ViewArgs, data_path: []co
 /// View sprites from a single file's data.
 fn viewSpriteFile(
     allocator: std.mem.Allocator,
+    io: std.Io,
     view_args: ViewArgs,
     file_data: []const u8,
     filename: []const u8,
@@ -370,6 +380,7 @@ fn viewSpriteFile(
     // Load palette (with filename context for smart auto-detection)
     const palette = sprite_viewer.loadPaletteForFile(
         allocator,
+        io,
         view_args.palette,
         tre_data_opt,
         file_data,
@@ -416,7 +427,7 @@ fn viewSpriteFile(
     const total_to_show = global_end - global_start;
 
     // Create pager from ViewArgs + runtime context
-    const is_tty = std.posix.isatty(std.posix.STDIN_FILENO);
+    const is_tty = try std.Io.File.stdin().isTty(io);
     const pager = Pager.init(.{
         .no_pager = view_args.no_pager,
         .page_size = view_args.page_size,
@@ -429,12 +440,19 @@ fn viewSpriteFile(
     const pager_active = pager.isActive();
 
     // Enable raw mode for single-keypress input if pager is active
-    const raw_mode = if (pager_active) RawMode.enable(std.posix.STDIN_FILENO) else null;
+    const raw_mode = if (pager_active) RawMode.enable(std.Io.File.stdin().handle) else null;
     defer if (raw_mode) |rm| rm.disable();
 
-    const stdin_reader = std.fs.File.stdin().deprecatedReader();
-    const stderr_writer = std.fs.File.stderr().deprecatedWriter();
-    const stdout_writer = std.fs.File.stdout().deprecatedWriter();
+    var stdin_buf: [64]u8 = undefined;
+    var stderr_buf: [512]u8 = undefined;
+    var stdout_buf: [64 * 1024]u8 = undefined;
+    var stdin_file_reader = std.Io.File.stdin().readerStreaming(io, &stdin_buf);
+    var stderr_file_writer = std.Io.File.stderr().writerStreaming(io, &stderr_buf);
+    var stdout_file_writer = std.Io.File.stdout().writerStreaming(io, &stdout_buf);
+    const stdin_reader = &stdin_file_reader.interface;
+    const stderr_writer = &stderr_file_writer.interface;
+    const stdout_writer = &stdout_file_writer.interface;
+    defer stdout_writer.flush() catch {};
 
     // Page-based outer loop
     var page: usize = 0;
@@ -452,7 +470,7 @@ fn viewSpriteFile(
 
         // Render sprites in the current page
         for (page_start..page_end) |idx| {
-            try renderSprite(allocator, view_args, sprites, idx, palette, can_inline, auto_save, stdout_writer);
+            try renderSprite(allocator, io, view_args, sprites, idx, palette, can_inline, auto_save, stdout_writer);
         }
 
         // If pager is active and there are more pages, prompt the user
@@ -477,13 +495,14 @@ fn viewSpriteFile(
 /// Render a single sprite at the given index.
 fn renderSprite(
     allocator: std.mem.Allocator,
+    io: std.Io,
     view_args: ViewArgs,
     sprites: []sprite_mod.Sprite,
     idx: usize,
     palette: pal_mod.Palette,
     can_inline: bool,
     auto_save: bool,
-    stdout_writer: anytype,
+    stdout_writer: *std.Io.Writer,
 ) !void {
     const spr = sprites[idx];
     std.debug.print("Sprite {}/{}: {}x{}\n", .{ idx, sprites.len, spr.width, spr.height });
@@ -527,13 +546,14 @@ fn renderSprite(
         if (can_inline) {
             std.debug.print("  [1x: {}x{}]  |  [{}x: {}x{}]\n", .{
                 rgba_image.width, rgba_image.height,
-                view_args.scale,   upscaled.width,  upscaled.height,
+                view_args.scale,  upscaled.width,
+                upscaled.height,
             });
             try kitty.displayImage(stdout_writer, allocator, composite.pixels, composite.width, composite.height);
         }
 
         if (effective_save) |base_path| {
-            try savePng(allocator, base_path, idx, sprites.len, composite.pixels, composite.width, composite.height);
+            try savePng(allocator, io, base_path, idx, sprites.len, composite.pixels, composite.width, composite.height);
         }
     } else if (view_args.scale > 1) {
         // Upscaled only
@@ -552,7 +572,7 @@ fn renderSprite(
         }
 
         if (effective_save) |base_path| {
-            try savePng(allocator, base_path, idx, sprites.len, upscaled.pixels, upscaled.width, upscaled.height);
+            try savePng(allocator, io, base_path, idx, sprites.len, upscaled.pixels, upscaled.width, upscaled.height);
         }
     } else {
         // Original size
@@ -561,7 +581,7 @@ fn renderSprite(
         }
 
         if (effective_save) |base_path| {
-            try savePng(allocator, base_path, idx, sprites.len, rgba_image.pixels, rgba_image.width, rgba_image.height);
+            try savePng(allocator, io, base_path, idx, sprites.len, rgba_image.pixels, rgba_image.width, rgba_image.height);
         }
     }
 }
@@ -575,9 +595,9 @@ fn scaleToFactor(scale: u8) upscale_mod.ScaleFactor {
     };
 }
 
-
 fn savePng(
     allocator: std.mem.Allocator,
+    io: std.Io,
     base_path: []const u8,
     index: usize,
     total: usize,
@@ -600,25 +620,13 @@ fn savePng(
     const png_data = try png_mod.encode(allocator, width, height, pixels);
     defer allocator.free(png_data);
 
-    const file = try std.fs.cwd().createFile(save_path, .{});
-    defer file.close();
-    try file.writeAll(png_data);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = save_path, .data = png_data });
 
     std.debug.print("  Saved: {s}\n", .{save_path});
 }
 
-fn loadFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    const stat = try file.stat();
-    const data = try allocator.alloc(u8, stat.size);
-    errdefer allocator.free(data);
-    const bytes_read = try file.readAll(data);
-    if (bytes_read != stat.size) {
-        allocator.free(data);
-        return error.FileNotFound;
-    }
-    return data;
+fn loadFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }
 
 // Expose normalizeTrePath for use by other modules
@@ -694,23 +702,24 @@ pub const Pager = struct {
     }
 
     /// Write the formatted status line prompt to the given writer.
-    pub fn writePrompt(self: Pager, writer: anytype, buf: []u8, start_idx: usize, end_idx: usize, total: usize) !void {
+    pub fn writePrompt(self: Pager, writer: *std.Io.Writer, buf: []u8, start_idx: usize, end_idx: usize, total: usize) !void {
         const line = self.formatStatusLine(buf, start_idx, end_idx, total);
         try writer.writeAll(line);
     }
 
     /// Clear the prompt line by writing CR + clear-to-EOL escape sequence.
-    pub fn clearPrompt(_: Pager, writer: anytype) !void {
+    pub fn clearPrompt(_: Pager, writer: *std.Io.Writer) !void {
         try writer.writeAll("\r\x1b[K");
     }
 
     /// Read a single byte from the reader and classify it as a pager action.
     /// Returns .quit on EOF (no bytes available).
-    pub fn readAction(_: Pager, reader: anytype) !Action {
-        var byte_buf: [1]u8 = undefined;
-        const n = try reader.read(&byte_buf);
-        if (n == 0) return .quit;
-        return classifyKey(byte_buf[0]);
+    pub fn readAction(_: Pager, reader: *std.Io.Reader) !Action {
+        const byte = reader.takeByte() catch |err| switch (err) {
+            error.EndOfStream => return .quit,
+            else => |e| return e,
+        };
+        return classifyKey(byte);
     }
 
     pub fn isActive(self: Pager) bool {
@@ -727,12 +736,21 @@ pub const Pager = struct {
 /// Disables canonical mode and echo so the pager can read one key at a time.
 /// Returns null from enable() if the fd isn't a TTY (safe for tests/piped input).
 pub const RawMode = struct {
-    fd: std.posix.fd_t,
-    original_termios: std.posix.termios,
+    fd: std.Io.File.Handle,
+    original_termios: Termios,
+
+    /// `std.posix.termios` is `void` on targets without termios (e.g. Windows).
+    const Termios = std.posix.termios;
+
+    /// Whether this target has a termios API. On targets without one the
+    /// pager falls back to line-buffered input.
+    const supported = Termios != void;
 
     /// Enable raw mode on the given file descriptor.
-    /// Returns null if the fd is not a TTY.
-    pub fn enable(fd: std.posix.fd_t) ?RawMode {
+    /// Returns null if the fd is not a TTY, or on targets without termios.
+    pub fn enable(fd: std.Io.File.Handle) ?RawMode {
+        if (!supported) return null;
+
         const original = std.posix.tcgetattr(fd) catch return null;
 
         var raw = original;
@@ -751,6 +769,7 @@ pub const RawMode = struct {
 
     /// Restore the original terminal settings.
     pub fn disable(self: RawMode) void {
+        if (!supported) return;
         std.posix.tcsetattr(self.fd, .FLUSH, self.original_termios) catch {};
     }
 };
@@ -899,43 +918,43 @@ test "classifyKey arbitrary key maps to next_page" {
 test "writePrompt writes formatted status line" {
     var buf: [256]u8 = undefined;
     var output_buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output_buf);
+    var stream: std.Io.Writer = .fixed(&output_buf);
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
-    try pager.writePrompt(stream.writer(), &buf, 0, 25, 100);
-    const written = stream.getWritten();
+    try pager.writePrompt(&stream, &buf, 0, 25, 100);
+    const written = stream.buffered();
     try std.testing.expectEqualStrings("-- sprites 1-25 of 100 (SPACE=next, q=quit) --", written);
 }
 
 test "clearPrompt writes CR and clear-to-EOL escape" {
     var output_buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output_buf);
+    var stream: std.Io.Writer = .fixed(&output_buf);
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
-    try pager.clearPrompt(stream.writer());
-    const written = stream.getWritten();
+    try pager.clearPrompt(&stream);
+    const written = stream.buffered();
     try std.testing.expectEqualStrings("\r\x1b[K", written);
 }
 
 test "readAction returns quit for q" {
     var input = [_]u8{'q'};
-    var stream = std.io.fixedBufferStream(&input);
+    var stream: std.Io.Reader = .fixed(&input);
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
-    const action = try pager.readAction(stream.reader());
+    const action = try pager.readAction(&stream);
     try std.testing.expectEqual(Pager.Action.quit, action);
 }
 
 test "readAction returns next_page for space" {
     var input = [_]u8{' '};
-    var stream = std.io.fixedBufferStream(&input);
+    var stream: std.Io.Reader = .fixed(&input);
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
-    const action = try pager.readAction(stream.reader());
+    const action = try pager.readAction(&stream);
     try std.testing.expectEqual(Pager.Action.next_page, action);
 }
 
 test "readAction returns quit on EOF" {
     var input = [_]u8{};
-    var stream = std.io.fixedBufferStream(&input);
+    var stream: std.Io.Reader = .fixed(&input);
     const pager = Pager.init(.{ .total_sprites = 100, .page_size = 25 });
-    const action = try pager.readAction(stream.reader());
+    const action = try pager.readAction(&stream);
     try std.testing.expectEqual(Pager.Action.quit, action);
 }
 

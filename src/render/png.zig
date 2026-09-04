@@ -209,8 +209,8 @@ test "encode produces IHDR, IDAT, IEND chunks in order" {
 test "encode IHDR contains correct dimensions" {
     const allocator = std.testing.allocator;
     const pixels = [_]u8{
-        255, 0,   0,   255, 0, 255, 0, 255,
-        0,   0,   255, 255, 0, 0,   0, 255,
+        255, 0, 0,   255, 0, 255, 0, 255,
+        0,   0, 255, 255, 0, 0,   0, 255,
     };
     const png_data = try encode(allocator, 2, 2, &pixels);
     defer allocator.free(png_data);
@@ -274,8 +274,8 @@ test "CRC32 incremental update matches single-shot" {
 test "encode 2x2 image produces valid PNG" {
     const allocator = std.testing.allocator;
     const pixels = [_]u8{
-        255, 0, 0,   255, 0, 255, 0,   255,
-        0,   0, 255, 255, 0, 0,   0,   255,
+        255, 0, 0,   255, 0, 255, 0, 255,
+        0,   0, 255, 255, 0, 0,   0, 255,
     };
     const png_data = try encode(allocator, 2, 2, &pixels);
     defer allocator.free(png_data);

@@ -6,13 +6,13 @@
 const std = @import("std");
 const privateer = @import("privateer");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    const arena = init.arena.allocator();
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const argv = try init.minimal.args.toSlice(arena);
+    const args = try privateer.config.argSlices(arena, argv);
 
     var input_dir: ?[]const u8 = null;
     var output_path: ?[]const u8 = null;
@@ -44,7 +44,7 @@ pub fn main() !void {
 
     std.debug.print("Repacking {s} → {s}...\n", .{ input, output });
 
-    const result = privateer.repack.repackAll(allocator, input, output) catch |err| {
+    const result = privateer.repack.repackAll(allocator, io, input, output) catch |err| {
         std.debug.print("Error: repack failed: {}\n", .{err});
         std.process.exit(1);
     };

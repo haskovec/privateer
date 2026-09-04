@@ -13,7 +13,7 @@ star systems. This project faithfully recreates that experience with enhanced gr
 
 ## Tech Stack
 
-- **Language:** Zig 0.15.2
+- **Language:** Zig 0.16.0
 - **Graphics/Input/Audio:** SDL3
 - **Rendering:** 320x200 internal resolution upscaled via xBRZ/HQ4x to 1280x800+
 - **Tooling:** Python 3.13 (offline asset analysis and extraction scripts)

@@ -615,7 +615,7 @@ test "parseMfdData extracts CHUD HUD modes" {
 test "parseMfdData rejects non-COCK IFF" {
     const data = [_]u8{
         'F', 'O', 'R', 'M',
-        0, 0, 0, 4,
+        0,   0,   0,   4,
         'X', 'X', 'X', 'X',
     };
     try std.testing.expectError(

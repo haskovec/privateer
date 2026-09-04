@@ -5,7 +5,7 @@ modern reimplementation of Wing Commander: Privateer (1993).
 
 ## What You Need
 
-1. **Zig 0.15.2** or later -- https://ziglang.org/download/
+1. **Zig 0.16.0** or later -- https://ziglang.org/download/
 2. **Original game files** -- a legal copy of Wing Commander: Privateer containing
    `GAME.DAT` (the ISO 9660 image with `PRIV.TRE` inside). Common sources include
    the GOG or EA release.

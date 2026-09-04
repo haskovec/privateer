@@ -119,20 +119,21 @@ pub fn parseOverrides(json_str: []const u8) ConfigOverrideError!ConfigOverrides 
 }
 
 /// Load config overrides from a JSON file. Returns defaults if file doesn't exist.
-pub fn loadFromFile(path: []const u8) ConfigOverrideError!ConfigOverrides {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
-        if (err == error.FileNotFound) return ConfigOverrides.initDefaults();
-        return ConfigOverrideError.ReadError;
+pub fn loadFromFile(io: std.Io, path: []const u8) ConfigOverrideError!ConfigOverrides {
+    const content = std.Io.Dir.cwd().readFileAlloc(
+        io,
+        path,
+        std.heap.page_allocator,
+        .limited(1024 * 1024 + 1),
+    ) catch |err| switch (err) {
+        error.FileNotFound => return ConfigOverrides.initDefaults(),
+        error.StreamTooLong => return ConfigOverrideError.InvalidConfig,
+        error.OutOfMemory => return ConfigOverrideError.OutOfMemory,
+        else => return ConfigOverrideError.ReadError,
     };
-    defer file.close();
-
-    const stat = file.stat() catch return ConfigOverrideError.ReadError;
-    if (stat.size > 1024 * 1024) return ConfigOverrideError.InvalidConfig;
-    const content = std.heap.page_allocator.alloc(u8, stat.size) catch return ConfigOverrideError.OutOfMemory;
     defer std.heap.page_allocator.free(content);
-    const bytes_read = file.readAll(content) catch return ConfigOverrideError.ReadError;
 
-    return parseOverrides(content[0..bytes_read]);
+    return parseOverrides(content);
 }
 
 /// Apply individual ship stat overrides from a JSON object.
@@ -280,7 +281,7 @@ test "parseOverrides rejects non-object ship entry" {
 }
 
 test "loadFromFile returns defaults for missing file" {
-    const cfg = try loadFromFile("nonexistent_balance_override_file.json");
+    const cfg = try loadFromFile(std.testing.io, "nonexistent_balance_override_file.json");
 
     try std.testing.expectEqual(defaults.trade_in_multiplier, cfg.trade_in_multiplier);
     try std.testing.expectEqual(defaults.missile_lifetime, cfg.missile_lifetime);

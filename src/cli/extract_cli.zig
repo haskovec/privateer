@@ -9,17 +9,17 @@
 const std = @import("std");
 const privateer = @import("privateer");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    const arena = init.arena.allocator();
 
     // Parse command-line arguments
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const argv = try init.minimal.args.toSlice(arena);
+    const args = try privateer.config.argSlices(arena, argv);
 
     // Resolve data_dir from config file / env var / CLI args
-    var cfg = privateer.config.resolveForCli(allocator, args[1..]) catch {
+    var cfg = privateer.config.resolveForCli(io, init.minimal.environ, allocator, args[1..]) catch {
         std.debug.print("Error: could not resolve config. Use --data-dir or set data_dir in privateer.json\n", .{});
         std.process.exit(1);
     };
@@ -51,26 +51,16 @@ pub fn main() !void {
     std.debug.print("Loading {s}...\n", .{game_dat_path});
 
     // Load GAME.DAT
-    const file = std.fs.cwd().openFile(game_dat_path, .{}) catch |err| {
-        std.debug.print("Error: could not open {s}: {}\n", .{ game_dat_path, err });
+    const data = std.Io.Dir.cwd().readFileAlloc(io, game_dat_path, allocator, .unlimited) catch |err| {
+        std.debug.print("Error: could not read {s}: {}\n", .{ game_dat_path, err });
         std.process.exit(1);
     };
-    defer file.close();
-
-    const stat = try file.stat();
-    std.debug.print("GAME.DAT size: {} bytes\n", .{stat.size});
-
-    const data = try allocator.alloc(u8, stat.size);
     defer allocator.free(data);
 
-    const bytes_read = try file.readAll(data);
-    if (bytes_read != stat.size) {
-        std.debug.print("Error: incomplete read of GAME.DAT\n", .{});
-        std.process.exit(1);
-    }
+    std.debug.print("GAME.DAT size: {} bytes\n", .{data.len});
 
     // Create output directory
-    std.fs.cwd().makePath(out_path) catch |err| {
+    std.Io.Dir.cwd().createDirPath(io, out_path) catch |err| {
         std.debug.print("Error: could not create output directory {s}: {}\n", .{ out_path, err });
         std.process.exit(1);
     };
@@ -78,7 +68,7 @@ pub fn main() !void {
     std.debug.print("Extracting to {s}...\n", .{out_path});
 
     // Run extraction
-    const result = try privateer.extract.extractAll(allocator, data, out_path);
+    const result = try privateer.extract.extractAll(allocator, io, data, out_path);
 
     std.debug.print("\nExtraction complete:\n", .{});
     std.debug.print("  Files extracted: {}\n", .{result.files_extracted});

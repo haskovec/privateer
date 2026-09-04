@@ -179,7 +179,7 @@ test "readPvd parses volume identifier" {
 
     const pvd = try readPvd(data);
     // Volume ID is "PRIVATEER_TEST" padded with spaces
-    const trimmed = std.mem.trimRight(u8, &pvd.volume_id, " ");
+    const trimmed = std.mem.trimEnd(u8, &pvd.volume_id, " ");
     try std.testing.expectEqualStrings("PRIVATEER_TEST", trimmed);
 }
 

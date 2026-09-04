@@ -1,6 +1,7 @@
 .idea
 .zig-cache/
 zig-out/
+zig-pkg/
 privateer.json
 GAME.DAT
 tools/__pycache__/

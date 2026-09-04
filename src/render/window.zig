@@ -163,9 +163,9 @@ pub const Window = struct {
     /// Run the main game loop with a fixed timestep.
     /// Calls `update_fn` each frame with `state`, then presents the frame.
     /// The loop exits when the window is closed or quit is requested.
-    pub fn runLoop(self: *Window, state: *anyopaque, update_fn: FrameCallback) void {
+    pub fn runLoop(self: *Window, io: std.Io, state: *anyopaque, update_fn: FrameCallback) void {
         while (!self.quit_requested) {
-            const frame_start = std.time.Instant.now() catch unreachable;
+            const frame_start = std.Io.Clock.awake.now(io);
 
             if (!self.pollEvents()) break;
 
@@ -180,10 +180,11 @@ pub const Window = struct {
             _ = c.SDL_RenderPresent(self.renderer);
 
             // Frame pacing: sleep to maintain target FPS
-            const frame_end = std.time.Instant.now() catch unreachable;
-            const elapsed = frame_end.since(frame_start);
+            const frame_end = std.Io.Clock.awake.now(io);
+            const elapsed = frame_start.durationTo(frame_end).nanoseconds;
             if (elapsed < FRAME_TIME_NS) {
-                std.Thread.sleep(FRAME_TIME_NS - elapsed);
+                const remaining: std.Io.Duration = .fromNanoseconds(@as(i96, FRAME_TIME_NS) - elapsed);
+                std.Io.sleep(io, remaining, .awake) catch {};
             }
         }
     }
